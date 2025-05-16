@@ -6,6 +6,7 @@ import tempfile
 import threading
 
 import h5py
+import nd2reader
 import numpy as np
 import tifffile
 import PIL.Image as pilimg
@@ -129,6 +130,8 @@ class Stack:
                 loader = 'npy'
             elif ext.casefold() in ('.h5', '.hdf5'):
                 loader = 'hdf5'
+            elif ext.casefold().startswith('.nd2'):
+                loader = 'nd2'
             else:
                 loader = '' # to prevent error in string comparison
         if loader == 'tiff':
@@ -137,6 +140,8 @@ class Stack:
             self._load_npy(status=status, channels=channels)
         elif loader == 'hdf5':
             self._load_hdf5(status=status, channels=channels, h5_key=h5_key)
+        elif loader == 'nd2':
+            self._load_nd2(status=status, channels=channels)
         else:
             self._clear_state()
             raise TypeError("Unknown type: {}".format(loader))
@@ -194,6 +199,45 @@ class Stack:
                 del arr
                 self._listeners.notify("image")
 
+    def _load_nd2(self, view=0, status=None, channels=None):
+        if channels is not None:
+            #TODO implement channel selection
+            raise NotImplementedError("Channel selection for ND2 is not implemented yet")
+        if status is None:
+            status = DummyStatus()
+            print("Stack._load_nd2: use DummyStatus") #DEBUG
+        try:
+            with self.image_lock, nd2reader.ND2Reader(self._path) as nd2, status("Reading stack …") as current_status:
+                self._stacktype = 'nd2'
+                self._n_channels = nd2.sizes['c']
+                self._n_frames = nd2.sizes['t']
+                self._height = nd2.sizes['y']
+                self._width = nd2.sizes['x']
+                self._mode = self.dtype_str(nd2.pixel_type)
+                self._n_images = self._n_channels * self._n_frames
+                self._order = 'tc'
+
+                # Copy stack to numpy array in temporary file
+                self._tmpfile = tempfile.TemporaryFile()
+                self.img = np.memmap(filename=self._tmpfile,
+                                     dtype=self._mode,
+                                     shape=(self._n_channels,
+                                            self._n_frames,
+                                            self._height,
+                                            self._width))
+                for i in range(self._n_images):
+                    current_status.reset("Reading image", current=i+1, total=self._n_images)
+                    ch, fr = self.convert_position(image=i)
+                    self.img[ch, fr, :, :] = nd2.get_frame_2D(c=ch, t=fr, v=view)
+
+        except Exception as e:
+            self._clear_state()
+            print(str(e))
+            raise
+
+        finally:
+            self._listeners.notify("image")
+            
     def _load_tiff(self, status=None, channels=None):
         if channels is not None:
             #TODO implement channel selection
@@ -452,19 +496,19 @@ class Stack:
             if self._order is None:
                 return None
 
-            elif self._order == "tc":
+            elif self._order == "tc": # 11,12,13,21,22,23,31,32,33,41,42,43 (t=4, c=3)
                 if to2:
-                    channel = image % self._n_channels
-                    frame = image // self._n_channels
+                    channel = image % self._n_channels # 0,1,2,0,1,2,0,1,2,0,1,2
+                    frame = image // self._n_channels # 0,0,0,1,1,1,2,2,2,3,3,3
                     return (channel, frame)
                 else:
                     image = frame * self._n_channels + channel
                     return image
 
-            elif self._order == "ct":
+            elif self._order == "ct": # 11,21,31,41,12,22,32,42,13,23,33,43 (t=4, c=3)
                 if to2:
-                    channel = image // self._n_frames
-                    frame = image % self._n_frames
+                    channel = image // self._n_frames # 0,1,2,3,0,1,2,3,0,1,2,3
+                    frame = image % self._n_frames # 0,0,0,0,1,1,1,1,2,2,2,2
                     return (channel, frame)
                 else:
                     image = channel * self._n_frames + frame
