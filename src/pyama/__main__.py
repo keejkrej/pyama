@@ -27,7 +27,7 @@ if __name__ == "__main__":
         if not os.path.isfile(open_path):
             open_path = None
 
-    from src.session import SessionController
+    from .session import SessionController
     SessionController(name=PACKAGE_NAME, version=__version__, read_session_path=open_path).start()
 
 

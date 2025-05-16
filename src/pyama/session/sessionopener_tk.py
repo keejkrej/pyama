@@ -166,10 +166,11 @@ class SessionOpener:
                                   parent=self.frame,
                                   initialdir='res',
                                   filetypes=(
-                                        ("Stack", '*.tif *.tiff *.npy *.npz *.h5'),
+                                        ("Stack", '*.tif *.tiff *.npy *.npz *.h5 *.nd2'),
                                         ("TIFF", '*.tif *.tiff'),
                                         ("Numpy", '*.npy *.npz'),
                                         ("HDF5", '*.h5'),
+                                        ("ND2", '*.nd2'),
                                         ("All files", '*')
                                   )
                                  )

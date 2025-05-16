@@ -199,7 +199,7 @@ class Stack:
                 del arr
                 self._listeners.notify("image")
 
-    def _load_nd2(self, view, status=None, channels=None):
+    def _load_nd2(self, view=0, status=None, channels=None):
         if channels is not None:
             #TODO implement channel selection
             raise NotImplementedError("Channel selection for ND2 is not implemented yet")
@@ -215,6 +215,7 @@ class Stack:
                 self._width = nd2.sizes['x']
                 self._mode = self.dtype_str(nd2.pixel_type)
                 self._n_images = self._n_channels * self._n_frames
+                self._order = 'tc'
 
                 # Copy stack to numpy array in temporary file
                 self._tmpfile = tempfile.TemporaryFile()
@@ -227,7 +228,7 @@ class Stack:
                 for i in range(self._n_images):
                     current_status.reset("Reading image", current=i+1, total=self._n_images)
                     ch, fr = self.convert_position(image=i)
-                    nd2.get_frame_2D(c=ch, t=fr, v=view).asarray(out=self.img[ch, fr, :, :])
+                    self.img[ch, fr, :, :] = nd2.get_frame_2D(c=ch, t=fr, v=view)
 
         except Exception as e:
             self._clear_state()
@@ -495,19 +496,19 @@ class Stack:
             if self._order is None:
                 return None
 
-            elif self._order == "tc":
+            elif self._order == "tc": # 11,12,13,21,22,23,31,32,33,41,42,43 (t=4, c=3)
                 if to2:
-                    channel = image % self._n_channels
-                    frame = image // self._n_channels
+                    channel = image % self._n_channels # 0,1,2,0,1,2,0,1,2,0,1,2
+                    frame = image // self._n_channels # 0,0,0,1,1,1,2,2,2,3,3,3
                     return (channel, frame)
                 else:
                     image = frame * self._n_channels + channel
                     return image
 
-            elif self._order == "ct":
+            elif self._order == "ct": # 11,21,31,41,12,22,32,42,13,23,33,43 (t=4, c=3)
                 if to2:
-                    channel = image // self._n_frames
-                    frame = image % self._n_frames
+                    channel = image // self._n_frames # 0,1,2,3,0,1,2,3,0,1,2,3
+                    frame = image % self._n_frames # 0,0,0,0,1,1,1,1,2,2,2,2
                     return (channel, frame)
                 else:
                     image = channel * self._n_frames + frame
