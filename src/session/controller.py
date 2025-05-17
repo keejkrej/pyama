@@ -139,14 +139,14 @@ class SessionController:
             del self.sessions[session_id]
             print(f"Deleted session with ID '{session_id}'.") #DEBUG
 
-    def open_new_stack(self, fn, session_id):
+    def open_new_stack(self, fn, session_id, view=0):
         """Open a new stack in a SessionModel.
 
         This method must be called from the control thread.
         """
         with self.lock:
             session = self.sessions[session_id]
-            session.open_stack(fn, status=self.status)
+            session.open_stack(fn, status=self.status, view=view)
             Event.fire(self.view.queue, const.CMD_UPDATE_STACK_LIST, stack_getter=session.get_stack_info, select=True)
 
     def close_stack(self, session_id, stack_id):

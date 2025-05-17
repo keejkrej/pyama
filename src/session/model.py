@@ -139,7 +139,7 @@ class SessionModel:
             if k != const.TYPE_AREA:
                 del self.trace_info[k]
 
-    def open_stack(self, fn, status=None):
+    def open_stack(self, fn, status=None, view=0):
         """Open a stack and save it in SessionModel.stacks.
 
         Arguments:
@@ -153,8 +153,11 @@ class SessionModel:
         stack_props = {}
         if fn.endswith('h5'):
             stack_props['channels'] = 0
+        if fn.endswith('nd2'):
+            stack_props['view'] = view
         stack_id = Event.now()
         stack = Stack(fn, status=status, **stack_props)
+        print(f"Opening stack {fn} with properties {stack_props}") #DEBUG
         stack_dir, stack_name = os.path.split(fn)
         n_channels = stack.n_channels
         with self.lock:

@@ -26,7 +26,7 @@ class Stack:
     :type path: str
     """
 
-    def __init__(self, path=None, arr=None, width=None, height=None, n_frames=None, n_channels=None, dtype=None, status=None, channels=None):
+    def __init__(self, path=None, arr=None, width=None, height=None, n_frames=None, n_channels=None, dtype=None, status=None, channels=None, view=None):
         """Initialize a stack."""
         self.image_lock = threading.RLock()
         self.info_lock = threading.RLock()
@@ -39,7 +39,10 @@ class Stack:
         # Initialize stack
         if path is not None:
             # Load from file (TIFF or numpy array)
-            self.load(path, status=status, channels=channels)
+            if view is not None:
+                self.load(path, status=status, channels=channels, view=view)
+            else:
+                self.load(path, status=status, channels=channels)
         elif arr is not None:
             # Use array
             self._path = None
@@ -106,7 +109,7 @@ class Stack:
         return dt
 
 
-    def load(self, path, loader=None, status=None, channels=None, h5_key=None):
+    def load(self, path, loader=None, status=None, channels=None, h5_key=None, view=0):
         """Load a stack from a path.
 
         `path` -- path to a stack file
@@ -141,7 +144,7 @@ class Stack:
         elif loader == 'hdf5':
             self._load_hdf5(status=status, channels=channels, h5_key=h5_key)
         elif loader == 'nd2':
-            self._load_nd2(status=status, channels=channels)
+            self._load_nd2(status=status, channels=channels, view=view)
         else:
             self._clear_state()
             raise TypeError("Unknown type: {}".format(loader))
@@ -199,7 +202,7 @@ class Stack:
                 del arr
                 self._listeners.notify("image")
 
-    def _load_nd2(self, view=0, status=None, channels=None):
+    def _load_nd2(self, status=None, channels=None, view=0):
         if channels is not None:
             #TODO implement channel selection
             raise NotImplementedError("Channel selection for ND2 is not implemented yet")
@@ -211,11 +214,15 @@ class Stack:
                 self._stacktype = 'nd2'
                 self._n_channels = nd2.sizes['c']
                 self._n_frames = nd2.sizes['t']
+                self._n_views = nd2.sizes['v']
                 self._height = nd2.sizes['y']
                 self._width = nd2.sizes['x']
                 self._mode = self.dtype_str(nd2.pixel_type)
                 self._n_images = self._n_channels * self._n_frames
                 self._order = 'tc'
+
+                if view >= self._n_views:
+                    raise ValueError(f"View index {view} is out of range for {self._path}")
 
                 # Copy stack to numpy array in temporary file
                 self._tmpfile = tempfile.TemporaryFile()
