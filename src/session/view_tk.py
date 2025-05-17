@@ -130,7 +130,8 @@ class SessionView_Tk(SessionView):
         filemenu.add_command(label="Open session", command=self.open_session)
         filemenu.add_command(label="Save", command=self.save)
         filemenu.add_command(label="Set output directory…", command=self._get_savedir)
-        filemenu.add_command(label="Quit", command=self.root.quit)
+        filemenu.add_command(label="Restart", command=self.restart_app)
+        filemenu.add_command(label="Quit", command=self.quit_app)
 
         modemenu = tk.Menu(menubar)
         menubar.add_cascade(label="Mode", menu=modemenu)
@@ -1090,3 +1091,11 @@ class SessionView_Tk(SessionView):
 
         from ..tools.roi_bboxer import get_selected_bboxes
         get_selected_bboxes(self.session, save_name)
+
+    def restart_app(self):
+        """Fires an event to the controller to initiate an application restart."""
+        Event.fire(self.control_queue, const.CMD_RESTART_APP)
+
+    def quit_app(self):
+        """Fires an event to the controller to initiate an application quit."""
+        Event.fire(self.control_queue, const.CMD_QUIT_APP)

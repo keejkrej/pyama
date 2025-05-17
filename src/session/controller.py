@@ -35,6 +35,8 @@ class SessionController:
         self.sessions = {}
         self.current_session = None
         self.status = Status()
+        self.restart_flag = None
+
         self.cmd_map = {
             const.CMD_INIT_SESSION: self.initialize_session,
             const.CMD_SAVE_SESSION_TO_DISK: self.save_session_to_disk,
@@ -46,6 +48,8 @@ class SessionController:
             const.CMD_SET_MICROSCOPE: self.set_microscope,
             const.CMD_TOOL_BINARIZE: self.binarize_phasecontrast_stack,
             const.CMD_TOOL_BGCORR: self.background_correction,
+            const.CMD_RESTART_APP: self.restart_app,
+            const.CMD_QUIT_APP: self.quit_app,
             }
 
         if read_session_path is not None:
@@ -76,10 +80,12 @@ class SessionController:
 
     def start(self):
         """Start control thread and run GUI mainloop.
+        Returns RESTART_APP_SENTINEL if a restart is requested, otherwise None.
 
         This method must be run in the main thread.
         """
         # Set up control queue and control loop
+        self.restart_flag = False
         control_thread = self.control_loop()
 
         try:
@@ -96,6 +102,21 @@ class SessionController:
             # Cleanup
             self.control_queue.put_nowait(None)
             control_thread.join()
+            self.view.root.destroy()
+            
+        return self.restart_flag
+
+    def restart_app(self):
+        """Sets the restart flag and requests the Tkinter mainloop to quit."""
+        with self.lock:
+            self.restart_flag = True
+            self.view.root.quit()
+
+    def quit_app(self):
+        """Sets the quit flag and requests the Tkinter mainloop to quit."""
+        with self.lock:
+            self.restart_flag = False
+            self.view.root.quit()
 
     def initialize_session(self):
         """Create a new, empty SessionModel instance.
