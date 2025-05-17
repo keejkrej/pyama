@@ -157,7 +157,6 @@ class SessionModel:
             stack_props['view'] = view
         stack_id = Event.now()
         stack = Stack(fn, status=status, **stack_props)
-        print(f"Opening stack {fn} with properties {stack_props}") #DEBUG
         stack_dir, stack_name = os.path.split(fn)
         n_channels = stack.n_channels
         with self.lock:

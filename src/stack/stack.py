@@ -46,7 +46,6 @@ class Stack:
         elif arr is not None:
             # Use array
             self._path = None
-            self._tmpfile = None
             self.img = arr
             self._n_channels, self._n_frames, self._height, self._width = arr.shape
             self._n_images = self._n_channels * self._n_frames
@@ -60,15 +59,13 @@ class Stack:
             self._n_frames = n_frames
             self._n_channels = n_channels
             self._mode = self.dtype_str(dtype)
-            self._tmpfile = tempfile.TemporaryFile()
-            self.img = np.memmap(filename=self._tmpfile,
-                                 dtype=dtype,
-                                 shape=(self._n_channels,
-                                        self._n_frames,
-                                        self._height,
-                                        self._width
-                                       )
-                                )
+            self.img = np.zeros(dtype=dtype,
+                                shape=(self._n_channels,
+                                       self._n_frames,
+                                       self._height,
+                                       self._width
+                                      )
+                               )
             self._listeners.notify("image")
 
     def _clear_state(self):
@@ -76,8 +73,7 @@ class Stack:
         with self.image_lock:
             # The stack path and object
             self._path = None
-            self.img = None
-            self._tmpfile = None
+            self.img = None # This will now free the in-memory numpy array
             self._stacktype = None
 
             # The stack properties
@@ -184,20 +180,27 @@ class Stack:
                 raise ValueError("Bad array shape: {}".format(arr.ndim))
             self._n_images = self._n_channels * self._n_frames
             try:
-                self._tmpfile = tempfile.TemporaryFile()
-                self.img = np.memmap(filename=self._tmpfile,
-                                     dtype=arr.dtype,
-                                     shape=(self._n_channels,
-                                            self._n_frames,
-                                            self._height,
-                                            self._width
-                                           )
-                                    )
+                # self._tmpfile = tempfile.TemporaryFile() # Remove tempfile
+                # self.img = np.memmap(filename=self._tmpfile, # Remove memmap
+                #                      dtype=arr.dtype,
+                #                      shape=(self._n_channels,
+                #                             self._n_frames,
+                #                             self._height,
+                #                             self._width
+                #                            )
+                #                     )
+                # Create an in-memory array
+                self.img = np.zeros(dtype=arr.dtype,
+                                    shape=(self._n_channels,
+                                           self._n_frames,
+                                           self._height,
+                                           self._width
+                                          )
+                                   )
+                self.img[...] = arr[...]
             except Exception:
                 self._clear_state()
                 raise
-            else:
-                self.img[...] = arr[...]
             finally:
                 del arr
                 self._listeners.notify("image")
@@ -212,11 +215,11 @@ class Stack:
         try:
             with self.image_lock, nd2reader.ND2Reader(self._path) as nd2, status("Reading stack …") as current_status:
                 self._stacktype = 'nd2'
-                self._n_channels = nd2.sizes['c']
-                self._n_frames = nd2.sizes['t']
-                self._n_views = nd2.sizes['v']
-                self._height = nd2.sizes['y']
-                self._width = nd2.sizes['x']
+                self._n_channels = nd2.sizes.get('c', 1)
+                self._n_frames = nd2.sizes.get('t', 1)
+                self._n_views = nd2.sizes.get('v', 1)
+                self._height = nd2.sizes.get('y', 1)
+                self._width = nd2.sizes.get('x', 1)
                 self._mode = self.dtype_str(nd2.pixel_type)
                 self._n_images = self._n_channels * self._n_frames
                 self._order = 'tc'
@@ -225,13 +228,18 @@ class Stack:
                     raise ValueError(f"View index {view} is out of range for {self._path}")
 
                 # Copy stack to numpy array in temporary file
-                self._tmpfile = tempfile.TemporaryFile()
-                self.img = np.memmap(filename=self._tmpfile,
-                                     dtype=self._mode,
-                                     shape=(self._n_channels,
-                                            self._n_frames,
-                                            self._height,
-                                            self._width))
+                # self._tmpfile = tempfile.TemporaryFile() # Remove tempfile
+                # self.img = np.memmap(filename=self._tmpfile, # Remove memmap
+                #                      dtype=self._mode,
+                #                      shape=(self._n_channels,
+                #                             self._n_frames,
+                #                             self._height,
+                #                             self._width))
+                self.img = np.zeros(dtype=self._mode, # self._mode is already a dtype string
+                                    shape=(self._n_channels,
+                                           self._n_frames,
+                                           self._height,
+                                           self._width))
                 for i in range(self._n_images):
                     current_status.reset("Reading image", current=i+1, total=self._n_images)
                     ch, fr = self.convert_position(image=i)
@@ -279,17 +287,22 @@ class Stack:
                     self._n_frames = self._n_images
 
                 # Copy stack to numpy array in temporary file
-                self._tmpfile = tempfile.TemporaryFile()
-                self.img = np.memmap(filename=self._tmpfile,
-                                     dtype=page0.dtype,
-                                     shape=(self._n_channels,
-                                            self._n_frames,
-                                            self._height,
-                                            self._width))
+                # self._tmpfile = tempfile.TemporaryFile() # Remove tempfile
+                # self.img = np.memmap(filename=self._tmpfile, # Remove memmap
+                #                      dtype=page0.dtype,
+                #                      shape=(self._n_channels,
+                #                             self._n_frames,
+                #                             self._height,
+                #                             self._width))
+                self.img = np.zeros(dtype=page0.dtype,
+                                    shape=(self._n_channels,
+                                           self._n_frames,
+                                           self._height,
+                                           self._width))
                 for i in range(self._n_images):
                     current_status.reset("Reading image", current=i+1, total=self._n_images)
                     ch, fr = self.convert_position(image=i)
-                    pages[i].asarray(out=self.img[ch, fr, :, :])
+                    self.img[ch, fr, :, :] = pages[i].asarray()
 
         except Exception as e:
             self._clear_state()
@@ -354,13 +367,18 @@ class Stack:
                 self._n_images = self._n_frames * self._n_channels
 
                 # Copy stack to numpy array in temporary file
-                self._tmpfile = tempfile.TemporaryFile()
-                self.img = np.memmap(filename=self._tmpfile,
-                                     dtype=data5.dtype,
-                                     shape=(self._n_channels,
-                                            self._n_frames,
-                                            self._height,
-                                            self._width))
+                # self._tmpfile = tempfile.TemporaryFile() # Remove tempfile
+                # self.img = np.memmap(filename=self._tmpfile, # Remove memmap
+                #                      dtype=data5.dtype,
+                #                      shape=(self._n_channels,
+                #                             self._n_frames,
+                #                             self._height,
+                #                             self._width))
+                self.img = np.zeros(dtype=data5.dtype,
+                                    shape=(self._n_channels,
+                                           self._n_frames,
+                                           self._height,
+                                           self._width))
                 i = np.zeros(len(idx), dtype=np.object)
                 for dim in 'xy':
                     i[idx[dim]] = slice(None)
@@ -384,15 +402,12 @@ class Stack:
             self._listeners.notify("image")
 
     def close(self):
-        """Close the TIFF file."""
-        with self.image_lock:
-            self.img = None
-            try:
-                self._tmpfile.close()
-            except Exception:
-                pass
-            self._tmpfile = None
-            self._clear_state()
+        """Close the stack and release associated resources (the in-memory array)."""
+        # _clear_state() handles setting self.img to None.
+        self._clear_state()
+
+    def __del__(self):
+        self.close()
 
     def crop(self, *, top=0, bottom=0, left=0, right=0):
         """Crop image with specified margins"""
@@ -410,30 +425,38 @@ class Stack:
             right = -right
         with self.image_lock:
             try:
-                new_tempfile = tempfile.TemporaryFile()
-                new_img = np.memmap(filename=new_tempfile,
-                                    dtype=self.img.dtype,
-                                    shape=(self._n_channels,
-                                           self._n_frames,
-                                           new_height,
-                                           new_width))
+                # new_tempfile = tempfile.TemporaryFile() # Remove tempfile
+                # new_img = np.memmap(filename=new_tempfile, # Remove memmap
+                #                     dtype=self.img.dtype,
+                #                     shape=(self._n_channels,
+                #                            self._n_frames,
+                #                            new_height,
+                #                            new_width))
+                new_img = np.zeros(dtype=self.img.dtype,
+                                   shape=(self._n_channels,
+                                          self._n_frames,
+                                          new_height,
+                                          new_width))
                 new_img[:, :, :, :] = self.img[:, :, top:bottom, left:right]
             except Exception:
-                new_tempfile.close()
+                # new_tempfile.close() # No longer needed
                 raise
+            
+            # self.img is already an in-memory array, direct assignment is fine.
+            # Old memmap-specific cleanup is not needed.
             self.img = new_img
             self._width = new_width
             self._height = new_height
-            try:
-                self._tmpfile.close()
-            except Exception:
-                pass
-            self._tmpfile = new_tempfile
+            # try: # Remove old tempfile logic
+            #     self._tmpfile.close()
+            # except Exception:
+            #     pass
+            # self._tmpfile = new_tempfile # Remove old tempfile logic
         self._listeners.notify("image")
 
 
     def _parse_imagej_tags(self, desc):
-        """Read stack dimensions from ImageJ’s TIFF description tag."""
+        """Read stack dimensions from ImageJ's TIFF description tag."""
         #TODO: use tiff.imagej_metadata instead of page0.description
         # Set dimension order
         self._order = "tc"

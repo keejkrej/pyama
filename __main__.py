@@ -31,6 +31,8 @@ if __name__ == "__main__":
     while True:
         controller = SessionController(name=PACKAGE_NAME, version=__version__, read_session_path=open_path)
         restart_flag = controller.start()
+        for session_id in list(controller.sessions.keys()):
+            controller.discard_session(session_id)
         if restart_flag:
             continue
         else:
