@@ -188,7 +188,7 @@ class SessionOpener:
                 try:
                     view = int(self.var_view.get())
                 except ValueError:
-                    # tk.messagebox.showerror("Error", "Please select a valid view")
+                    tk.messagebox.showerror("Error", "Please select a valid view", parent=self.frame)
                     return
             else:
                 view = 0
