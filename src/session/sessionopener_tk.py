@@ -172,7 +172,7 @@ class SessionOpener:
         """Open a new stack"""
         fn = tkfd.askopenfilename(title="Open stack",
                                   parent=self.frame,
-                                  initialdir='/project/ag-moonraedler/',
+                                  initialdir=const.CONST_INITIAL_DIR,
                                   filetypes=(
                                         ("Stack", '*.tif *.tiff *.npy *.npz *.h5 *.nd2'),
                                         ("TIFF", '*.tif *.tiff'),
