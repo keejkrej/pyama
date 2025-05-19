@@ -367,7 +367,7 @@ class SessionModel:
             rois -- iterable of ROIs to show; if None, show all ROIs in frame
             binary -- if True, returned array is boolean, else uint8
         """
-        img = np.zeros((meta.height, meta.width), dtype=(np.bool if binary else np.uint8))
+        img = np.zeros((meta.height, meta.width), dtype=(bool if binary else np.uint8))
         if rois is None:
             if self.rois is None:
                 print("SessionModel.render_segmentation: trying to read non-existent ROIs") #DEBUG
@@ -470,7 +470,7 @@ class SessionModel:
                 tr['val'].clear()
 
                 # Area
-                val_area = np.empty(n_frames, dtype=np.float)
+                val_area = np.empty(n_frames, dtype=float)
                 for fr, i in enumerate(tr['roi']):
                     val_area[fr] = self.rois[fr][i].area
                 if area_factor is not None:
@@ -479,7 +479,7 @@ class SessionModel:
 
                 # Fluorescence
                 for ch in fl_chans:
-                    tr['val'][ch['name']] = np.empty(n_frames, dtype=np.float)
+                    tr['val'][ch['name']] = np.empty(n_frames, dtype=float)
 
             for fr in range(n_frames):
                 images = {}

@@ -17,7 +17,7 @@ from .. import util
 
 def _make_tiles(n, div, name='center'):
     borders = np.rint(np.linspace(0, n, 2*div-1)).astype(np.uint16)
-    tiles = np.empty(len(borders)-2, dtype=[(name, np.float), ('slice', object)])
+    tiles = np.empty(len(borders)-2, dtype=[(name, float), ('slice', object)])
     for i, (b1, b2) in enumerate(zip(borders[:-2], borders[2:])):
         tiles[i] = (b1 + b2) / 2, slice(b1, b2)
     return tiles
