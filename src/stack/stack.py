@@ -214,7 +214,7 @@ class Stack:
                 self._n_images = self._n_channels * self._n_frames
                 self._order = 'tc'
 
-                if view >= self._n_views:
+                if view >= self._n_views or view < 0:
                     raise ValueError(f"View index {view} is out of range for {self._path}")
 
                 self.img = np.zeros(dtype=self._mode, # self._mode is already a dtype string

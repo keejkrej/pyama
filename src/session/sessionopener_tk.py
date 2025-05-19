@@ -93,7 +93,7 @@ class SessionOpener:
         view_frame = tk.Frame(btn_frame)
         view_frame.grid(row=1, column=0, columnspan=2, sticky='WE', pady=5)
         tk.Label(view_frame, text="View:").pack(side=tk.LEFT, padx=5)
-        self.var_view = tk.StringVar(value="0")
+        self.var_view = tk.StringVar(value="None")
         self.view_entry = tk.Entry(view_frame, textvariable=self.var_view, width=5)
         self.view_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -182,8 +182,17 @@ class SessionOpener:
                                         ("All files", '*')
                                   )
                                  )
+
         if fn:
-            Event.fire(self.control_queue, const.CMD_NEW_STACK, fn, self.session_id, view=int(self.var_view.get()))
+            if fn.endswith(".nd2"):
+                try:
+                    view = int(self.var_view.get())
+                except ValueError:
+                    tk.messagebox.showerror("Error", "Please select a valid view")
+                    return
+            else:
+                view = 0
+            Event.fire(self.control_queue, const.CMD_NEW_STACK, fn, self.session_id, view=view)
 
     def set_session_id(self, session_id):
         print(f"New session ID: {session_id}") #DEBUG
