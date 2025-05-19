@@ -593,7 +593,6 @@ class SessionModel:
         """Convert 0-based frame number to hours"""
         try:
             with self.lock:
-                print(x)
                 return x / self.frames_per_hour
         except Exception:
             return np.nan

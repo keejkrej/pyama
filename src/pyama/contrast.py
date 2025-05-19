@@ -472,8 +472,8 @@ class ContrastAdjuster:
 
         # Get canvas properties
         self.histcan.update_idletasks()
-        width = self.histcan.winfo_width()
-        height = self.histcan.winfo_height()
+        width = self.histcan.winfo_width() - 1 # 0 to 255
+        height = self.histcan.winfo_height() - 1 # 0 to 255
 
         # Get action
         if self.mouse_state is None:
@@ -483,12 +483,10 @@ class ContrastAdjuster:
 
         # Get handle position
         if action == "MIN":
-            print(pmin, width, self.hist_max)
-            x_handle = pmin * (width / self.hist_max)
+            x_handle = pmin * width / self.hist_max
             y_handle = height
         elif action == "MAX":
-            print(pmax, width, self.hist_max)
-            x_handle = pmax * (width / self.hist_max)
+            x_handle = pmax * width / self.hist_max
             y_handle = 0
         else:
             self.check_limit_line()
