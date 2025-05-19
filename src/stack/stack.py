@@ -180,16 +180,6 @@ class Stack:
                 raise ValueError("Bad array shape: {}".format(arr.ndim))
             self._n_images = self._n_channels * self._n_frames
             try:
-                # self._tmpfile = tempfile.TemporaryFile() # Remove tempfile
-                # self.img = np.memmap(filename=self._tmpfile, # Remove memmap
-                #                      dtype=arr.dtype,
-                #                      shape=(self._n_channels,
-                #                             self._n_frames,
-                #                             self._height,
-                #                             self._width
-                #                            )
-                #                     )
-                # Create an in-memory array
                 self.img = np.zeros(dtype=arr.dtype,
                                     shape=(self._n_channels,
                                            self._n_frames,
@@ -227,14 +217,6 @@ class Stack:
                 if view >= self._n_views:
                     raise ValueError(f"View index {view} is out of range for {self._path}")
 
-                # Copy stack to numpy array in temporary file
-                # self._tmpfile = tempfile.TemporaryFile() # Remove tempfile
-                # self.img = np.memmap(filename=self._tmpfile, # Remove memmap
-                #                      dtype=self._mode,
-                #                      shape=(self._n_channels,
-                #                             self._n_frames,
-                #                             self._height,
-                #                             self._width))
                 self.img = np.zeros(dtype=self._mode, # self._mode is already a dtype string
                                     shape=(self._n_channels,
                                            self._n_frames,
@@ -286,14 +268,6 @@ class Stack:
                     self._n_channels = 1
                     self._n_frames = self._n_images
 
-                # Copy stack to numpy array in temporary file
-                # self._tmpfile = tempfile.TemporaryFile() # Remove tempfile
-                # self.img = np.memmap(filename=self._tmpfile, # Remove memmap
-                #                      dtype=page0.dtype,
-                #                      shape=(self._n_channels,
-                #                             self._n_frames,
-                #                             self._height,
-                #                             self._width))
                 self.img = np.zeros(dtype=page0.dtype,
                                     shape=(self._n_channels,
                                            self._n_frames,
@@ -366,14 +340,6 @@ class Stack:
                         self._n_channels = channels.size
                 self._n_images = self._n_frames * self._n_channels
 
-                # Copy stack to numpy array in temporary file
-                # self._tmpfile = tempfile.TemporaryFile() # Remove tempfile
-                # self.img = np.memmap(filename=self._tmpfile, # Remove memmap
-                #                      dtype=data5.dtype,
-                #                      shape=(self._n_channels,
-                #                             self._n_frames,
-                #                             self._height,
-                #                             self._width))
                 self.img = np.zeros(dtype=data5.dtype,
                                     shape=(self._n_channels,
                                            self._n_frames,
@@ -425,13 +391,6 @@ class Stack:
             right = -right
         with self.image_lock:
             try:
-                # new_tempfile = tempfile.TemporaryFile() # Remove tempfile
-                # new_img = np.memmap(filename=new_tempfile, # Remove memmap
-                #                     dtype=self.img.dtype,
-                #                     shape=(self._n_channels,
-                #                            self._n_frames,
-                #                            new_height,
-                #                            new_width))
                 new_img = np.zeros(dtype=self.img.dtype,
                                    shape=(self._n_channels,
                                           self._n_frames,

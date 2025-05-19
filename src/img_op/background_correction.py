@@ -60,7 +60,7 @@ def _get_arr(shape, dtype, mem_lim, memmap_dir):
         if not memmap_dir:
             memmap_dir = ()
         f = util.open_tempfile(memmap_dir)
-        arr_interp = np.memmap(f, mode='w+', shape=shape, dtype=dtype)
+        arr_interp = np.zeros(shape=shape, dtype=dtype)
 
     if n_req < mem_lim or force_mem:
         arr_temp = np.empty(shape=shape, dtype=dtype)

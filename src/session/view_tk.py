@@ -1030,7 +1030,7 @@ class SessionView_Tk(SessionView):
     def binarize(self):
         # Get filename
         options = {'defaultextension': '.tif',
-                   'filetypes': ( ("Numpy", '*.npy *.npz'), ("TIFF", '*.tif *.tiff'), ("All files", '*')),
+                   'filetypes': ( ("Numpy", '*.npy *.npz'), ("All files", '*')),
                    'parent': self.root,
                    'title': "Choose output file for binarized phase-contrast stack",
                   }
@@ -1052,8 +1052,8 @@ class SessionView_Tk(SessionView):
         """Write a background-corrected version of the fluorescence channel"""
 
         # Get filename
-        options = {'defaultextension': '.tif',
-                   'filetypes': ( ("TIFF", '*.tif *.tiff'), ("All files", '*') ),
+        options = {'defaultextension': '.npz',
+                   'filetypes': ( ("Numpy", '*.npz'), ("All files", '*') ),
                    'parent': self.root,
                    'title': "Choose output file for background-corrected fluorescence channel",
                   }
