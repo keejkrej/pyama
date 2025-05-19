@@ -483,10 +483,12 @@ class ContrastAdjuster:
 
         # Get handle position
         if action == "MIN":
-            x_handle = width * pmin / self.hist_max
+            print(pmin, width, self.hist_max)
+            x_handle = pmin * (width / self.hist_max)
             y_handle = height
         elif action == "MAX":
-            x_handle = width * pmax / self.hist_max
+            print(pmax, width, self.hist_max)
+            x_handle = pmax * (width / self.hist_max)
             y_handle = 0
         else:
             self.check_limit_line()

@@ -705,7 +705,7 @@ class SessionView_Tk(SessionView):
                     fr = self.stackviewer.i_frame
                 t = self.session.to_hours(fr)
         else:
-            t = np.NaN
+            t = np.nan
         for indicator in self.frame_indicators:
             indicator.set_xdata([t, t])
         if draw:

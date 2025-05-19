@@ -583,7 +583,7 @@ class SessionModel:
 
                 if is_interactive:
                     if frame_indicator_list is not None:
-                        frame_indicator_list.append(ax.axvline(np.NaN, lw=1.5, color='r'))
+                        frame_indicator_list.append(ax.axvline(np.nan, lw=1.5, color='r'))
                 else:
                     ax.xaxis.set_tick_params(labelbottom=True)
                 if ax.is_last_row():
@@ -593,9 +593,10 @@ class SessionModel:
         """Convert 0-based frame number to hours"""
         try:
             with self.lock:
+                print(x)
                 return x / self.frames_per_hour
         except Exception:
-            return np.NaN
+            return np.nan
 
     @property
     def mic_name(self):
