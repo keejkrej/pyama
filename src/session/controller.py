@@ -103,6 +103,7 @@ class SessionController:
             self.control_queue.put_nowait(None)
             control_thread.join()
             if self.restart_flag:
+                self.view.cancel_after_callbacks()
                 self.view.root.destroy()
             
         return self.restart_flag

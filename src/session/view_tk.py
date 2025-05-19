@@ -120,6 +120,8 @@ class SessionView_Tk(SessionView):
         self.var_show_untrackable = tk.BooleanVar(value=False)
         self.var_microscope_res = tk.StringVar(value=MIC_RES_UNSPEC)
 
+        self._after_id = None  # Track after callback for poll_event_queue
+
         # Build menu
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
@@ -245,7 +247,7 @@ class SessionView_Tk(SessionView):
                         print(f"Failed to register keysym '{keysym}'")
 
     def mainloop(self):
-        self.root.after(QUEUE_POLL_INTERVAL, self.poll_event_queue)
+        self._after_id = self.root.after(QUEUE_POLL_INTERVAL, self.poll_event_queue)
         self.root.mainloop()
         self.root.quit()
 
@@ -309,7 +311,7 @@ class SessionView_Tk(SessionView):
                 evt(cmd)
                 continue
             raise ValueError(f"Unknown command: '{evt.cmd}'")
-        self.root.after(QUEUE_POLL_INTERVAL, self.poll_event_queue)
+        self._after_id = self.root.after(QUEUE_POLL_INTERVAL, self.poll_event_queue)
 
     @property
     def session_opener(self):
@@ -1099,3 +1101,12 @@ class SessionView_Tk(SessionView):
     def quit_app(self):
         """Fires an event to the controller to initiate an application quit."""
         Event.fire(self.control_queue, const.CMD_QUIT_APP)
+
+    def cancel_after_callbacks(self):
+        """Cancel any scheduled after callbacks before destroying the root window."""
+        if self._after_id is not None:
+            try:
+                self.root.after_cancel(self._after_id)
+            except Exception:
+                pass
+            self._after_id = None
