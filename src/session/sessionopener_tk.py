@@ -172,7 +172,7 @@ class SessionOpener:
         """Open a new stack"""
         fn = tkfd.askopenfilename(title="Open stack",
                                   parent=self.frame,
-                                  initialdir='res',
+                                  initialdir='/project/ag-moonraedler/',
                                   filetypes=(
                                         ("Stack", '*.tif *.tiff *.npy *.npz *.h5 *.nd2'),
                                         ("TIFF", '*.tif *.tiff'),
@@ -188,7 +188,7 @@ class SessionOpener:
                 try:
                     view = int(self.var_view.get())
                 except ValueError:
-                    tk.messagebox.showerror("Error", "Please select a valid view")
+                    # tk.messagebox.showerror("Error", "Please select a valid view")
                     return
             else:
                 view = 0
