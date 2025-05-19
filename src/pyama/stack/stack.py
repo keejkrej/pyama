@@ -345,7 +345,7 @@ class Stack:
                                            self._n_frames,
                                            self._height,
                                            self._width))
-                i = np.zeros(len(idx), dtype=np.object)
+                i = np.zeros(len(idx), dtype=object)
                 for dim in 'xy':
                     i[idx[dim]] = slice(None)
                 for fr in range(self._n_frames):
