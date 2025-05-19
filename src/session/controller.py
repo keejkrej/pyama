@@ -102,7 +102,8 @@ class SessionController:
             # Cleanup
             self.control_queue.put_nowait(None)
             control_thread.join()
-            self.view.root.destroy()
+            if self.restart_flag:
+                self.view.root.destroy()
             
         return self.restart_flag
 
