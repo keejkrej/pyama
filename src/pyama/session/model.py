@@ -586,7 +586,7 @@ class SessionModel:
                         frame_indicator_list.append(ax.axvline(np.nan, lw=1.5, color='r'))
                 else:
                     ax.xaxis.set_tick_params(labelbottom=True)
-                if ax.is_last_row():
+                if ax.get_subplotspec().is_last_row():
                     ax.set_xlabel(xlbl)
 
     def to_hours(self, x):
