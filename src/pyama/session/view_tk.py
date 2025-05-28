@@ -1032,7 +1032,7 @@ class SessionView_Tk(SessionView):
 
     def binarize(self):
         # Get filename
-        options = {'defaultextension': '.tif',
+        options = {'defaultextension': '.npz',
                    'filetypes': ( ("Numpy", '*.npy *.npz'), ("All files", '*')),
                    'parent': self.root,
                    'title': "Choose output file for binarized phase-contrast stack",
