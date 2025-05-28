@@ -410,6 +410,7 @@ class SessionView_Tk(SessionView):
         options = {'mustexist': False,
                    'parent': self.root,
                    'title': "Choose output directory",
+                   'initialdir': const.CONST_INITIAL_DIR,
                   }
         if self.save_dir:
             options['initialdir'] = self.save_dir

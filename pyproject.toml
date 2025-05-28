@@ -25,6 +25,7 @@ dependencies = [
     "scipy==1.15.3",
     "scikit-image==0.25.2",
     "tifffile==2025.5.10",
+	"xlsxwriter==3.2.3",
 ]
 
 [tool.hatch.build.targets.wheel]
