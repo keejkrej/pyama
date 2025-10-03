@@ -1,7 +1,6 @@
-"""Reusable UI components shared across PyAMA Qt pages."""
+"""Component modules for PyAMA Qt."""
 
-from .mpl_canvas import MplCanvas
-from .parameter_panel import ParameterPanel
-from .sample_table import SampleTable
+from . import ui
+from . import common
 
-__all__ = ["MplCanvas", "ParameterPanel", "SampleTable"]
+__all__ = ["ui", "common"]
