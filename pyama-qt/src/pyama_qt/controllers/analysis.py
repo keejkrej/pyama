@@ -12,8 +12,7 @@ from pyama_core.analysis.fitting import fit_trace_data, get_trace
 from pyama_core.analysis.models import get_model, get_types, list_models
 from pyama_core.io.analysis_csv import discover_csv_files, load_analysis_csv
 
-from pyama_qt.models.analysis import AnalysisDataModel, FittingModel, FittedResultsModel
-from pyama_qt.models.analysis_requests import FittingRequest
+from pyama_qt.models.analysis import AnalysisModel, FittingRequest
 from pyama_qt.services import WorkerHandle, start_worker
 
 from pyama_qt.views.analysis.page import AnalysisPage
@@ -24,12 +23,10 @@ logger = logging.getLogger(__name__)
 class AnalysisController(QObject):
     """Controller implementing the strict PySide6 MVC rules for the analysis tab."""
 
-    def __init__(self, view: AnalysisPage) -> None:
+    def __init__(self, view: AnalysisPage, model: AnalysisModel) -> None:
         super().__init__()
         self._view = view
-        self._data_model = AnalysisDataModel()
-        self._fitting_model = FittingModel()
-        self._results_model = FittedResultsModel()
+        self._model = model
         self._worker: WorkerHandle | None = None
 
         self._current_plot_title: str = ""
@@ -65,21 +62,21 @@ class AnalysisController(QObject):
         results_panel.save_requested.connect(self._on_save_requested)
 
     def _connect_model_signals(self) -> None:
-        self._data_model.rawDataChanged.connect(self._handle_raw_data_changed)
-        self._data_model.plotDataChanged.connect(self._handle_plot_data_changed)
-        self._data_model.plotTitleChanged.connect(self._handle_plot_title_changed)
+        self._model.data_model.rawDataChanged.connect(self._handle_raw_data_changed)
+        self._model.data_model.plotDataChanged.connect(self._handle_plot_data_changed)
+        self._model.data_model.plotTitleChanged.connect(self._handle_plot_title_changed)
 
-        self._fitting_model.isFittingChanged.connect(
+        self._model.fitting_model.isFittingChanged.connect(
             self._view.fitting_panel.set_fitting_active
         )
-        self._fitting_model.statusMessageChanged.connect(
+        self._model.fitting_model.statusMessageChanged.connect(
             self._view.status_bar.showMessage
         )
 
-        self._results_model.resultsReset.connect(self._handle_results_reset)
+        self._model.results_model.resultsReset.connect(self._handle_results_reset)
 
     def _initialise_defaults(self) -> None:
-        self._on_model_changed(self._fitting_model.model_type())
+        self._on_model_changed(self._model.fitting_model.model_type())
 
     # ------------------------------------------------------------------
     # View → Controller handlers
@@ -94,7 +91,7 @@ class AnalysisController(QObject):
         bounds: dict,
         manual: bool,
     ) -> None:
-        if self._data_model.raw_data() is None:
+        if self._model.data_model.raw_data() is None:
             self._view.status_bar.showMessage("Load a CSV file before starting fitting")
             return
 
@@ -106,14 +103,14 @@ class AnalysisController(QObject):
             model_params=model_params,
             model_bounds=model_bounds,
         )
-        self._fitting_model.set_model_params(model_params)
-        self._fitting_model.set_model_bounds(model_bounds)
+        self._model.fitting_model.set_model_params(model_params)
+        self._model.fitting_model.set_model_bounds(model_bounds)
         self._start_fitting(request)
 
     def _on_visualize_requested(self, cell_name: str) -> None:
         if not cell_name:
             return
-        raw = self._data_model.raw_data()
+        raw = self._model.data_model.raw_data()
         if raw is None or cell_name not in raw.columns:
             self._view.status_bar.showMessage(f"Cell '{cell_name}' not found")
             return
@@ -145,7 +142,7 @@ class AnalysisController(QObject):
         self._current_cell = cell_name
 
     def _on_shuffle_requested(self) -> None:
-        cell_name = self._data_model.get_random_cell()
+        cell_name = self._model.data_model.get_random_cell()
         if not cell_name:
             return
         self._view.fitting_panel.set_cell_candidate(cell_name)
@@ -154,11 +151,11 @@ class AnalysisController(QObject):
     def _on_model_changed(self, model_type: str) -> None:
         if not model_type:
             return
-        self._fitting_model.set_model_type(model_type)
+        self._model.fitting_model.set_model_type(model_type)
         self._update_parameter_defaults(model_type)
 
     def _on_cell_visualized(self, cell_id: str) -> None:
-        self._data_model.highlight_cell(cell_id)
+        self._model.data_model.highlight_cell(cell_id)
 
     def _on_parameter_selected(self, param_name: str) -> None:
         self._selected_parameter = param_name
@@ -168,7 +165,7 @@ class AnalysisController(QObject):
         self._update_histogram()
 
     def _on_save_requested(self, folder: Path) -> None:
-        df = self._results_model.results()
+        df = self._model.results_model.results()
         if df is None or df.empty or not self._parameter_names:
             return
 
@@ -214,7 +211,7 @@ class AnalysisController(QObject):
         )
 
     def _handle_results_reset(self) -> None:
-        df = self._results_model.results()
+        df = self._model.results_model.results()
         if df is None or df.empty:
             self._parameter_names = []
             self._selected_parameter = None
@@ -240,19 +237,19 @@ class AnalysisController(QObject):
     # Internal helpers
     # ------------------------------------------------------------------
     def _load_csv(self, path: Path) -> None:
-        self._data_model.load_csv(path)
+        self._model.data_model.load_csv(path)
 
         fitted_path = path.parent / f"{path.stem}_fitted.csv"
         if fitted_path.exists():
             try:
-                self._results_model.load_from_csv(fitted_path)
+                self._model.results_model.load_from_csv(fitted_path)
                 logger.info("Loaded existing fitted results from %s", fitted_path)
             except Exception as exc:
                 logger.warning(
                     "Failed to load fitted results from %s: %s", fitted_path, exc
                 )
         else:
-            self._results_model.clear_results()
+            self._model.results_model.clear_results()
             logger.info("No fitted results found for %s", path)
 
         self._view.status_bar.showMessage(f"Loaded {path.name}")
@@ -262,7 +259,7 @@ class AnalysisController(QObject):
             self._view.status_bar.showMessage("A fitting job is already running")
             return
 
-        data_path = self._data_model.raw_csv_path()
+        data_path = self._model.data_model.raw_csv_path()
         if data_path is None:
             self._view.status_bar.showMessage("CSV path not available for fitting")
             return
@@ -279,9 +276,9 @@ class AnalysisController(QObject):
             finished_callback=self._on_worker_thread_finished,
         )
         self._worker = handle
-        self._fitting_model.set_is_fitting(True)
-        self._fitting_model.set_status_message("Starting batch fitting…")
-        self._fitting_model.set_error_message("")
+        self._model.fitting_model.set_is_fitting(True)
+        self._model.fitting_model.set_status_message("Starting batch fitting…")
+        self._model.fitting_model.set_error_message("")
 
     def _available_model_names(self) -> Sequence[str]:
         try:
@@ -320,8 +317,8 @@ class AnalysisController(QObject):
         self._default_params = defaults
         self._default_bounds = bounds
         self._view.fitting_panel.set_parameter_defaults(df)
-        self._fitting_model.set_model_params(defaults)
-        self._fitting_model.set_model_bounds(bounds)
+        self._model.fitting_model.set_model_params(defaults)
+        self._model.fitting_model.set_model_bounds(bounds)
 
     def _append_fitted_curve(
         self,
@@ -330,7 +327,7 @@ class AnalysisController(QObject):
         lines: list[tuple[np.ndarray, np.ndarray]],
         styles: list[dict],
     ) -> None:
-        results = self._results_model.results()
+        results = self._model.results_model.results()
         if results is None or results.empty:
             return
 
@@ -381,7 +378,7 @@ class AnalysisController(QObject):
             )
 
     def _update_histogram(self) -> None:
-        df = self._results_model.results()
+        df = self._model.results_model.results()
         if df is None or df.empty or not self._selected_parameter:
             self._view.results_panel.render_histogram(
                 param_name=self._selected_parameter or "",
@@ -484,30 +481,30 @@ class AnalysisController(QObject):
     # Worker callbacks
     # ------------------------------------------------------------------
     def _on_worker_progress(self, message: str) -> None:
-        self._fitting_model.set_status_message(message)
+        self._model.fitting_model.set_status_message(message)
 
     def _on_worker_file_processed(self, filename: str, results: pd.DataFrame) -> None:
         logger.info("Processed analysis file %s (%d rows)", filename, len(results))
-        self._results_model.set_results(results)
-        self._fitting_model.set_status_message(f"Processed {filename}")
+        self._model.results_model.set_results(results)
+        self._model.fitting_model.set_status_message(f"Processed {filename}")
 
     def _on_worker_error(self, message: str) -> None:
         logger.error("Analysis worker error: %s", message)
-        self._fitting_model.set_error_message(message)
-        self._fitting_model.set_is_fitting(False)
+        self._model.fitting_model.set_error_message(message)
+        self._model.fitting_model.set_is_fitting(False)
         self._view.status_bar.showMessage(message)
 
     def _on_worker_finished(self) -> None:
         logger.info("Analysis fitting completed")
-        self._fitting_model.set_is_fitting(False)
-        self._fitting_model.set_status_message("Fitting complete")
+        self._model.fitting_model.set_is_fitting(False)
+        self._model.fitting_model.set_status_message("Fitting complete")
 
-        raw_csv_path = self._data_model.raw_csv_path()
+        raw_csv_path = self._model.data_model.raw_csv_path()
         if raw_csv_path:
             fitted_path = raw_csv_path.parent / f"{raw_csv_path.stem}_fitted.csv"
             if fitted_path.exists():
                 try:
-                    self._results_model.load_from_csv(fitted_path)
+                    self._model.results_model.load_from_csv(fitted_path)
                 except Exception as exc:
                     logger.warning("Failed to load fitted results from disk: %s", exc)
 

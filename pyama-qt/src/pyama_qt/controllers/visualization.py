@@ -15,6 +15,7 @@ from pyama_qt.models.visualization import (
     TraceFeatureModel,
     TraceSelectionModel,
     TraceTableModel,
+    VisualizationModel,
 )
 from pyama_qt.services import WorkerHandle, start_worker
 from pyama_qt.views.visualization.page import VisualizationPage
@@ -25,14 +26,10 @@ logger = logging.getLogger(__name__)
 class VisualizationController(QObject):
     """Controller implementing strict MVC rules for the visualization tab."""
 
-    def __init__(self, view: VisualizationPage) -> None:
+    def __init__(self, view: VisualizationPage, model: VisualizationModel) -> None:
         super().__init__()
         self._view = view
-        self._project_model = ProjectModel()
-        self._image_model = ImageCacheModel()
-        self._trace_table_model = TraceTableModel()
-        self._trace_feature_model = TraceFeatureModel()
-        self._trace_selection_model = TraceSelectionModel()
+        self._model = model
         self._worker: WorkerHandle | None = None
 
         self._project_data: dict | None = None
@@ -66,40 +63,46 @@ class VisualizationController(QObject):
         self._view.trace_panel.save_requested.connect(self._on_save_requested)
 
     def _connect_model_signals(self) -> None:
-        self._project_model.projectDataChanged.connect(self._handle_project_data)
-        self._project_model.availableChannelsChanged.connect(
+        self._model.project_model.projectDataChanged.connect(self._handle_project_data)
+        self._model.project_model.availableChannelsChanged.connect(
             self._handle_available_channels
         )
-        self._project_model.statusMessageChanged.connect(self._handle_status_message)
-        self._project_model.errorMessageChanged.connect(self._handle_error_message)
-        self._project_model.isLoadingChanged.connect(self._handle_loading_state)
+        self._model.project_model.statusMessageChanged.connect(
+            self._handle_status_message
+        )
+        self._model.project_model.errorMessageChanged.connect(
+            self._handle_error_message
+        )
+        self._model.project_model.isLoadingChanged.connect(self._handle_loading_state)
 
-        self._image_model.cacheReset.connect(self._handle_image_cache_reset)
-        self._image_model.currentDataTypeChanged.connect(
+        self._model.image_model.cacheReset.connect(self._handle_image_cache_reset)
+        self._model.image_model.currentDataTypeChanged.connect(
             self._handle_current_data_type_changed
         )
-        self._image_model.frameBoundsChanged.connect(self._handle_frame_bounds_changed)
-        self._image_model.currentFrameChanged.connect(self._handle_frame_changed)
-        self._image_model.tracePositionsChanged.connect(
+        self._model.image_model.frameBoundsChanged.connect(
+            self._handle_frame_bounds_changed
+        )
+        self._model.image_model.currentFrameChanged.connect(self._handle_frame_changed)
+        self._model.image_model.tracePositionsChanged.connect(
             self._handle_trace_positions_changed
         )
-        self._image_model.activeTraceChanged.connect(
+        self._model.image_model.activeTraceChanged.connect(
             self._handle_image_active_trace_changed
         )
 
-        self._trace_table_model.tracesReset.connect(self._handle_traces_reset)
-        self._trace_table_model.goodStateChanged.connect(
+        self._model.trace_table_model.tracesReset.connect(self._handle_traces_reset)
+        self._model.trace_table_model.goodStateChanged.connect(
             self._handle_good_state_changed_from_model
         )
 
-        self._trace_feature_model.featureDataChanged.connect(
+        self._model.trace_feature_model.featureDataChanged.connect(
             self._handle_feature_data_changed
         )
-        self._trace_feature_model.availableFeaturesChanged.connect(
+        self._model.trace_feature_model.availableFeaturesChanged.connect(
             self._handle_feature_list_changed
         )
 
-        self._trace_selection_model.activeTraceChanged.connect(
+        self._model.trace_selection_model.activeTraceChanged.connect(
             self._handle_selection_change
         )
 
@@ -108,27 +111,29 @@ class VisualizationController(QObject):
     # ------------------------------------------------------------------
     def _on_project_load_requested(self, project_path: Path) -> None:
         logger.info("Loading project from %s", project_path)
-        self._project_model.set_is_loading(True)
-        self._project_model.set_error_message("")
-        self._project_model.set_status_message(f"Loading project: {project_path.name}")
+        self._model.project_model.set_is_loading(True)
+        self._model.project_model.set_error_message("")
+        self._model.project_model.set_status_message(
+            f"Loading project: {project_path.name}"
+        )
         try:
             project_results = discover_processing_results(project_path)
             project_data = project_results.to_dict()
             self._project_data = project_data
-            self._project_model.set_project_path(project_path)
-            self._project_model.set_project_data(project_data)
+            self._model.project_model.set_project_path(project_path)
+            self._model.project_model.set_project_data(project_data)
             channels = self._extract_available_channels(project_data)
-            self._project_model.set_available_channels(channels)
-            self._project_model.set_status_message(
+            self._model.project_model.set_available_channels(channels)
+            self._model.project_model.set_status_message(
                 self._format_project_status(project_data)
             )
         except Exception as exc:
             message = self._format_project_error(project_path, exc)
             logger.exception("Failed to load project")
-            self._project_model.set_error_message(message)
+            self._model.project_model.set_error_message(message)
             self._view.status_bar.showMessage(message)
         finally:
-            self._project_model.set_is_loading(False)
+            self._model.project_model.set_is_loading(False)
 
     def _on_visualization_requested(
         self, fov_idx: int, selected_channels: list[str]
@@ -138,9 +143,9 @@ class VisualizationController(QObject):
             return
         self._cancel_worker()
         self._clear_trace_data()
-        self._image_model.remove_images()
-        self._project_model.set_is_loading(True)
-        self._project_model.set_status_message(f"Loading FOV {fov_idx:03d}…")
+        self._model.image_model.remove_images()
+        self._model.project_model.set_is_loading(True)
+        self._model.project_model.set_status_message(f"Loading FOV {fov_idx:03d}…")
         self._view.project_panel.set_visualize_button_text("Loading...")
 
         worker = _VisualizationWorker(
@@ -160,17 +165,17 @@ class VisualizationController(QObject):
         )
 
     def _on_data_type_selected(self, data_type: str) -> None:
-        self._image_model.set_current_data_type(data_type)
+        self._model.image_model.set_current_data_type(data_type)
 
     def _on_frame_delta_requested(self, delta: int) -> None:
-        self._image_model.set_current_frame(self._current_frame_index + delta)
+        self._model.image_model.set_current_frame(self._current_frame_index + delta)
 
     def _on_active_trace_selected(self, trace_id: str) -> None:
-        self._trace_selection_model.set_active_trace(trace_id)
-        self._image_model.set_active_trace(trace_id)
+        self._model.trace_selection_model.set_active_trace(trace_id)
+        self._model.image_model.set_active_trace(trace_id)
 
     def _on_good_state_changed(self, trace_id: str, is_good: bool) -> None:
-        self._trace_table_model.set_good_state(trace_id, is_good)
+        self._model.trace_table_model.set_good_state(trace_id, is_good)
 
     def _on_save_requested(
         self, good_map: dict[str, bool], target: Path | None
@@ -179,8 +184,8 @@ class VisualizationController(QObject):
             logger.warning("Save requested without a target path")
             return
         for trace_id, state in good_map.items():
-            self._trace_table_model.set_good_state(trace_id, state)
-        success = self._trace_table_model.save_inspected_data(target)
+            self._model.trace_table_model.set_good_state(trace_id, state)
+        success = self._model.trace_table_model.save_inspected_data(target)
         message = (
             f"Saved inspected data to {target.name}"
             if success
@@ -214,8 +219,8 @@ class VisualizationController(QObject):
             self._view.project_panel.set_visualize_button_text("Start Visualization")
 
     def _handle_image_cache_reset(self) -> None:
-        types = self._image_model.available_types()
-        current = self._image_model.current_data_type()
+        types = self._model.image_model.available_types()
+        current = self._model.image_model.current_data_type()
         self._view.image_panel.set_available_data_types(types, current)
         self._render_current_frame()
 
@@ -232,7 +237,7 @@ class VisualizationController(QObject):
     def _handle_frame_changed(self, frame: int) -> None:
         self._current_frame_index = frame
         self._view.image_panel.set_frame_info(
-            frame, self._image_model.frame_bounds()[1]
+            frame, self._model.image_model.frame_bounds()[1]
         )
         self._render_current_frame()
 
@@ -245,7 +250,7 @@ class VisualizationController(QObject):
         self._render_current_frame()
 
     def _handle_traces_reset(self) -> None:
-        records = self._trace_table_model.traces()
+        records = self._model.trace_table_model.traces()
         self._trace_good_status = {
             str(record.cell_id): record.good for record in records
         }
@@ -274,7 +279,7 @@ class VisualizationController(QObject):
     # Worker callbacks
     # ------------------------------------------------------------------
     def _handle_worker_progress(self, message: str) -> None:
-        self._project_model.set_status_message(message)
+        self._model.project_model.set_status_message(message)
 
     def _handle_worker_fov_loaded(
         self,
@@ -283,43 +288,43 @@ class VisualizationController(QObject):
         traces_path: Path | None,
     ) -> None:
         logger.info("FOV %s data loaded (%d image types)", fov_idx, len(image_map))
-        self._image_model.set_images(image_map)
+        self._model.image_model.set_images(image_map)
         self._trace_source_path = traces_path
 
         if traces_path and traces_path.exists():
-            self._project_model.set_status_message(
+            self._model.project_model.set_status_message(
                 f"Loading trace data for FOV {fov_idx:03d}..."
             )
-            success = self._project_model.load_processing_csv(
+            success = self._model.project_model.load_processing_csv(
                 traces_path,
-                self._trace_table_model,
-                self._trace_feature_model,
-                self._image_model,
+                self._model.trace_table_model,
+                self._model.trace_feature_model,
+                self._model.image_model,
             )
             if success:
-                self._project_model.set_status_message(
+                self._model.project_model.set_status_message(
                     f"FOV {fov_idx:03d} ready with trace data"
                 )
             else:
                 self._trace_source_path = None
-                self._project_model.set_status_message(
+                self._model.project_model.set_status_message(
                     f"FOV {fov_idx:03d} ready (images only)"
                 )
         else:
             self._trace_source_path = None
-            self._project_model.set_status_message(
+            self._model.project_model.set_status_message(
                 f"FOV {fov_idx:03d} ready (no trace data)"
             )
 
-        self._project_model.set_is_loading(False)
+        self._model.project_model.set_is_loading(False)
 
     def _handle_worker_error(self, message: str) -> None:
         logger.error("Visualization worker error: %s", message)
-        self._project_model.set_is_loading(False)
-        self._project_model.set_error_message(message)
+        self._model.project_model.set_is_loading(False)
+        self._model.project_model.set_error_message(message)
 
     def _handle_worker_finished(self) -> None:
-        self._project_model.set_is_loading(False)
+        self._model.project_model.set_is_loading(False)
 
     def _cleanup_worker(self) -> None:
         self._worker = None
@@ -334,7 +339,7 @@ class VisualizationController(QObject):
             self._worker = None
 
     def _render_current_frame(self) -> None:
-        image = self._image_model.image_for_current_type()
+        image = self._model.image_model.image_for_current_type()
         if image is None:
             return
         frame = image
@@ -348,7 +353,7 @@ class VisualizationController(QObject):
             self._view.trace_panel.clear()
             return
 
-        features = self._trace_feature_model.available_features()
+        features = self._model.trace_feature_model.available_features()
         self._view.trace_panel.set_trace_dataset(
             traces=self._trace_features,
             good_status=self._trace_good_status,
@@ -356,7 +361,7 @@ class VisualizationController(QObject):
             source_path=self._trace_source_path,
         )
         self._view.trace_panel.set_active_trace(
-            self._trace_selection_model.active_trace()
+            self._model.trace_selection_model.active_trace()
         )
 
     def _clear_trace_data(self) -> None:

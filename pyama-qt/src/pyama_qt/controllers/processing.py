@@ -17,8 +17,7 @@ from pyama_core.io.results_yaml import (
 )
 from pyama_core.processing.workflow import ensure_context, run_complete_workflow
 from pyama_core.processing.workflow.services.types import Channels, ProcessingContext
-from pyama_qt.models.processing import ProcessingConfigModel, WorkflowStatusModel
-from pyama_qt.models.processing_requests import MergeRequest
+from pyama_qt.models.processing import ProcessingModel, MergeRequest
 from pyama_qt.services import WorkerHandle, start_worker
 from .processing_utils import parse_fov_range
 import yaml
@@ -336,11 +335,10 @@ def _run_merge(  # Renamed from run_merge for private
 class ProcessingController(QObject):
     """Controller coordinating processing workflow UI interactions."""
 
-    def __init__(self, view: ProcessingPage) -> None:
+    def __init__(self, view: ProcessingPage, model: ProcessingModel) -> None:
         super().__init__()
         self._view = view
-        self._config_model = ProcessingConfigModel()
-        self._status_model = WorkflowStatusModel()
+        self._model = model
         self._microscopy_loader: WorkerHandle | None = None
         self._workflow_runner: WorkerHandle | None = None
         self._merge_runner: WorkerHandle | None = None
@@ -369,46 +367,48 @@ class ProcessingController(QObject):
     def _connect_model_signals(self) -> None:
         config_panel = self._view.config_panel
 
-        self._config_model.microscopyPathChanged.connect(
+        self._model.config_model.microscopyPathChanged.connect(
             config_panel.display_microscopy_path
         )
-        self._config_model.outputDirChanged.connect(
+        self._model.config_model.outputDirChanged.connect(
             config_panel.display_output_directory
         )
-        self._config_model.metadataChanged.connect(self._on_metadata_changed)
-        self._config_model.phaseChanged.connect(self._sync_channel_selection)
-        self._config_model.fluorescenceChanged.connect(self._sync_channel_selection)
-        self._config_model.fovStartChanged.connect(
+        self._model.config_model.metadataChanged.connect(self._on_metadata_changed)
+        self._model.config_model.phaseChanged.connect(self._sync_channel_selection)
+        self._model.config_model.fluorescenceChanged.connect(
+            self._sync_channel_selection
+        )
+        self._model.config_model.fovStartChanged.connect(
             lambda value: config_panel.set_parameter_value("fov_start", value)
         )
-        self._config_model.fovEndChanged.connect(
+        self._model.config_model.fovEndChanged.connect(
             lambda value: config_panel.set_parameter_value("fov_end", value)
         )
-        self._config_model.batchSizeChanged.connect(
+        self._model.config_model.batchSizeChanged.connect(
             lambda value: config_panel.set_parameter_value("batch_size", value)
         )
-        self._config_model.nWorkersChanged.connect(
+        self._model.config_model.nWorkersChanged.connect(
             lambda value: config_panel.set_parameter_value("n_workers", value)
         )
 
-        self._status_model.isProcessingChanged.connect(
+        self._model.status_model.isProcessingChanged.connect(
             config_panel.set_processing_active
         )
-        self._status_model.isProcessingChanged.connect(
+        self._model.status_model.isProcessingChanged.connect(
             lambda active: config_panel.set_process_enabled(not active)
         )
 
     def _initialise_view_state(self) -> None:
         panel = self._view.config_panel
-        panel.display_microscopy_path(self._config_model.microscopy_path())
-        panel.display_output_directory(self._config_model.output_dir())
-        self._on_metadata_changed(self._config_model.metadata())
+        panel.display_microscopy_path(self._model.config_model.microscopy_path())
+        panel.display_output_directory(self._model.config_model.output_dir())
+        self._on_metadata_changed(self._model.config_model.metadata())
         self._sync_channel_selection()
-        panel.set_parameter_value("fov_start", self._config_model.fov_start())
-        panel.set_parameter_value("fov_end", self._config_model.fov_end())
-        panel.set_parameter_value("batch_size", self._config_model.batch_size())
-        panel.set_parameter_value("n_workers", self._config_model.n_workers())
-        active = self._status_model.is_processing()
+        panel.set_parameter_value("fov_start", self._model.config_model.fov_start())
+        panel.set_parameter_value("fov_end", self._model.config_model.fov_end())
+        panel.set_parameter_value("batch_size", self._model.config_model.batch_size())
+        panel.set_parameter_value("n_workers", self._model.config_model.n_workers())
+        active = self._model.status_model.is_processing()
         panel.set_processing_active(active)
         panel.set_process_enabled(not active)
 
@@ -420,20 +420,20 @@ class ProcessingController(QObject):
 
     def _on_output_directory_selected(self, directory: Path) -> None:
         logger.info("Selected output directory: %s", directory)
-        self._config_model.set_output_dir(directory)
-        self._status_model.set_error_message("")
+        self._model.config_model.set_output_dir(directory)
+        self._model.status_model.set_error_message("")
 
     def _on_channels_changed(self, payload: Any) -> None:
         phase = getattr(payload, "phase", None)
         fluorescence = list(getattr(payload, "fluorescence", [])) if payload else []
-        self._config_model.update_channels(phase, fluorescence)
+        self._model.config_model.update_channels(phase, fluorescence)
 
     def _on_parameters_changed(self, param_dict: dict[str, Any]) -> None:
         fov_start = param_dict.get("fov_start", -1)
         fov_end = param_dict.get("fov_end", -1)
         batch_size = param_dict.get("batch_size", 2)
         n_workers = param_dict.get("n_workers", 2)
-        self._config_model.update_parameters(
+        self._model.config_model.update_parameters(
             fov_start=fov_start,
             fov_end=fov_end,
             batch_size=batch_size,
@@ -441,7 +441,7 @@ class ProcessingController(QObject):
         )
 
     def _on_process_requested(self) -> None:
-        if self._status_model.is_processing():
+        if self._model.status_model.is_processing():
             logger.warning("Workflow already running; ignoring start request")
             return
 
@@ -449,21 +449,21 @@ class ProcessingController(QObject):
             self._validate_ready()
         except ValueError as exc:
             logger.error("Cannot start workflow: %s", exc)
-            self._status_model.set_error_message(str(exc))
+            self._model.status_model.set_error_message(str(exc))
             return
 
-        metadata = self._config_model.metadata()
+        metadata = self._model.config_model.metadata()
         assert metadata is not None
 
         context = ProcessingContext(
-            output_dir=self._config_model.output_dir(),
+            output_dir=self._model.config_model.output_dir(),
             channels=Channels(
                 pc=(
-                    self._config_model.phase()
-                    if self._config_model.phase() is not None
+                    self._model.config_model.phase()
+                    if self._model.config_model.phase() is not None
                     else 0
                 ),
-                fl=list(self._config_model.fluorescence() or []),
+                fl=list(self._model.config_model.fluorescence() or []),
             ),
             params={},
             time_units="",
@@ -472,10 +472,10 @@ class ProcessingController(QObject):
         worker = _WorkflowRunner(
             metadata=metadata,
             context=context,
-            fov_start=self._config_model.fov_start(),
-            fov_end=self._config_model.fov_end(),
-            batch_size=self._config_model.batch_size(),
-            n_workers=self._config_model.n_workers(),
+            fov_start=self._model.config_model.fov_start(),
+            fov_end=self._model.config_model.fov_end(),
+            batch_size=self._model.config_model.batch_size(),
+            n_workers=self._model.config_model.n_workers(),
         )
         worker.finished.connect(self._on_workflow_finished)
 
@@ -485,9 +485,9 @@ class ProcessingController(QObject):
             finished_callback=self._clear_workflow_handle,
         )
         self._workflow_runner = handle
-        self._status_model.set_is_processing(True)
-        self._status_model.set_status_message("Running workflow…")
-        self._status_model.set_error_message("")
+        self._model.status_model.set_is_processing(True)
+        self._model.status_model.set_status_message("Running workflow…")
+        self._model.status_model.set_error_message("")
 
     def _on_samples_load_requested(self, path: Path) -> None:
         self._load_samples(path)
@@ -497,7 +497,7 @@ class ProcessingController(QObject):
             samples = self._view.merge_panel.current_samples()
         except ValueError as exc:
             logger.error("Failed to save samples: %s", exc)
-            self._status_model.set_error_message(str(exc))
+            self._model.status_model.set_error_message(str(exc))
             return
         self._save_samples(path, samples)
 
@@ -525,7 +525,7 @@ class ProcessingController(QObject):
     # Model → Controller helpers
     # ------------------------------------------------------------------
     def _sync_channel_selection(self, *_args) -> None:
-        selection = self._config_model.channels()
+        selection = self._model.config_model.channels()
         self._view.config_panel.apply_selected_channels(
             phase=selection.phase,
             fluorescence=selection.fluorescence,
@@ -551,9 +551,9 @@ class ProcessingController(QObject):
     # ------------------------------------------------------------------
     def _load_microscopy(self, path: Path) -> None:
         logger.info("Loading microscopy metadata from %s", path)
-        self._config_model.load_microscopy(path)
-        self._status_model.set_status_message("Loading microscopy metadata…")
-        self._status_model.set_error_message("")
+        self._model.config_model.load_microscopy(path)
+        self._model.status_model.set_status_message("Loading microscopy metadata…")
+        self._model.status_model.set_error_message("")
 
         worker = _MicroscopyLoaderWorker(path)
         worker.loaded.connect(self._on_microscopy_loaded)
@@ -575,7 +575,7 @@ class ProcessingController(QObject):
             self._view.merge_panel.set_sample_yaml_path(path)
         except Exception as exc:
             logger.error("Failed to load samples from %s: %s", path, exc)
-            self._status_model.set_error_message(str(exc))
+            self._model.status_model.set_error_message(str(exc))
 
     def _save_samples(self, path: Path, samples: list[dict[str, Any]]) -> None:
         try:
@@ -586,7 +586,7 @@ class ProcessingController(QObject):
             self._view.merge_panel.set_sample_yaml_path(path)
         except Exception as exc:
             logger.error("Failed to save samples to %s: %s", path, exc)
-            self._status_model.set_error_message(str(exc))
+            self._model.status_model.set_error_message(str(exc))
 
     def _run_merge(self, request: MergeRequest) -> None:
         if self._merge_runner:
@@ -601,20 +601,20 @@ class ProcessingController(QObject):
             finished_callback=self._clear_merge_handle,
         )
         self._merge_runner = handle
-        self._status_model.set_status_message("Running merge…")
-        self._status_model.set_error_message("")
+        self._model.status_model.set_status_message("Running merge…")
+        self._model.status_model.set_error_message("")
 
     def _validate_ready(self) -> None:
-        metadata = self._config_model.metadata()
+        metadata = self._model.config_model.metadata()
         if metadata is None:
             raise ValueError("Load an ND2 file before starting the workflow")
-        if self._config_model.output_dir() is None:
+        if self._model.config_model.output_dir() is None:
             raise ValueError("Select an output directory before starting the workflow")
-        channels = self._config_model.channels()
+        channels = self._model.config_model.channels()
         if channels.phase is None and not channels.fluorescence:
             raise ValueError("Select at least one channel to process")
 
-        params = self._config_model.parameters()
+        params = self._model.config_model.parameters()
         n_fovs = getattr(metadata, "n_fovs", 0)
 
         if params.fov_start != -1 or params.fov_end != -1:
@@ -637,14 +637,14 @@ class ProcessingController(QObject):
     # ------------------------------------------------------------------
     def _on_microscopy_loaded(self, metadata: MicroscopyMetadata) -> None:
         logger.info("Microscopy metadata loaded")
-        self._config_model.set_metadata(metadata)
-        self._status_model.set_status_message("ND2 ready")
-        self._status_model.set_error_message("")
+        self._model.config_model.set_metadata(metadata)
+        self._model.status_model.set_status_message("ND2 ready")
+        self._model.status_model.set_error_message("")
 
     def _on_microscopy_failed(self, message: str) -> None:
         logger.error("Failed to load ND2: %s", message)
-        self._status_model.set_status_message("")
-        self._status_model.set_error_message(message)
+        self._model.status_model.set_status_message("")
+        self._model.status_model.set_error_message(message)
 
     def _on_loader_finished(self) -> None:
         logger.info("ND2 loader thread finished")
@@ -652,10 +652,10 @@ class ProcessingController(QObject):
 
     def _on_workflow_finished(self, success: bool, message: str) -> None:
         logger.info("Workflow finished (success=%s): %s", success, message)
-        self._status_model.set_is_processing(False)
-        self._status_model.set_status_message(message)
+        self._model.status_model.set_is_processing(False)
+        self._model.status_model.set_status_message(message)
         if not success:
-            self._status_model.set_error_message(message)
+            self._model.status_model.set_error_message(message)
 
     def _clear_workflow_handle(self) -> None:
         logger.info("Workflow thread finished")
@@ -664,11 +664,11 @@ class ProcessingController(QObject):
     def _on_merge_finished(self, success: bool, message: str) -> None:
         if success:
             logger.info("Merge completed: %s", message)
-            self._status_model.set_status_message(message)
-            self._status_model.set_error_message("")
+            self._model.status_model.set_status_message(message)
+            self._model.status_model.set_error_message("")
         else:
             logger.error("Merge failed: %s", message)
-            self._status_model.set_error_message(message)
+            self._model.status_model.set_error_message(message)
 
 
 class _MicroscopyLoaderWorker(QObject):

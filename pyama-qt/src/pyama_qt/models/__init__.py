@@ -1,14 +1,21 @@
 """Domain models exposed by the PyAMA-Qt MVC application."""
 
-from .analysis import AnalysisDataModel, FittedResultsModel, FittingModel
-from .analysis_requests import FittingRequest
+from .analysis import (
+    AnalysisDataModel,
+    AnalysisModel,
+    FittedResultsModel,
+    FittingModel,
+    FittingRequest,
+)
 from .processing import (
     ChannelSelection,
     Parameters,
     ProcessingConfigModel,
+    ProcessingModel,
     WorkflowStatusModel,
+    WorkflowStartRequest,
+    MergeRequest,
 )
-from .processing_requests import MergeRequest, WorkflowStartRequest
 from .visualization import (
     CellQuality,
     FeatureData,
@@ -18,13 +25,7 @@ from .visualization import (
     TraceFeatureModel,
     TraceSelectionModel,
     TraceTableModel,
-)
-from .visualization_requests import (
-    DataTypeChangeRequest,
-    FrameNavigationRequest,
-    ProjectLoadRequest,
-    TraceSelectionRequest,
-    VisualizationRequest,
+    VisualizationModel,
 )
 
 __all__ = [
@@ -32,6 +33,9 @@ __all__ = [
     "FittedResultsModel",
     "FittingModel",
     "FittingRequest",
+    "AnalysisModel",
+    "ProcessingModel",
+    "VisualizationModel",
     "ChannelSelection",
     "Parameters",
     "ProcessingConfigModel",
@@ -46,9 +50,4 @@ __all__ = [
     "TraceFeatureModel",
     "TraceSelectionModel",
     "TraceTableModel",
-    "DataTypeChangeRequest",
-    "FrameNavigationRequest",
-    "ProjectLoadRequest",
-    "TraceSelectionRequest",
-    "VisualizationRequest",
 ]
