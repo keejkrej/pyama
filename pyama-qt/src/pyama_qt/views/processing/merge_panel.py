@@ -13,11 +13,11 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from pyama_qt.config import DEFAULT_DIR
-from ..base import BasePanel
-from ..components.sample_table import SampleTable
+from pyama_qt.components.sample_table import SampleTable
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class MergeRequestPayload:
     output_dir: Path
 
 
-class ProcessingMergePanel(BasePanel):
+class ProcessingMergePanel(QWidget):
     """Panel responsible for FOV assignment and CSV merging utilities."""
 
     # Signals for controller
@@ -41,12 +41,14 @@ class ProcessingMergePanel(BasePanel):
     merge_requested = Signal(object)  # Emits MergeRequestPayload
     samples_changed = Signal(list[dict[str, Any]])  # For real-time updates if needed
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
         self.table: SampleTable | None = None
-        super().__init__(*args, **kwargs)
+        self.build()
+        self.bind()
 
     def build(self) -> None:
-        """Build UI using BasePanel hook."""
+        """Build UI components."""
         main_layout = QVBoxLayout(self)
 
         # Create the two main sections
@@ -146,7 +148,7 @@ class ProcessingMergePanel(BasePanel):
         return group
 
     def bind(self) -> None:
-        """Connect signals in BasePanel hook."""
+        """Connect widget signals."""
         # Table buttons
         self.add_btn.clicked.connect(self.table.add_empty_row)
         self.remove_btn.clicked.connect(self.table.remove_selected_row)

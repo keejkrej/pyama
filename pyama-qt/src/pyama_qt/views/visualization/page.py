@@ -1,15 +1,19 @@
 """Visualization page composed of project, image, and trace panels."""
 
-from PySide6.QtWidgets import QHBoxLayout, QStatusBar
+from PySide6.QtWidgets import QHBoxLayout, QStatusBar, QWidget
 
 from .image_panel import ImagePanel
 from .project_panel import ProjectPanel
 from .trace_panel import TracePanel
-from ..base import BasePage
 
 
-class VisualizationPage(BasePage):
+class VisualizationPage(QWidget):
     """Embeddable visualization page comprising project, image, and trace panels."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         self._status_bar = QStatusBar(self)

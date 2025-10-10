@@ -11,25 +11,27 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from pyama_qt.config import DEFAULT_DIR
-from ..base import BasePanel
-from ..components.mpl_canvas import MplCanvas
+from pyama_qt.components.mpl_canvas import MplCanvas
 
 
 PlotLine = tuple[Sequence[float], Sequence[float], dict]
 
 
-class AnalysisDataPanel(BasePanel):
+class AnalysisDataPanel(QWidget):
     """Left-side panel responsible for loading CSV data and visualisation."""
 
     csv_selected = Signal(Path)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
         self._last_plot_hash: str | None = None
         self._current_title = ""
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         layout = QVBoxLayout(self)

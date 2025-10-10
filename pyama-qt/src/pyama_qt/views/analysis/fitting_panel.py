@@ -14,14 +14,14 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
-from ..base import BasePanel
-from ..components.mpl_canvas import MplCanvas
-from ..components.parameter_panel import ParameterPanel
+from pyama_qt.components.mpl_canvas import MplCanvas
+from pyama_qt.components.parameter_widget import ParameterWidget
 
 
-class AnalysisFittingPanel(BasePanel):
+class AnalysisFittingPanel(QWidget):
     """Middle panel offering model selection, fitting, and QC plots."""
 
     fit_requested = Signal(str, dict, dict, bool)
@@ -29,6 +29,11 @@ class AnalysisFittingPanel(BasePanel):
     shuffle_requested = Signal()
     cell_visualized = Signal(str)
     model_changed = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         layout = QVBoxLayout(self)
@@ -167,7 +172,7 @@ class AnalysisFittingPanel(BasePanel):
         form.addRow("Model:", self._model_combo)
         group_layout.addLayout(form)
 
-        self._param_panel = ParameterPanel()
+        self._param_panel = ParameterWidget()
         group_layout.addWidget(self._param_panel)
 
         self._start_button = QPushButton("Start Fitting")

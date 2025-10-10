@@ -12,20 +12,29 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
-
 from pyama_qt.models.visualization import PositionData
-from ..base import BasePanel
-from ..components.mpl_canvas import MplCanvas
+from pyama_qt.components.mpl_canvas import MplCanvas
 
 logger = logging.getLogger(__name__)
 
 
-class ImagePanel(BasePanel):
+class ImagePanel(QWidget):
     """Panel for viewing microscopy images and processing results."""
 
     data_type_selected = Signal(str)
     frame_delta_requested = Signal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._current_frame_index = 0
+        self._max_frame_index = 0
+        self._positions_by_cell: dict[str, PositionData] = {}
+        self._active_trace_id: str | None = None
+        self._current_data_type: str = ""
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         layout = QVBoxLayout(self)
@@ -60,12 +69,6 @@ class ImagePanel(BasePanel):
         image_layout.addWidget(self.canvas, 1)
 
         layout.addWidget(image_group)
-
-        self._current_frame_index = 0
-        self._max_frame_index = 0
-        self._positions_by_cell: dict[str, PositionData] = {}
-        self._active_trace_id: str | None = None
-        self._current_data_type: str = ""
 
     def bind(self) -> None:
         self.data_type_combo.currentTextChanged.connect(self.data_type_selected.emit)

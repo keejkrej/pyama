@@ -21,7 +21,7 @@ class FittingRequest:
 class AnalysisModel(QObject):
     """Consolidated model for analysis functionality."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.data_model = AnalysisDataModel()
         self.fitting_model = FittingModel()

@@ -1,15 +1,19 @@
 """Analysis tab composed of data, fitting, and results panels."""
 
-from PySide6.QtWidgets import QHBoxLayout, QStatusBar
+from PySide6.QtWidgets import QHBoxLayout, QStatusBar, QWidget
 
 from .data_panel import AnalysisDataPanel
 from .fitting_panel import AnalysisFittingPanel
 from .results_panel import AnalysisResultsPanel
-from ..base import BasePage
 
 
-class AnalysisPage(BasePage):
+class AnalysisPage(QWidget):
     """Embeddable analysis page comprising data, fitting, and results panels."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         self._status_bar = QStatusBar(self)

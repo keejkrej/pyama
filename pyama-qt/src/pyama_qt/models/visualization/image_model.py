@@ -1,8 +1,6 @@
 """Image cache model for visualization."""
 
 import logging
-from pathlib import Path
-from typing import Any
 from dataclasses import dataclass
 
 import numpy as np

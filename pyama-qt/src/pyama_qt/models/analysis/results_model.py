@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, List
 
 import pandas as pd
-from PySide6.QtCore import QObject, QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 
 logger = logging.getLogger(__name__)
 

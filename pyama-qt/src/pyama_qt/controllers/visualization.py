@@ -10,11 +10,6 @@ from pyama_core.io.results_yaml import discover_processing_results
 
 from pyama_qt.models.visualization import (
     FeatureData,
-    ImageCacheModel,
-    ProjectModel,
-    TraceFeatureModel,
-    TraceSelectionModel,
-    TraceTableModel,
     VisualizationModel,
 )
 from pyama_qt.services import WorkerHandle, start_worker

@@ -12,7 +12,7 @@ from .trace_table_model import TraceTableModel
 class VisualizationModel(QObject):
     """Consolidated model for visualization functionality."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.project_model = ProjectModel()
         self.image_model = ImageCacheModel()

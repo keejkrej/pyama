@@ -36,7 +36,7 @@ class MergeRequest:
 class ProcessingModel(QObject):
     """Consolidated model for processing functionality."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.config_model = ProcessingConfigModel()
         self.status_model = WorkflowStatusModel()

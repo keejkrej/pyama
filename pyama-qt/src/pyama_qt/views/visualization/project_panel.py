@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QListView,
     QAbstractItemView,
+    QWidget,
 )
 
 from pyama_qt.config import DEFAULT_DIR
@@ -27,8 +28,6 @@ from PySide6.QtCore import Qt, Signal, QModelIndex, QAbstractListModel
 from pathlib import Path
 import logging
 from typing import Any
-
-from ..base import BasePanel
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +77,16 @@ class ChannelListModel(QAbstractListModel):
         return ""
 
 
-class ProjectPanel(BasePanel):
+class ProjectPanel(QWidget):
     """Panel for loading and displaying FOV data from folders."""
 
     project_load_requested = Signal(Path)
     visualization_requested = Signal(int, list)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         layout = QVBoxLayout(self)

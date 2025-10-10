@@ -13,19 +13,24 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from pyama_qt.config import DEFAULT_DIR
-from ..base import BasePanel
-from ..components.mpl_canvas import MplCanvas
+from pyama_qt.components.mpl_canvas import MplCanvas
 
 
-class AnalysisResultsPanel(BasePanel):
+class AnalysisResultsPanel(QWidget):
     """Right-hand panel visualising fitting diagnostics."""
 
     parameter_selected = Signal(str)
     filter_toggled = Signal(bool)
     save_requested = Signal(Path)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         layout = QVBoxLayout(self)

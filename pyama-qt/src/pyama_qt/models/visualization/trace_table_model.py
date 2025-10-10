@@ -1,12 +1,11 @@
 """Trace table model for visualization."""
 
 import logging
-from pathlib import Path
 from typing import Any
 from dataclasses import dataclass
 
 import pandas as pd
-from PySide6.QtCore import QObject, QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 
 from pyama_core.io.processing_csv import (
     extract_cell_quality_dataframe,

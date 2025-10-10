@@ -15,22 +15,36 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from pyama_qt.models.visualization import FeatureData
-from ..base import BasePanel
-from ..components.mpl_canvas import MplCanvas
+from pyama_qt.components.mpl_canvas import MplCanvas
 
 logger = logging.getLogger(__name__)
 
 
-class TracePanel(BasePanel):
+class TracePanel(QWidget):
     """Panel to plot time traces and allow selection via a checkable table."""
 
     active_trace_changed = Signal(str)
     trace_selection_changed = Signal(str)
     good_state_changed = Signal(str, bool)
     save_requested = Signal(dict, object)  # good status map, target path
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._trace_data: dict[str, FeatureData] = {}
+        self._trace_ids: list[str] = []
+        self._good_status: dict[str, bool] = {}
+        self._available_features: list[str] = []
+        self._active_trace_id: str | None = None
+        self._traces_csv_path: Path | None = None
+        self._current_page = 0
+        self._items_per_page = 10
+        self._total_pages = 1
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         layout = QVBoxLayout(self)
@@ -90,17 +104,6 @@ class TracePanel(BasePanel):
         list_layout.addWidget(self._table_widget)
 
         layout.addWidget(list_group, 1)
-
-        self._trace_data: dict[str, FeatureData] = {}
-        self._trace_ids: list[str] = []
-        self._good_status: dict[str, bool] = {}
-        self._available_features: list[str] = []
-        self._active_trace_id: str | None = None
-        self._traces_csv_path: Path | None = None
-
-        self._current_page = 0
-        self._items_per_page = 10
-        self._total_pages = 1
 
     def bind(self) -> None:
         self._feature_dropdown.currentTextChanged.connect(self._on_feature_changed)

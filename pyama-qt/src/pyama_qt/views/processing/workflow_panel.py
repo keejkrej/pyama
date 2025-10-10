@@ -20,11 +20,11 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from pyama_qt.config import DEFAULT_DIR
-from ..base import BasePanel
-from ..components.parameter_panel import ParameterPanel
+from pyama_qt.components.parameter_widget import ParameterWidget
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class ChannelSelectionPayload:
     fluorescence: list[int]
 
 
-class ProcessingConfigPanel(BasePanel):
+class ProcessingConfigPanel(QWidget):
     """Collects user inputs for running the processing workflow."""
 
     file_selected = Signal(Path)
@@ -45,6 +45,11 @@ class ProcessingConfigPanel(BasePanel):
     channels_changed = Signal(object)  # Emits ChannelSelectionPayload as dict-like
     parameters_changed = Signal(dict)  # raw values
     process_requested = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.build()
+        self.bind()
 
     def build(self) -> None:
         layout = QHBoxLayout(self)
@@ -130,7 +135,7 @@ class ProcessingConfigPanel(BasePanel):
         self._output_dir_field.setReadOnly(True)
         layout.addWidget(self._output_dir_field)
 
-        self._param_panel = ParameterPanel()
+        self._param_panel = ParameterWidget()
         self._initialize_parameter_defaults()
         layout.addWidget(self._param_panel)
 
