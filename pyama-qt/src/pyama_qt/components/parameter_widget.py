@@ -1,7 +1,7 @@
 """
-ParameterPanel rewritten to present parameters in a table instead of label+editor rows.
-The table infers fields from an input pandas DataFrame and allows editing when
-"Set parameters manually" is enabled.
+Simplified ParameterWidget with checkbox to toggle table visibility and editability,
+set_table to populate from DataFrame, and get_table to return DataFrame.
+The widget does not store the DataFrame internally.
 """
 
 import pandas as pd
@@ -10,56 +10,76 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
     QCheckBox,
-    QSizePolicy,
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Qt, Property, Signal
 
 
 class ParameterWidget(QWidget):
     """A widget that displays editable parameters in a table.
 
     Usage:
-    - Use set_parameters_df(df) with a DataFrame of defaults.
+    - Use set_table(df) to populate the table from a DataFrame.
       The DataFrame should have parameter names as index OR include a 'name' column.
       All other columns are treated as fields (e.g., value, min, max...).
-    - Call get_values_df() to retrieve an updated DataFrame if manual mode is enabled.
+    - Use get_table() to retrieve the current table contents as a DataFrame.
+    - The checkbox toggles table visibility and editability.
     """
 
-    parameters_changed = Signal()
+    tableChanged = Signal()
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
+        self._build_ui()
+        self._connect_signals()
 
-        self._df: pd.DataFrame | None = None
-        self._fields: list[str] = []
-        self._param_names: list[str] = []
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
 
-        self.main_layout = QVBoxLayout(self)
+        self._manual_params = QCheckBox("Set parameters manually")
+        layout.addWidget(self._manual_params)
 
-        self.use_manual_params = QCheckBox("Set parameters manually")
-        self.use_manual_params.stateChanged.connect(self.toggle_inputs)
-        self.main_layout.addWidget(self.use_manual_params)
+        self._table = QTableWidget(0, 0, self)
+        layout.addWidget(self._table)
 
-        self.table = QTableWidget(0, 0, self)
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
-        # Emit change signal when any cell is edited
-        self.table.itemChanged.connect(self._on_item_changed)
-        self.main_layout.addWidget(self.table, 1)
+        self._on_toggle(False)  # initialize disabled state
 
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        self.toggle_inputs()  # initialize disabled state
+    def _connect_signals(self):
+        self._manual_params.stateChanged.connect(self._on_toggle)
 
-    # ---------------------------- Public API -------------------------------- #
+    @Property(pd.DataFrame, notify=tableChanged)
+    def table(self) -> pd.DataFrame:
+        """Return the current table contents as a DataFrame."""
+        param_names = []
+        fields = []
+        col_count = self._table.columnCount()
+        if col_count > 1:
+            # Get field names from headers (skip 'Parameter')
+            for c in range(1, col_count):
+                header_item = self._table.horizontalHeaderItem(c)
+                fields.append(header_item.text() if header_item else f"field_{c}")
 
-    def set_parameters_df(self, df: pd.DataFrame) -> None:
-        """Initialize the table from a pandas DataFrame.
+        rows = []
+        for r in range(self._table.rowCount()):
+            pname_item = self._table.item(r, 0)
+            pname = pname_item.text() if pname_item else f"param_{r}"
+            param_names.append(pname)
+            row_dict = {}
+            for c, field in enumerate(fields, start=1):
+                it = self._table.item(r, c)
+                text = it.text() if it else ""
+                row_dict[field] = self._coerce(text)
+            rows.append(row_dict)
+
+        if not param_names:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(rows, index=param_names, columns=fields)
+        return df
+
+    @table.setter
+    def table(self, df: pd.DataFrame) -> None:
+        """Populate the table from a pandas DataFrame.
 
         - If a 'name' column exists, it is used as the row index and not shown as a field.
         - Otherwise, the DataFrame's index is used for parameter names.
@@ -67,10 +87,7 @@ class ParameterWidget(QWidget):
         """
         if df is None or df.empty:
             # Clear the table
-            self._df = pd.DataFrame()
-            self._fields = []
-            self._param_names = []
-            self._rebuild_table()
+            self._rebuild_table([], [], pd.DataFrame())
             return
 
         df_local = df.copy()
@@ -79,121 +96,48 @@ class ParameterWidget(QWidget):
         # Normalize index to strings
         df_local.index = df_local.index.map(lambda x: str(x))
 
-        self._df = df_local
-        self._param_names = list(df_local.index)
-        self._fields = list(df_local.columns)
+        param_names = list(df_local.index)
+        fields = list(df_local.columns)
 
-        self._rebuild_table()
-        self.toggle_inputs()
+        self._rebuild_table(param_names, fields, df_local)
+        self.tableChanged.emit()
 
-    def set_parameter(self, name: str, value) -> None:
-        """Set the value of a single parameter by name.
-
-        Only updates the parameter if manual mode is disabled, otherwise
-        ignores the update to respect user's manual input.
-        """
-        # Don't update parameters when manual mode is enabled
-        if self.use_manual_params.isChecked():
-            return
-
-        if self._df is None or name not in self._param_names:
-            return
-
-        # Find the row index for this parameter
-        try:
-            row_idx = self._param_names.index(name)
-        except ValueError:
-            return
-
-        # Update the DataFrame if it exists
-        if "value" in self._fields:
-            self._df.loc[name, "value"] = value
-        elif len(self._fields) > 0:
-            # If no 'value' column, update the first field
-            self._df.loc[name, self._fields[0]] = value
-
-        # Update the table widget
-        self.table.blockSignals(True)
-        try:
-            # Find the column for the value (prefer 'value' column, fallback to first field)
-            col_idx = 1  # Default to first field column
-            if "value" in self._fields:
-                col_idx = self._fields.index("value") + 1
-
-            item = self.table.item(row_idx, col_idx)
-            if item is not None:
-                item.setText(str(value))
-        finally:
-            self.table.blockSignals(False)
-
-    def get_values_df(self) -> pd.DataFrame | None:
-        """Return the current table as a DataFrame if manual mode is enabled; else None."""
-        if not self.use_manual_params.isChecked():
-            return None
-        return self._collect_table_to_df()
-
-    # --------------------------- Internal logic ----------------------------- #
-    def _rebuild_table(self) -> None:
+    def _rebuild_table(
+        self, param_names: list[str], fields: list[str], df: pd.DataFrame
+    ) -> None:
         # Block signals during rebuild
-        self.table.blockSignals(True)
+        self._table.blockSignals(True)
         try:
             # Define columns: first column is 'Parameter' (name), others are fields
-            n_rows = len(self._param_names)
-            n_cols = 1 + len(self._fields)
-            self.table.clear()
-            self.table.setRowCount(n_rows)
-            self.table.setColumnCount(n_cols)
+            n_rows = len(param_names)
+            n_cols = 1 + len(fields)
+            self._table.clear()
+            self._table.setRowCount(n_rows)
+            self._table.setColumnCount(n_cols)
 
-            headers = ["Parameter"] + self._fields
-            self.table.setHorizontalHeaderLabels(headers)
+            headers = ["Parameter"] + fields
+            self._table.setHorizontalHeaderLabels(headers)
 
-            for r, pname in enumerate(self._param_names):
+            for r, pname in enumerate(param_names):
                 # Name column (read-only)
                 name_item = QTableWidgetItem(pname)
                 name_item.setFlags(
                     Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
                 )
-                self.table.setItem(r, 0, name_item)
+                self._table.setItem(r, 0, name_item)
 
-                # Field value columns (editable depending on manual toggle)
-                for c, field in enumerate(self._fields, start=1):
+                # Field value columns
+                for c, field in enumerate(fields, start=1):
                     val = None
-                    if (
-                        self._df is not None
-                        and pname in self._df.index
-                        and field in self._df.columns
-                    ):
-                        val = self._df.loc[pname, field]
+                    if pname in df.index and field in df.columns:
+                        val = df.loc[pname, field]
                     text = "" if pd.isna(val) else str(val)
                     item = QTableWidgetItem(text)
-                    self.table.setItem(r, c, item)
+                    self._table.setItem(r, c, item)
         finally:
-            self.table.blockSignals(False)
+            self._table.blockSignals(False)
 
-    def _on_item_changed(self, item: QTableWidgetItem):
-        # Ignore programmatic changes when manual is disabled
-        if not self.use_manual_params.isChecked():
-            return
-        self.parameters_changed.emit()
-
-    def _collect_table_to_df(self) -> pd.DataFrame:
-        # Build DataFrame from table contents
-        rows = []
-        for r in range(self.table.rowCount()):
-            pname_item = self.table.item(r, 0)
-            pname = pname_item.text() if pname_item else f"param_{r}"
-            row_dict = {}
-            for c, field in enumerate(self._fields, start=1):
-                it = self.table.item(r, c)
-                text = it.text() if it else ""
-                row_dict[field] = self._coerce(text)
-            rows.append((pname, row_dict))
-        data = {name: vals for name, vals in rows}
-        df = pd.DataFrame.from_dict(data, orient="index", columns=self._fields)
-        return df
-
-    @staticmethod
-    def _coerce(text: str):
+    def _coerce(self, text: str):
         # Try to coerce to int or float if possible; fallback to string
         if text is None or text == "":
             return None
@@ -204,15 +148,50 @@ class ParameterWidget(QWidget):
         except ValueError:
             return text
 
-    def toggle_inputs(self):
-        enabled = self.use_manual_params.isChecked()
-        # Toggle editability of value cells based on manual mode.
-        # We intentionally avoid calling `setEnabled` on the table so that
-        # higher-level controllers remain responsible for widget enabled/disabled state.
-        self.table.setVisible(enabled)
+    def _on_toggle(self, enabled):
+        self._table.setVisible(enabled)
         if enabled:
-            self.table.setEditTriggers(QTableWidget.EditTrigger.AllEditTriggers)
+            self._table.setEditTriggers(QTableWidget.EditTrigger.AllEditTriggers)
         else:
-            self.table.clearSelection()
-            self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        # No need to alter values on toggle; we just control interactivity.
+            self._table.clearSelection()
+            self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+
+if __name__ == "__main__":
+    import sys
+    from PySide6.QtWidgets import (
+        QApplication,
+        QMainWindow,
+        QWidget,
+        QVBoxLayout,
+        QPushButton,
+    )
+
+    # Create a test DataFrame
+    test_df = pd.DataFrame(
+        {
+            "name": ["param1", "param2", "param3"],
+            "value": [1.0, 2.5, 3.0],
+            "min": [0.0, 0.0, 0.0],
+            "max": [10.0, 10.0, 10.0],
+        }
+    )
+
+    app = QApplication(sys.argv)
+    main_window = QMainWindow()
+    central_widget = QWidget()
+    layout = QVBoxLayout(central_widget)
+
+    # Create button outside the widget
+    get_button = QPushButton("Get Table")
+    get_button.clicked.connect(lambda: print(widget.table))
+    layout.addWidget(get_button)
+
+    # Create the ParameterWidget
+    widget = ParameterWidget()
+    widget.table = test_df
+    layout.addWidget(widget)
+
+    main_window.setCentralWidget(central_widget)
+    main_window.show()
+    sys.exit(app.exec())

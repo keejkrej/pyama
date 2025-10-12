@@ -1,149 +1,120 @@
-"""Reusable path selector widget for files and directories."""
+"""Minimal PathSelector widget.
+
+Features kept intentionally small:
+- Label, QLineEdit, Browse button
+- Normalized string path stored in `path` property (never None)
+- QLineEdit updated when `path` is set programmatically
+- Simple browse behavior for files or directories
+- `path_changed` signal emitted with normalized string when path changes
+"""
 
 from enum import Enum
 from pathlib import Path
+from typing import Optional
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Property
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
 
 class PathType(Enum):
-    """Type of path selection."""
-
     FILE = "file"
     DIRECTORY = "directory"
 
 
 class PathSelector(QWidget):
-    """A reusable widget for selecting files or directories.
+    """A compact widget for selecting a file or directory."""
 
-    Provides a label, line edit field for displaying/editing the path,
-    and a browse button to open a file/directory dialog.
-
-    Signals:
-        path_changed: Emitted when the path is changed (either via browse or manual edit)
-    """
-
-    path_changed = Signal(str)  # Emits the new path as a string
+    path_changed = Signal()
 
     def __init__(
         self,
-        label: str,
+        label: str = "",
         path_type: PathType = PathType.FILE,
         dialog_title: str = "",
         file_filter: str = "All Files (*)",
         default_dir: str = "",
-        parent: QWidget | None = None,
+        parent: Optional[QWidget] = None,
     ) -> None:
-        """Initialize the path selector.
-
-        Args:
-            label: Label text to display
-            path_type: Whether to select files or directories
-            dialog_title: Title for the file dialog
-            file_filter: File filter for file dialogs (e.g., "YAML Files (*.yaml *.yml)")
-            default_dir: Default directory to open in dialog
-            parent: Parent widget
-        """
         super().__init__(parent)
         self._path_type = path_type
         self._dialog_title = dialog_title or (
             f"Select {label}" if label else "Select Path"
         )
         self._file_filter = file_filter
-        self._default_dir = default_dir
+        self._default_dir = str(Path(default_dir).expanduser()) if default_dir else ""
+        # Internal path is always a string (empty when unset)
+        self._path: str = ""
 
         self._build_ui(label)
         self._connect_signals()
 
     def _build_ui(self, label: str) -> None:
-        """Build the UI components."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout = QHBoxLayout(self)
+        if label:
+            layout.addWidget(QLabel(label))
 
-        # Top row: label and browse button
-        top_row = QHBoxLayout()
-        top_row.addWidget(QLabel(label))
-        top_row.addStretch()
-
-        self._browse_btn = QPushButton("Browse")
-        top_row.addWidget(self._browse_btn)
-
-        layout.addLayout(top_row)
-
-        # Bottom row: line edit for path
         self._path_edit = QLineEdit()
+        self._path_edit.setPlaceholderText("Enter path or click Browse")
         layout.addWidget(self._path_edit)
 
-    def _connect_signals(self) -> None:
-        """Connect internal signals."""
-        self._browse_btn.clicked.connect(self._on_browse_clicked)
-        self._path_edit.textChanged.connect(self.path_changed.emit)
+        self._browse_btn = QPushButton("Browse")
+        layout.addWidget(self._browse_btn)
 
-    def _on_browse_clicked(self) -> None:
-        """Handle browse button click."""
+    def _connect_signals(self) -> None:
+        self._browse_btn.clicked.connect(self._on_browse)
+        self._path_edit.textChanged.connect(self._on_edit)
+
+    @Property(str, notify=path_changed)
+    def path(self) -> str:
+        """Current path as a string (empty string if unset)."""
+        return self._path
+
+    @path.setter
+    def path(self, value: Optional[str]) -> None:
+        """Set the path. Accepts Path-like or string or None/empty to clear."""
+        new = self._normalize(value)
+        if new == self._path:
+            return
+
+        self._path = new
+        # Update QLineEdit without causing the textChanged handler to re-fire
+        if self._path_edit.text() != new:
+            self._path_edit.blockSignals(True)
+            self._path_edit.setText(new)
+            self._path_edit.blockSignals(False)
+
+        self.path_changed.emit()
+
+    def _normalize(self, value: Optional[str]) -> str:
+        if not value:
+            return ""
+        try:
+            # expand user but do not require existence
+            return str(Path(value).expanduser())
+        except Exception:
+            # Fallback to raw string if Path conversion fails
+            return str(value)
+
+    def _on_browse(self) -> None:
+        start_dir = self._default_dir or self._path or str(Path.home())
         if self._path_type == PathType.FILE:
-            path, _ = QFileDialog.getOpenFileName(
-                self,
-                self._dialog_title,
-                self._default_dir or self._path_edit.text(),
-                self._file_filter,
-                options=QFileDialog.Option.DontUseNativeDialog,
+            chosen, _ = QFileDialog.getOpenFileName(
+                self, self._dialog_title, start_dir, self._file_filter
             )
-        else:  # PathType.DIRECTORY
-            path = QFileDialog.getExistingDirectory(
-                self,
-                self._dialog_title,
-                self._default_dir or self._path_edit.text(),
-                options=QFileDialog.Option.DontUseNativeDialog,
-            )
+            path = chosen
+        else:
+            path = QFileDialog.getExistingDirectory(self, self._dialog_title, start_dir)
 
         if path:
-            self.set_path(path)
+            self.path = path
 
-    # ---------------------------- Public API -------------------------------- #
-
-    def set_path(self, path: Path | str) -> None:
-        """Set the displayed path.
-
-        Args:
-            path: Path to display
-        """
-        self._path_edit.setText(str(path))
-
-    def get_path(self) -> str:
-        """Get the current path as a string.
-
-        Returns:
-            Current path text
-        """
-        return self._path_edit.text().strip()
-
-    def get_path_obj(self) -> Path:
-        """Get the current path as a Path object.
-
-        Returns:
-            Current path as Path object (expanded)
-        """
-        return Path(self.get_path()).expanduser()
-
-    def clear(self) -> None:
-        """Clear the path field."""
-        self._path_edit.clear()
-
-    def set_enabled(self, enabled: bool) -> None:
-        """Enable or disable the widget.
-
-        Args:
-            enabled: Whether to enable the widget
-        """
-        self._path_edit.setEnabled(enabled)
-        self._browse_btn.setEnabled(enabled)
+    def _on_edit(self, text: str) -> None:
+        # Update property from user edit; setter will handle deduplication
+        self.path = text or ""

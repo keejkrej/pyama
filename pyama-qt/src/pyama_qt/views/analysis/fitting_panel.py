@@ -67,7 +67,7 @@ class AnalysisFittingPanel(QWidget):
 
     def set_parameter_defaults(self, parameters: pd.DataFrame) -> None:
         """Replace the parameter table with defaults supplied by controller."""
-        self._param_panel.set_parameters_df(parameters)
+        self._param_panel.table(parameters)
 
     def set_fitting_active(self, is_active: bool) -> None:
         """Toggle progress feedback while fitting is running."""
@@ -121,7 +121,7 @@ class AnalysisFittingPanel(QWidget):
         model_type = self._model_combo.currentText().strip().lower()
         params = self._collect_model_params()
         bounds = self._collect_model_bounds()
-        manual = self._param_panel.use_manual_params.isChecked()
+        manual = self._param_panel._manual_params.isChecked()
         self.fit_requested.emit(model_type, params, bounds, manual)
 
     def _on_visualize_clicked(self) -> None:
@@ -137,7 +137,7 @@ class AnalysisFittingPanel(QWidget):
     # Helpers for packaging parameter data
     # ------------------------------------------------------------------
     def _collect_model_params(self) -> dict:
-        df = self._param_panel.get_values_df()
+        df = self._param_panel.table()
         if df is None or df.empty:
             return {}
         if "value" in df.columns:
@@ -146,7 +146,7 @@ class AnalysisFittingPanel(QWidget):
         return df[first_col].to_dict()
 
     def _collect_model_bounds(self) -> dict:
-        df = self._param_panel.get_values_df()
+        df = self._param_panel.table()
         if df is None or df.empty or "min" not in df.columns or "max" not in df.columns:
             return {}
         bounds: dict[str, Tuple[float, float]] = {}

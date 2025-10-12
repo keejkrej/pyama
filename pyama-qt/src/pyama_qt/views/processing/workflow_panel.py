@@ -42,7 +42,6 @@ class ProcessingConfigPanel(QWidget):
     file_selected = Signal(Path)
     output_dir_selected = Signal(Path)
     channels_changed = Signal(object)  # Emits ChannelSelectionPayload as dict-like
-    parameters_changed = Signal(dict)  # raw values
     process_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -68,7 +67,6 @@ class ProcessingConfigPanel(QWidget):
         self._pc_combo.currentIndexChanged.connect(self._emit_channel_selection)
         self._fl_list.itemClicked.connect(self._on_fl_item_clicked)
         self._fl_list.itemSelectionChanged.connect(self._emit_channel_selection)
-        self._param_panel.parameters_changed.connect(self._on_parameters_changed)
 
     # ------------------------------------------------------------------
     # Layout builders
@@ -181,20 +179,6 @@ class ProcessingConfigPanel(QWidget):
         payload = ChannelSelectionPayload(phase=phase, fluorescence=fluorescence)
         self.channels_changed.emit(payload)
 
-    def _on_parameters_changed(self) -> None:
-        df = self._param_panel.get_values_df()
-        if df is not None:
-            # Convert DataFrame to simple dict: parameter_name -> value
-            values = (
-                df["value"].to_dict()
-                if "value" in df.columns
-                else df.iloc[:, 0].to_dict()
-            )
-            self.parameters_changed.emit(values)
-        else:
-            # When manual mode is disabled, emit empty dict or don't emit at all
-            self.parameters_changed.emit({})
-
     # ------------------------------------------------------------------
     # Controller-facing helpers
     # ------------------------------------------------------------------
@@ -268,11 +252,28 @@ class ProcessingConfigPanel(QWidget):
 
     def set_parameter_defaults(self, defaults: pd.DataFrame) -> None:
         """Replace the parameter table with controller-provided defaults."""
-        self._param_panel.set_parameters_df(defaults)
+        self._param_panel.table(defaults)
 
     def set_parameter_value(self, name: str, value) -> None:
         """Update a single parameter value."""
-        self._param_panel.set_parameter(name, value)
+        df = self._param_panel.table()
+        if not df.empty and name in df.index:
+            df.loc[name, "value"] = value
+            self._param_panel.table(df)
+
+    def get_current_parameters(self) -> dict:
+        """Get the current parameter values as a dict."""
+        df = self._param_panel.table()
+        if df is not None and not df.empty:
+            # Convert DataFrame to simple dict: parameter_name -> value
+            values = (
+                df["value"].to_dict()
+                if "value" in df.columns
+                else df.iloc[:, 0].to_dict()
+            )
+            return values
+        else:
+            return {}
 
     # ------------------------------------------------------------------
     # Helpers
@@ -285,4 +286,4 @@ class ProcessingConfigPanel(QWidget):
             "n_workers": {"value": 2},
         }
         df = pd.DataFrame.from_dict(defaults_data, orient="index")
-        self._param_panel.set_parameters_df(df)
+        self._param_panel.table(df)
