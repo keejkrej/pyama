@@ -1,13 +1,13 @@
 """View layer for the PyAMA-Qt MVC application."""
 
-from .analysis.page import AnalysisPage
 from .main_window import MainWindow
-from .processing.page import ProcessingPage
-from .visualization.page import VisualizationPage
+from .analysis.view import AnalysisView
+from .processing.view import ProcessingView
+from .visualization.view import VisualizationView
 
 __all__ = [
-    "AnalysisPage",
     "MainWindow",
-    "ProcessingPage",
-    "VisualizationPage",
+    "AnalysisView",
+    "ProcessingView",
+    "VisualizationView",
 ]

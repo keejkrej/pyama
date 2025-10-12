@@ -30,10 +30,10 @@ class ParameterWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        self._build_ui()
-        self._connect_signals()
+        self.build()
+        self.bind()
 
-    def _build_ui(self):
+    def build(self):
         layout = QVBoxLayout(self)
 
         self._manual_params = QCheckBox("Set parameters manually")
@@ -44,7 +44,7 @@ class ParameterWidget(QWidget):
 
         self._on_toggle(False)  # initialize disabled state
 
-    def _connect_signals(self):
+    def bind(self):
         self._manual_params.stateChanged.connect(self._on_toggle)
 
     @Property(pd.DataFrame, notify=tableChanged)

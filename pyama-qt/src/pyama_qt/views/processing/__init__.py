@@ -1,11 +1,11 @@
 """Processing views for the PyAMA-Qt application."""
 
-from .merge_panel import ProcessingMergePanel
-from .page import ProcessingPage
-from .workflow_panel import ProcessingConfigPanel
+from .merge_view import MergeView
+from .view import ProcessingView
+from .workflow_view import WorkflowView
 
 __all__ = [
-    "ProcessingConfigPanel",
-    "ProcessingMergePanel",
-    "ProcessingPage",
+    "ProcessingView",
+    "MergeView",
+    "WorkflowView",
 ]

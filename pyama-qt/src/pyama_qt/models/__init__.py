@@ -1,9 +1,9 @@
 """Domain models exposed by the PyAMA-Qt MVC application."""
 
 from .analysis import (
-    AnalysisDataModel,
+    DataModel,
     AnalysisModel,
-    FittedResultsModel,
+    ResultsModel,
     FittingModel,
     FittingRequest,
 )
@@ -27,8 +27,8 @@ from .visualization import (
 )
 
 __all__ = [
-    "AnalysisDataModel",
-    "FittedResultsModel",
+    "DataModel",
+    "ResultsModel",
     "FittingModel",
     "FittingRequest",
     "AnalysisModel",

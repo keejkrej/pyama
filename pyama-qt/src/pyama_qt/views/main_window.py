@@ -8,9 +8,9 @@ from pyama_qt.controllers.visualization import VisualizationController
 from pyama_qt.models.analysis import AnalysisModel
 from pyama_qt.models.processing import ProcessingModel
 from pyama_qt.models.visualization import VisualizationModel
-from pyama_qt.views.analysis import AnalysisPage
-from pyama_qt.views.processing import ProcessingPage
-from pyama_qt.views.visualization import VisualizationPage
+from pyama_qt.views.analysis import AnalysisView
+from pyama_qt.views.processing import WorkflowView
+from pyama_qt.views.visualization import VisualizationView
 
 
 class MainWindow(QMainWindow):
@@ -33,9 +33,9 @@ class MainWindow(QMainWindow):
         self.visualization_model = VisualizationModel()
 
         # Create views
-        self.processing_page = ProcessingPage(self)
-        self.analysis_page = AnalysisPage(self)
-        self.visualization_page = VisualizationPage(self)
+        self.processing_page = WorkflowView(self)
+        self.analysis_page = AnalysisView(self)
+        self.visualization_page = VisualizationView(self)
 
         # Create controllers with injected models
         self.processing_controller = ProcessingController(

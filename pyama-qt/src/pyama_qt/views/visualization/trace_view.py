@@ -24,25 +24,14 @@ from pyama_qt.components.mpl_canvas import MplCanvas
 logger = logging.getLogger(__name__)
 
 
-class TracePanel(QWidget):
+class TraceView(QWidget):
     """Panel to plot time traces and allow selection via a checkable table."""
-
-    active_trace_changed = Signal(str)
-    trace_selection_changed = Signal(str)
-    good_state_changed = Signal(str, bool)
-    save_requested = Signal(dict, object)  # good status map, target path
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._trace_data: dict[str, FeatureData] = {}
-        self._trace_ids: list[str] = []
-        self._good_status: dict[str, bool] = {}
-        self._available_features: list[str] = []
-        self._active_trace_id: str | None = None
-        self._traces_csv_path: Path | None = None
         self._current_page = 0
-        self._items_per_page = 10
         self._total_pages = 1
+        self._items_per_page = 10
         self.build()
         self.bind()
 
@@ -56,7 +45,6 @@ class TracePanel(QWidget):
         selector_layout.addWidget(QLabel("Feature:"))
         self._feature_dropdown = QComboBox()
         selector_layout.addWidget(self._feature_dropdown, 1)
-        selector_layout.addStretch()
         plot_layout.addLayout(selector_layout)
 
         self._canvas = MplCanvas(self, width=8, height=6, dpi=100)
@@ -88,32 +76,22 @@ class TracePanel(QWidget):
         self._save_button = QPushButton("Save Inspected")
         controls_layout.addWidget(self._save_button, 1)
 
-        controls_layout.addStretch()
         list_layout.addLayout(controls_layout)
 
         self._table_widget = QTableWidget(0, 2)
-        self._table_widget.setHorizontalHeaderLabels(["Good", "Trace ID"])
-        self._table_widget.horizontalHeader().setStretchLastSection(True)
-        self._table_widget.verticalHeader().setVisible(False)
-        self._table_widget.setAlternatingRowColors(True)
-        self._table_widget.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self._table_widget.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows
-        )
-        self._table_widget.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         list_layout.addWidget(self._table_widget)
 
         layout.addWidget(list_group, 1)
 
     def bind(self) -> None:
-        self._feature_dropdown.currentTextChanged.connect(self._on_feature_changed)
-        self._prev_button.clicked.connect(self._on_prev_page)
-        self._next_button.clicked.connect(self._on_next_page)
-        self._check_all_button.clicked.connect(self._check_all)
-        self._uncheck_all_button.clicked.connect(self._uncheck_all)
-        self._save_button.clicked.connect(self._on_save_clicked)
-        self._table_widget.itemChanged.connect(self._on_item_changed)
-        self._table_widget.cellClicked.connect(self._on_cell_clicked)
+        self._feature_dropdown.currentTextChanged.connect(self._handle_feature_changed)
+        self._prev_button.clicked.connect(self._handle_prev_page)
+        self._next_button.clicked.connect(self._handle_next_page)
+        self._check_all_button.clicked.connect(self._handle_check_all)
+        self._uncheck_all_button.clicked.connect(self._handle_uncheck_all)
+        self._save_button.clicked.connect(self._handle_save_clicked)
+        self._table_widget.itemChanged.connect(self._handle_item_changed)
+        self._table_widget.cellClicked.connect(self._handle_cell_clicked)
         self._table_widget.keyPressEvent = self._handle_key_press  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
@@ -192,11 +170,11 @@ class TracePanel(QWidget):
     # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
-    def _on_feature_changed(self, feature_name: str) -> None:
+    def _handle_feature_changed(self, feature_name: str) -> None:
         if feature_name:
             self._plot_current_page_selected()
 
-    def _on_prev_page(self) -> None:
+    def _handle_prev_page(self) -> None:
         if self._current_page == 0:
             return
         self._current_page -= 1
@@ -204,7 +182,7 @@ class TracePanel(QWidget):
         self._populate_table()
         self._plot_current_page_selected()
 
-    def _on_next_page(self) -> None:
+    def _handle_next_page(self) -> None:
         if self._current_page >= self._total_pages - 1:
             return
         self._current_page += 1
@@ -212,7 +190,7 @@ class TracePanel(QWidget):
         self._populate_table()
         self._plot_current_page_selected()
 
-    def _on_item_changed(self, item: QTableWidgetItem) -> None:
+    def _handle_item_changed(self, item: QTableWidgetItem) -> None:
         if item.column() != 0:
             return
         row = item.row()
@@ -226,7 +204,7 @@ class TracePanel(QWidget):
         self.good_state_changed.emit(trace_id, is_good)
         self.trace_selection_changed.emit(trace_id)
 
-    def _on_cell_clicked(self, row: int, _column: int) -> None:
+    def _handle_cell_clicked(self, row: int, _column: int) -> None:
         visible_ids = self._visible_trace_ids()
         if row >= len(visible_ids):
             return
@@ -244,7 +222,7 @@ class TracePanel(QWidget):
         if event.key() == Qt.Key.Key_Up:
             if current_row > 0:
                 self._table_widget.setCurrentCell(current_row - 1, 1)
-                self._on_cell_clicked(current_row - 1, 1)
+                self._handle_cell_clicked(current_row - 1, 1)
             elif self._current_page > 0:
                 self._current_page -= 1
                 self._update_pagination_controls()
@@ -253,21 +231,21 @@ class TracePanel(QWidget):
                 if new_ids:
                     last_row = len(new_ids) - 1
                     self._table_widget.setCurrentCell(last_row, 1)
-                    self._on_cell_clicked(last_row, 1)
+                    self._handle_cell_clicked(last_row, 1)
             event.accept()
             return
 
         if event.key() == Qt.Key.Key_Down:
             if current_row < len(visible_ids) - 1:
                 self._table_widget.setCurrentCell(current_row + 1, 1)
-                self._on_cell_clicked(current_row + 1, 1)
+                self._handle_cell_clicked(current_row + 1, 1)
             elif self._current_page < self._total_pages - 1:
                 self._current_page += 1
                 self._update_pagination_controls()
                 self._populate_table()
                 if self._visible_trace_ids():
                     self._table_widget.setCurrentCell(0, 1)
-                    self._on_cell_clicked(0, 1)
+                    self._handle_cell_clicked(0, 1)
             event.accept()
             return
 
@@ -291,7 +269,7 @@ class TracePanel(QWidget):
 
         QTableWidget.keyPressEvent(self._table_widget, event)
 
-    def _on_save_clicked(self) -> None:
+    def _handle_save_clicked(self) -> None:
         if not self._traces_csv_path:
             logger.warning("No trace CSV path set; skipping save")
             return
@@ -401,7 +379,7 @@ class TracePanel(QWidget):
                 font.setBold(trace_id == self._active_trace_id)
                 item.setFont(font)
 
-    def _check_all(self) -> None:
+    def _handle_check_all(self) -> None:
         for trace_id in self._trace_ids:
             if not self._good_status.get(trace_id, True):
                 self._good_status[trace_id] = True
@@ -409,7 +387,7 @@ class TracePanel(QWidget):
         self._populate_table()
         self._plot_current_page_selected()
 
-    def _uncheck_all(self) -> None:
+    def _handle_uncheck_all(self) -> None:
         for trace_id in self._trace_ids:
             if self._good_status.get(trace_id, True):
                 self._good_status[trace_id] = False

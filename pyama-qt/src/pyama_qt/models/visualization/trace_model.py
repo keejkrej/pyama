@@ -1,9 +1,13 @@
 """Trace table model for visualization."""
 
 import logging
-from PySide6.QtCore import QObject, Signal, Property
 from dataclasses import dataclass
 import numpy as np
+import pandas as pd
+from pathlib import Path
+from PySide6.QtCore import QObject, Signal, Property, Slot
+
+from pyama_core.io.processing_csv import extract_cell_quality_dataframe, get_dataframe
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +25,9 @@ class FeatureData:
 class TraceModel(QObject):
     """Model for trace table state."""
 
-    goodCellsChanged = Signal(dict)
-    selectedCellsChanged = Signal(dict)
-    featureDataCellsChanged = Signal(dict)
+    good_cells_changed = Signal(dict)
+    selected_cells_changed = Signal(dict)
+    feature_data_cells_changed = Signal(dict)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -31,32 +35,40 @@ class TraceModel(QObject):
         self._selected_cells: dict[str, bool] | None = None
         self._feature_data_cells: dict[str, FeatureData] | None = None
 
-    @Property(object, notify=goodCellsChanged)
-    def goodCells(self) -> dict[str, bool] | None:
+    @Property(object, notify=good_cells_changed)
+    def good_cells(self) -> dict[str, bool] | None:
         return self._good_cells
 
-    @goodCells.setter
-    def goodCells(self, good_cells: dict[str, bool] | None) -> None:
+    @good_cells.setter
+    def good_cells(self, good_cells: dict[str, bool] | None) -> None:
         if self._good_cells is not good_cells:
             self._good_cells = good_cells
-            self.goodCellsChanged.emit(good_cells or {})
+            self.good_cells_changed.emit(good_cells or {})
 
-    @Property(object, notify=selectedCellsChanged)
-    def selectedCells(self) -> dict[str, bool] | None:
+    @Property(object, notify=selected_cells_changed)
+    def selected_cells(self) -> dict[str, bool] | None:
         return self._selected_cells
 
-    @selectedCells.setter
-    def selectedCells(self, selected_cells: dict[str, bool] | None) -> None:
+    @selected_cells.setter
+    def selected_cells(self, selected_cells: dict[str, bool] | None) -> None:
         if self._selected_cells is not selected_cells:
             self._selected_cells = selected_cells
-            self.selectedCellsChanged.emit(selected_cells or {})
+            self.selected_cells_changed.emit(selected_cells or {})
 
-    @Property(object, notify=featureDataCellsChanged)
-    def featureDataCells(self) -> dict[str, FeatureData] | None:
+    @Property(object, notify=feature_data_cells_changed)
+    def feature_data_cells(self) -> dict[str, FeatureData] | None:
         return self._feature_data_cells
 
-    @featureDataCells.setter
-    def featureDataCells(self, feature_data: dict[str, FeatureData] | None) -> None:
+    @feature_data_cells.setter
+    def feature_data_cells(self, feature_data: dict[str, FeatureData] | None) -> None:
         if self._feature_data_cells is not feature_data:
             self._feature_data_cells = feature_data
-            self.featureDataCellsChanged.emit(feature_data or {})
+            self.feature_data_cells_changed.emit(feature_data or {})
+
+    @Slot()
+    def load_from_csv(self, path: Path) -> None:
+        pass
+
+    @Slot()
+    def save_to_csv(self, path: Path) -> None:
+        pass

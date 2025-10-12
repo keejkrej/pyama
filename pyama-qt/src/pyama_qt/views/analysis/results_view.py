@@ -20,7 +20,7 @@ from pyama_qt.config import DEFAULT_DIR
 from pyama_qt.components.mpl_canvas import MplCanvas
 
 
-class AnalysisResultsPanel(QWidget):
+class ResultsView(QWidget):
     """Right-hand panel visualising fitting diagnostics."""
 
     parameter_selected = Signal(str)

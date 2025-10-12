@@ -1,13 +1,13 @@
 """Visualization views for the PyAMA-Qt application."""
 
-from .image_panel import ImagePanel
-from .page import VisualizationPage
-from .project_panel import ProjectPanel
-from .trace_panel import TracePanel
+from .view import VisualizationView
+from .image_view import ImageView
+from .project_view import ProjectView
+from .trace_view import TraceView
 
 __all__ = [
-    "ImagePanel",
-    "ProjectPanel",
-    "TracePanel",
-    "VisualizationPage",
+    "ImageView",
+    "ProjectView",
+    "TraceView",
+    "VisualizationView",
 ]

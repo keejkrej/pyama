@@ -13,7 +13,7 @@ from pyama_core.io.analysis_csv import load_analysis_csv
 logger = logging.getLogger(__name__)
 
 
-class AnalysisDataModel(QObject):
+class DataModel(QObject):
     """Model holding raw trace data and plot configuration."""
 
     rawDataChanged = Signal(pd.DataFrame)

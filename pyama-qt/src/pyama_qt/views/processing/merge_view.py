@@ -101,7 +101,7 @@ class SampleTable(QTableWidget):
             self.add_row(name, fovs_text)
 
 
-class ProcessingMergePanel(QWidget):
+class MergeView(QWidget):
     """Panel responsible for FOV assignment and CSV merging utilities."""
 
     # Signals for controller

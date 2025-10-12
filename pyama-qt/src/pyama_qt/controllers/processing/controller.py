@@ -20,7 +20,7 @@ from pyama_core.processing.workflow import ensure_context, run_complete_workflow
 from pyama_core.processing.workflow.services.types import Channels, ProcessingContext
 from pyama_qt.models.processing import ProcessingModel
 from pyama_qt.services import WorkerHandle, start_worker
-from pyama_qt.views.processing.page import ProcessingPage
+from pyama_qt.views.processing.view import ProcessingView
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +396,7 @@ def _run_merge(
 class ProcessingController(QObject):
     """Controller coordinating processing workflow UI interactions."""
 
-    def __init__(self, view: ProcessingPage, model: ProcessingModel) -> None:
+    def __init__(self, view: ProcessingView, model: ProcessingModel) -> None:
         super().__init__()
         self._view = view
         self._model = model
@@ -412,8 +412,8 @@ class ProcessingController(QObject):
     # Signal wiring helpers
     # ------------------------------------------------------------------
     def _connect_view_signals(self) -> None:
-        config_panel = self._view.config_panel
-        merge_panel = self._view.merge_panel
+        config_panel = self._view.workflow_view
+        merge_panel = self._view.merge_view
 
         config_panel.file_selected.connect(self._on_microscopy_selected)
         config_panel.output_dir_selected.connect(self._on_output_directory_selected)
@@ -442,8 +442,8 @@ class ProcessingController(QObject):
         self._model.merge_model.mergeOutputDir = path
 
     def _connect_model_signals(self) -> None:
-        config_panel = self._view.config_panel
-        merge_panel = self._view.merge_panel
+        config_panel = self._view.workflow_view
+        merge_panel = self._view.merge_view
 
         self._model.workflow_model.microscopyPathChanged.connect(
             config_panel.display_microscopy_path
@@ -488,8 +488,8 @@ class ProcessingController(QObject):
         )
 
     def _initialise_view_state(self) -> None:
-        config_panel = self._view.config_panel
-        merge_panel = self._view.merge_panel
+        config_panel = self._view.workflow_view
+        merge_panel = self._view.merge_view
 
         # Initialize config panel
         config_panel.display_microscopy_path(self._model.workflow_model.microscopyPath)
@@ -600,7 +600,7 @@ class ProcessingController(QObject):
 
     def _on_samples_save_requested(self, path: Path) -> None:
         try:
-            samples = self._view.merge_panel.current_samples()
+            samples = self._view.merge_view.current_samples()
         except ValueError as exc:
             logger.error("Failed to save samples: %s", exc)
             self._model.workflow_model.errorMessage = str(exc)
@@ -629,7 +629,7 @@ class ProcessingController(QObject):
     # ------------------------------------------------------------------
     def _sync_channel_selection(self, *_args) -> None:
         selection = self._model.workflow_model.channels()
-        self._view.config_panel.apply_selected_channels(
+        self._view.workflow_view.apply_selected_channels(
             phase=selection.phase,
             fluorescence=selection.fluorescence,
         )
@@ -643,7 +643,7 @@ class ProcessingController(QObject):
                 label = f"Channel {idx}: {name}"
                 phase_options.append((label, idx))
                 fluorescence_options.append((label, idx))
-        self._view.config_panel.set_channel_options(
+        self._view.workflow_view.set_channel_options(
             phase_channels=phase_options,
             fluorescence_channels=fluorescence_options,
         )
@@ -674,7 +674,7 @@ class ProcessingController(QObject):
             samples = data.get("samples", [])
             if not isinstance(samples, list):
                 raise ValueError("Invalid YAML: 'samples' must be list")
-            self._view.merge_panel.load_samples(samples)
+            self._view.merge_view.load_samples(samples)
             # Update merge model with the loaded path
             self._model.merge_model.sampleYamlPath = path
         except Exception as exc:

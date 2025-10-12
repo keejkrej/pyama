@@ -14,13 +14,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from pyama_qt.models.visualization import PositionData
 from pyama_qt.components.mpl_canvas import MplCanvas
 
 logger = logging.getLogger(__name__)
 
 
-class ImagePanel(QWidget):
+class ImageView(QWidget):
     """Panel for viewing microscopy images and processing results."""
 
     data_type_selected = Signal(str)

@@ -21,7 +21,7 @@ from pyama_qt.components.mpl_canvas import MplCanvas
 PlotLine = tuple[Sequence[float], Sequence[float], dict]
 
 
-class AnalysisDataPanel(QWidget):
+class DataView(QWidget):
     """Left-side panel responsible for loading CSV data and visualisation."""
 
     csv_selected = Signal(Path)

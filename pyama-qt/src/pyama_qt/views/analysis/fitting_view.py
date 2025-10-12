@@ -21,7 +21,7 @@ from pyama_qt.components.mpl_canvas import MplCanvas
 from pyama_qt.components.parameter_widget import ParameterWidget
 
 
-class AnalysisFittingPanel(QWidget):
+class FittingView(QWidget):
     """Middle panel offering model selection, fitting, and QC plots."""
 
     fit_requested = Signal(str, dict, dict, bool)

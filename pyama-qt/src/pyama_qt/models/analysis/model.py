@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 from typing import Dict
 from PySide6.QtCore import QObject
 
-from .data_model import AnalysisDataModel
+from .data_model import DataModel
 from .fitting_model import FittingModel
-from .results_model import FittedResultsModel
+from .results_model import ResultsModel
 
 
 @dataclass(slots=True)
@@ -23,6 +23,6 @@ class AnalysisModel(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self.data_model = AnalysisDataModel()
+        self.data_model = DataModel()
         self.fitting_model = FittingModel()
-        self.results_model = FittedResultsModel()
+        self.results_model = ResultsModel()

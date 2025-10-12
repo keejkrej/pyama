@@ -17,7 +17,7 @@ from pyama_core.io.results_yaml import (
 )
 from pyama_qt.models.processing import ProcessingModel
 from pyama_qt.services import WorkerHandle, start_worker
-from pyama_qt.views.processing.page import ProcessingPage
+from pyama_qt.views.processing.view import ProcessingView
 
 logger = logging.getLogger(__name__)
 
@@ -388,7 +388,7 @@ def _run_merge(
 class MergeController(QObject):
     """Controller coordinating merge UI actions and background work."""
 
-    def __init__(self, view: ProcessingPage, model: ProcessingModel) -> None:
+    def __init__(self, view: ProcessingView, model: ProcessingModel) -> None:
         super().__init__()
         self._view = view
         self._model = model
@@ -398,7 +398,7 @@ class MergeController(QObject):
         self._connect_model_signals()
 
     def _connect_view_signals(self) -> None:
-        merge_panel = self._view.merge_panel
+        merge_panel = self._view.merge_view
 
         merge_panel.load_samples_requested.connect(self._on_samples_load_requested)
         merge_panel.save_samples_requested.connect(self._on_samples_save_requested)
@@ -421,7 +421,7 @@ class MergeController(QObject):
         self._model.merge_model.mergeOutputDir = path
 
     def _connect_model_signals(self) -> None:
-        merge_panel = self._view.merge_panel
+        merge_panel = self._view.merge_view
 
         # Connect merge model signals to view
         self._model.merge_model.sampleYamlPathChanged.connect(
@@ -439,7 +439,7 @@ class MergeController(QObject):
 
     def _on_samples_save_requested(self, path: Path) -> None:
         try:
-            samples = self._view.merge_panel.current_samples()
+            samples = self._view.merge_view.current_samples()
         except ValueError as exc:
             logger.error("Failed to save samples: %s", exc)
             self._model.workflow_model.errorMessage = str(exc)
@@ -452,7 +452,7 @@ class MergeController(QObject):
             samples = data.get("samples", [])
             if not isinstance(samples, list):
                 raise ValueError("Invalid YAML: 'samples' must be list")
-            self._view.merge_panel.load_samples(samples)
+            self._view.merge_view.load_samples(samples)
             # Update merge model with the loaded path
             self._model.merge_model.sampleYamlPath = path
         except Exception as exc:

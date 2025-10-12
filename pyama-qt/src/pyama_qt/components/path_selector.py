@@ -52,10 +52,10 @@ class PathSelector(QWidget):
         # Internal path is always a string (empty when unset)
         self._path: str = ""
 
-        self._build_ui(label)
-        self._connect_signals()
+        self.build(label)
+        self.bind()
 
-    def _build_ui(self, label: str) -> None:
+    def build(self, label: str) -> None:
         layout = QHBoxLayout(self)
         if label:
             layout.addWidget(QLabel(label))
@@ -67,7 +67,7 @@ class PathSelector(QWidget):
         self._browse_btn = QPushButton("Browse")
         layout.addWidget(self._browse_btn)
 
-    def _connect_signals(self) -> None:
+    def bind(self) -> None:
         self._browse_btn.clicked.connect(self._on_browse)
         self._path_edit.textChanged.connect(self._on_edit)
 

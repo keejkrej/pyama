@@ -10,7 +10,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 logger = logging.getLogger(__name__)
 
 
-class FittedResultsModel(QAbstractTableModel):
+class ResultsModel(QAbstractTableModel):
     """Table model for fitted results DataFrame."""
 
     resultsReset = Signal()

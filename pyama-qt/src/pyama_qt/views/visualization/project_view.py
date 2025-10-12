@@ -23,8 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyama_qt.config import DEFAULT_DIR
 from PySide6.QtCore import Qt, Signal, QModelIndex, QAbstractListModel
+from pyama_qt.config import DEFAULT_DIR
 from pathlib import Path
 import logging
 from typing import Any
@@ -77,7 +77,7 @@ class ChannelListModel(QAbstractListModel):
         return ""
 
 
-class ProjectPanel(QWidget):
+class ProjectView(QWidget):
     """Panel for loading and displaying FOV data from folders."""
 
     project_load_requested = Signal(Path)

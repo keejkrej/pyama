@@ -1,14 +1,14 @@
 """Analysis models for the PyAMA-Qt application."""
 
-from .data_model import AnalysisDataModel
+from .data_model import DataModel
 from .fitting_model import FittingModel
 from .model import AnalysisModel, FittingRequest
-from .results_model import FittedResultsModel
+from .results_model import ResultsModel
 
 __all__ = [
-    "AnalysisDataModel",
+    "DataModel",
     "FittingModel",
     "AnalysisModel",
-    "FittedResultsModel",
+    "ResultsModel",
     "FittingRequest",
 ]

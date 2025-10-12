@@ -36,7 +36,7 @@ class ChannelSelectionPayload:
     fluorescence: list[int]
 
 
-class ProcessingConfigPanel(QWidget):
+class WorkflowView(QWidget):
     """Collects user inputs for running the processing workflow."""
 
     file_selected = Signal(Path)
