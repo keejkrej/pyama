@@ -125,7 +125,7 @@ MainWindow
 
 ### Processing Controller (`controllers/processing.py`)
 
-- Receives injected `ProcessingModel` containing `ProcessingConfigModel` and `WorkflowStatusModel`.
+- Receives injected `ProcessingModel` containing `WorkflowModel`, `WorkflowStatusModel`, and `MergeModel`.
 - Coordinates the workflow configuration, launch, and merge operations.
 - Drives `ProcessingConfigPanel` and `ProcessingMergePanel` using plain data payloads.
 - Background workers update models and cascaded view state.

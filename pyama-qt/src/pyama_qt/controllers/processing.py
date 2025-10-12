@@ -6,28 +6,32 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
 from PySide6.QtCore import QObject, Signal
 
-from pyama_core.io import load_microscopy_file, MicroscopyMetadata
+from pyama_core.io import MicroscopyMetadata, load_microscopy_file
 from pyama_core.io.processing_csv import get_dataframe
 from pyama_core.io.results_yaml import (
-    load_processing_results_yaml,
     get_channels_from_yaml,
     get_time_units_from_yaml,
+    load_processing_results_yaml,
 )
 from pyama_core.processing.workflow import ensure_context, run_complete_workflow
 from pyama_core.processing.workflow.services.types import Channels, ProcessingContext
-from pyama_qt.models.processing import ProcessingModel, MergeRequest
+from pyama_qt.models.processing import ProcessingModel
 from pyama_qt.services import WorkerHandle, start_worker
-from .processing_utils import parse_fov_range
-import yaml
-
 from pyama_qt.views.processing.page import ProcessingPage
+
+from .processing_utils import parse_fov_range
 
 logger = logging.getLogger(__name__)
 
 
-# Move helpers here from merge_panel
+# =============================================================================
+# Merge Utility Functions
+# =============================================================================
+
+
 def get_available_features() -> list[str]:
     """Get list of available feature extractors."""
     try:
@@ -234,14 +238,24 @@ def _find_trace_csv_file(
     return None
 
 
-def _run_merge(  # Renamed from run_merge for private
+def _run_merge(
     sample_yaml: Path,
     processing_results: Path,
-    input_dir: Path,
     output_dir: Path,
 ) -> str:
-    """Internal merge logic - return success message or raise error."""
-    # Adapted from original run_merge, but no root param, direct paths
+    """Internal merge logic - return success message or raise error.
+
+    Args:
+        sample_yaml: Path to sample YAML configuration
+        processing_results: Path to processing_results.yaml
+        output_dir: Directory for merged output files
+
+    Returns:
+        Success message with number of files created
+    """
+    # Input directory is always the parent of processing_results.yaml
+    input_dir = processing_results.parent
+
     config = read_yaml_config(sample_yaml)
     samples = config["samples"]
 
@@ -332,6 +346,11 @@ def _run_merge(  # Renamed from run_merge for private
     return f"Merge completed. Created {len(created_files)} files in {output_dir}"
 
 
+# =============================================================================
+# Main Controller
+# =============================================================================
+
+
 class ProcessingController(QObject):
     """Controller coordinating processing workflow UI interactions."""
 
@@ -364,53 +383,98 @@ class ProcessingController(QObject):
         merge_panel.save_samples_requested.connect(self._on_samples_save_requested)
         merge_panel.merge_requested.connect(self._on_merge_requested)
 
+        # Connect path changes to merge model
+        merge_panel.sample_yaml_path_changed.connect(self._on_sample_yaml_path_changed)
+        merge_panel.processing_results_path_changed.connect(
+            self._on_processing_results_path_changed
+        )
+        merge_panel.merge_output_dir_changed.connect(self._on_merge_output_dir_changed)
+
+    def _on_sample_yaml_path_changed(self, path: Path | None) -> None:
+        self._model.merge_model.sampleYamlPath = path
+
+    def _on_processing_results_path_changed(self, path: Path | None) -> None:
+        self._model.merge_model.processingResultsPath = path
+
+    def _on_merge_output_dir_changed(self, path: Path | None) -> None:
+        self._model.merge_model.mergeOutputDir = path
+
     def _connect_model_signals(self) -> None:
         config_panel = self._view.config_panel
+        merge_panel = self._view.merge_panel
 
-        self._model.config_model.microscopyPathChanged.connect(
+        self._model.workflow_model.microscopyPathChanged.connect(
             config_panel.display_microscopy_path
         )
-        self._model.config_model.outputDirChanged.connect(
+        self._model.workflow_model.outputDirChanged.connect(
             config_panel.display_output_directory
         )
-        self._model.config_model.metadataChanged.connect(self._on_metadata_changed)
-        self._model.config_model.phaseChanged.connect(self._sync_channel_selection)
-        self._model.config_model.fluorescenceChanged.connect(
+        self._model.workflow_model.metadataChanged.connect(self._on_metadata_changed)
+        self._model.workflow_model.phaseChanged.connect(self._sync_channel_selection)
+        self._model.workflow_model.fluorescenceChanged.connect(
             self._sync_channel_selection
         )
-        self._model.config_model.fovStartChanged.connect(
+        self._model.workflow_model.fovStartChanged.connect(
             lambda value: config_panel.set_parameter_value("fov_start", value)
         )
-        self._model.config_model.fovEndChanged.connect(
+        self._model.workflow_model.fovEndChanged.connect(
             lambda value: config_panel.set_parameter_value("fov_end", value)
         )
-        self._model.config_model.batchSizeChanged.connect(
+        self._model.workflow_model.batchSizeChanged.connect(
             lambda value: config_panel.set_parameter_value("batch_size", value)
         )
-        self._model.config_model.nWorkersChanged.connect(
+        self._model.workflow_model.nWorkersChanged.connect(
             lambda value: config_panel.set_parameter_value("n_workers", value)
         )
 
-        self._model.status_model.isProcessingChanged.connect(
+        self._model.workflow_model.isProcessingChanged.connect(
             config_panel.set_processing_active
         )
-        self._model.status_model.isProcessingChanged.connect(
+        self._model.workflow_model.isProcessingChanged.connect(
             lambda active: config_panel.set_process_enabled(not active)
         )
 
+        # Connect merge model signals to view
+        self._model.merge_model.sampleYamlPathChanged.connect(
+            lambda path: merge_panel.set_sample_yaml_path(path) if path else None
+        )
+        self._model.merge_model.processingResultsPathChanged.connect(
+            lambda path: merge_panel.set_processing_results_path(path) if path else None
+        )
+        self._model.merge_model.mergeOutputDirChanged.connect(
+            lambda path: merge_panel.set_output_directory(path) if path else None
+        )
+
     def _initialise_view_state(self) -> None:
-        panel = self._view.config_panel
-        panel.display_microscopy_path(self._model.config_model.microscopy_path())
-        panel.display_output_directory(self._model.config_model.output_dir())
-        self._on_metadata_changed(self._model.config_model.metadata())
+        config_panel = self._view.config_panel
+        merge_panel = self._view.merge_panel
+
+        # Initialize config panel
+        config_panel.display_microscopy_path(self._model.workflow_model.microscopyPath)
+        config_panel.display_output_directory(self._model.workflow_model.outputDir)
+        self._on_metadata_changed(self._model.workflow_model.metadata)
         self._sync_channel_selection()
-        panel.set_parameter_value("fov_start", self._model.config_model.fov_start())
-        panel.set_parameter_value("fov_end", self._model.config_model.fov_end())
-        panel.set_parameter_value("batch_size", self._model.config_model.batch_size())
-        panel.set_parameter_value("n_workers", self._model.config_model.n_workers())
-        active = self._model.status_model.is_processing()
-        panel.set_processing_active(active)
-        panel.set_process_enabled(not active)
+        config_panel.set_parameter_value(
+            "fov_start", self._model.workflow_model.fovStart
+        )
+        config_panel.set_parameter_value("fov_end", self._model.workflow_model.fovEnd)
+        config_panel.set_parameter_value(
+            "batch_size", self._model.workflow_model.batchSize
+        )
+        config_panel.set_parameter_value(
+            "n_workers", self._model.workflow_model.nWorkers
+        )
+        active = self._model.workflow_model.isProcessing
+        config_panel.set_processing_active(active)
+        config_panel.set_process_enabled(not active)
+
+        # Initialize merge panel
+        if path := self._model.merge_model.sampleYamlPath:
+            merge_panel.set_sample_yaml_path(path)
+        if path := self._model.merge_model.processingResultsPath:
+            merge_panel.set_processing_results_path(path)
+        if path := self._model.merge_model.mergeOutputDir:
+            merge_panel.set_output_directory(path)
 
     # ------------------------------------------------------------------
     # View → Controller handlers
@@ -420,20 +484,20 @@ class ProcessingController(QObject):
 
     def _on_output_directory_selected(self, directory: Path) -> None:
         logger.info("Selected output directory: %s", directory)
-        self._model.config_model.set_output_dir(directory)
-        self._model.status_model.set_error_message("")
+        self._model.workflow_model.outputDir = directory
+        self._model.workflow_model.errorMessage = ""
 
     def _on_channels_changed(self, payload: Any) -> None:
         phase = getattr(payload, "phase", None)
         fluorescence = list(getattr(payload, "fluorescence", [])) if payload else []
-        self._model.config_model.update_channels(phase, fluorescence)
+        self._model.workflow_model.update_channels(phase, fluorescence)
 
     def _on_parameters_changed(self, param_dict: dict[str, Any]) -> None:
         fov_start = param_dict.get("fov_start", -1)
         fov_end = param_dict.get("fov_end", -1)
         batch_size = param_dict.get("batch_size", 2)
         n_workers = param_dict.get("n_workers", 2)
-        self._model.config_model.update_parameters(
+        self._model.workflow_model.update_parameters(
             fov_start=fov_start,
             fov_end=fov_end,
             batch_size=batch_size,
@@ -441,7 +505,7 @@ class ProcessingController(QObject):
         )
 
     def _on_process_requested(self) -> None:
-        if self._model.status_model.is_processing():
+        if self._model.workflow_model.isProcessing:
             logger.warning("Workflow already running; ignoring start request")
             return
 
@@ -449,21 +513,21 @@ class ProcessingController(QObject):
             self._validate_ready()
         except ValueError as exc:
             logger.error("Cannot start workflow: %s", exc)
-            self._model.status_model.set_error_message(str(exc))
+            self._model.workflow_model.errorMessage = str(exc)
             return
 
-        metadata = self._model.config_model.metadata()
+        metadata = self._model.workflow_model.metadata()
         assert metadata is not None
 
         context = ProcessingContext(
-            output_dir=self._model.config_model.output_dir(),
+            output_dir=self._model.workflow_model.outputDir,
             channels=Channels(
                 pc=(
-                    self._model.config_model.phase()
-                    if self._model.config_model.phase() is not None
+                    self._model.workflow_model.phase
+                    if self._model.workflow_model.phase is not None
                     else 0
                 ),
-                fl=list(self._model.config_model.fluorescence() or []),
+                fl=list(self._model.workflow_model.fluorescence or []),
             ),
             params={},
             time_units="",
@@ -472,10 +536,10 @@ class ProcessingController(QObject):
         worker = _WorkflowRunner(
             metadata=metadata,
             context=context,
-            fov_start=self._model.config_model.fov_start(),
-            fov_end=self._model.config_model.fov_end(),
-            batch_size=self._model.config_model.batch_size(),
-            n_workers=self._model.config_model.n_workers(),
+            fov_start=self._model.workflow_model.fovStart,
+            fov_end=self._model.workflow_model.fovEnd,
+            batch_size=self._model.workflow_model.batchSize,
+            n_workers=self._model.workflow_model.nWorkers,
         )
         worker.finished.connect(self._on_workflow_finished)
 
@@ -485,9 +549,9 @@ class ProcessingController(QObject):
             finished_callback=self._clear_workflow_handle,
         )
         self._workflow_runner = handle
-        self._model.status_model.set_is_processing(True)
-        self._model.status_model.set_status_message("Running workflow…")
-        self._model.status_model.set_error_message("")
+        self._model.workflow_model.isProcessing = True
+        self._model.workflow_model.statusMessage = "Running workflow…"
+        self._model.workflow_model.errorMessage = ""
 
     def _on_samples_load_requested(self, path: Path) -> None:
         self._load_samples(path)
@@ -497,35 +561,32 @@ class ProcessingController(QObject):
             samples = self._view.merge_panel.current_samples()
         except ValueError as exc:
             logger.error("Failed to save samples: %s", exc)
-            self._model.status_model.set_error_message(str(exc))
+            self._model.workflow_model.errorMessage = str(exc)
             return
         self._save_samples(path, samples)
 
-    def _on_merge_requested(self, payload: Any) -> None:
-        sample_yaml = Path(getattr(payload, "sample_yaml"))
-        processing_yaml = Path(getattr(payload, "processing_results_yaml"))
-        data_dir = Path(getattr(payload, "data_dir"))
-        output_dir = Path(getattr(payload, "output_dir"))
+    def _on_merge_requested(self) -> None:
+        """Handle merge request from view - reads paths from merge model."""
+        # Read paths from merge model
+        sample_yaml = self._model.merge_model.sampleYamlPath
+        processing_results = self._model.merge_model.processingResultsPath
+        output_dir = self._model.merge_model.mergeOutputDir
 
-        panel = self._view.merge_panel
-        panel.set_sample_yaml_path(sample_yaml)
-        panel.set_processing_results_path(processing_yaml)
-        panel.set_data_directory(data_dir)
-        panel.set_output_directory(output_dir)
+        # Validate all paths are present
+        if not all([sample_yaml, processing_results, output_dir]):
+            error_msg = "All paths must be specified for merge"
+            logger.error(error_msg)
+            self._model.workflow_model.errorMessage = error_msg
+            return
 
-        request = MergeRequest(
-            sample_yaml=sample_yaml,
-            processing_results=processing_yaml,
-            input_dir=data_dir,
-            output_dir=output_dir,
-        )
-        self._run_merge(request)
+        # Start merge with paths from merge model
+        self._run_merge(sample_yaml, processing_results, output_dir)
 
     # ------------------------------------------------------------------
     # Model → Controller helpers
     # ------------------------------------------------------------------
     def _sync_channel_selection(self, *_args) -> None:
-        selection = self._model.config_model.channels()
+        selection = self._model.workflow_model.channels()
         self._view.config_panel.apply_selected_channels(
             phase=selection.phase,
             fluorescence=selection.fluorescence,
@@ -551,9 +612,9 @@ class ProcessingController(QObject):
     # ------------------------------------------------------------------
     def _load_microscopy(self, path: Path) -> None:
         logger.info("Loading microscopy metadata from %s", path)
-        self._model.config_model.load_microscopy(path)
-        self._model.status_model.set_status_message("Loading microscopy metadata…")
-        self._model.status_model.set_error_message("")
+        self._model.workflow_model.load_microscopy(path)
+        self._model.workflow_model.statusMessage = "Loading microscopy metadata…"
+        self._model.workflow_model.errorMessage = ""
 
         worker = _MicroscopyLoaderWorker(path)
         worker.loaded.connect(self._on_microscopy_loaded)
@@ -572,10 +633,11 @@ class ProcessingController(QObject):
             if not isinstance(samples, list):
                 raise ValueError("Invalid YAML: 'samples' must be list")
             self._view.merge_panel.load_samples(samples)
-            self._view.merge_panel.set_sample_yaml_path(path)
+            # Update merge model with the loaded path
+            self._model.merge_model.sampleYamlPath = path
         except Exception as exc:
             logger.error("Failed to load samples from %s: %s", path, exc)
-            self._model.status_model.set_error_message(str(exc))
+            self._model.workflow_model.errorMessage = str(exc)
 
     def _save_samples(self, path: Path, samples: list[dict[str, Any]]) -> None:
         try:
@@ -583,17 +645,20 @@ class ProcessingController(QObject):
             with path.open("w", encoding="utf-8") as f:
                 yaml.safe_dump({"samples": samples}, f, sort_keys=False)
             logger.info("Saved samples to %s", path)
-            self._view.merge_panel.set_sample_yaml_path(path)
+            # Update merge model with the saved path
+            self._model.merge_model.sampleYamlPath = path
         except Exception as exc:
             logger.error("Failed to save samples to %s: %s", path, exc)
-            self._model.status_model.set_error_message(str(exc))
+            self._model.workflow_model.errorMessage = str(exc)
 
-    def _run_merge(self, request: MergeRequest) -> None:
+    def _run_merge(
+        self, sample_yaml: Path, processing_results: Path, output_dir: Path
+    ) -> None:
         if self._merge_runner:
             logger.warning("Merge already running")
             return
 
-        worker = _MergeRunner(request)
+        worker = _MergeRunner(sample_yaml, processing_results, output_dir)
         worker.finished.connect(self._on_merge_finished)
         handle = start_worker(
             worker,
@@ -601,20 +666,20 @@ class ProcessingController(QObject):
             finished_callback=self._clear_merge_handle,
         )
         self._merge_runner = handle
-        self._model.status_model.set_status_message("Running merge…")
-        self._model.status_model.set_error_message("")
+        self._model.workflow_model.statusMessage = "Running merge…"
+        self._model.workflow_model.errorMessage = ""
 
     def _validate_ready(self) -> None:
-        metadata = self._model.config_model.metadata()
+        metadata = self._model.workflow_model.metadata
         if metadata is None:
             raise ValueError("Load an ND2 file before starting the workflow")
-        if self._model.config_model.output_dir() is None:
+        if self._model.workflow_model.outputDir is None:
             raise ValueError("Select an output directory before starting the workflow")
-        channels = self._model.config_model.channels()
+        channels = self._model.workflow_model.channels()
         if channels.phase is None and not channels.fluorescence:
             raise ValueError("Select at least one channel to process")
 
-        params = self._model.config_model.parameters()
+        params = self._model.workflow_model.parameters()
         n_fovs = getattr(metadata, "n_fovs", 0)
 
         if params.fov_start != -1 or params.fov_end != -1:
@@ -637,14 +702,14 @@ class ProcessingController(QObject):
     # ------------------------------------------------------------------
     def _on_microscopy_loaded(self, metadata: MicroscopyMetadata) -> None:
         logger.info("Microscopy metadata loaded")
-        self._model.config_model.set_metadata(metadata)
-        self._model.status_model.set_status_message("ND2 ready")
-        self._model.status_model.set_error_message("")
+        self._model.workflow_model.metadata = metadata
+        self._model.workflow_model.statusMessage = "ND2 ready"
+        self._model.workflow_model.errorMessage = ""
 
     def _on_microscopy_failed(self, message: str) -> None:
         logger.error("Failed to load ND2: %s", message)
-        self._model.status_model.set_status_message("")
-        self._model.status_model.set_error_message(message)
+        self._model.workflow_model.set_status_message("")
+        self._model.workflow_model.set_error_message(message)
 
     def _on_loader_finished(self) -> None:
         logger.info("ND2 loader thread finished")
@@ -652,23 +717,32 @@ class ProcessingController(QObject):
 
     def _on_workflow_finished(self, success: bool, message: str) -> None:
         logger.info("Workflow finished (success=%s): %s", success, message)
-        self._model.status_model.set_is_processing(False)
-        self._model.status_model.set_status_message(message)
+        self._model.workflow_model.set_is_processing(False)
+        self._model.workflow_model.set_status_message(message)
         if not success:
-            self._model.status_model.set_error_message(message)
+            self._model.workflow_model.set_error_message(message)
 
     def _clear_workflow_handle(self) -> None:
         logger.info("Workflow thread finished")
         self._workflow_runner = None
 
+    def _clear_merge_handle(self) -> None:
+        logger.info("Merge thread finished")
+        self._merge_runner = None
+
     def _on_merge_finished(self, success: bool, message: str) -> None:
         if success:
             logger.info("Merge completed: %s", message)
-            self._model.status_model.set_status_message(message)
-            self._model.status_model.set_error_message("")
+            self._model.workflow_model.set_status_message(message)
+            self._model.workflow_model.set_error_message("")
         else:
             logger.error("Merge failed: %s", message)
-            self._model.status_model.set_error_message(message)
+            self._model.workflow_model.set_error_message(message)
+
+
+# =============================================================================
+# Background Worker Classes
+# =============================================================================
 
 
 class _MicroscopyLoaderWorker(QObject):
@@ -744,19 +818,24 @@ class _WorkflowRunner(QObject):
 
 
 class _MergeRunner(QObject):
+    """Background worker for running merge operations."""
+
     finished = Signal(bool, str)
 
-    def __init__(self, request: MergeRequest):
+    def __init__(
+        self, sample_yaml: Path, processing_results: Path, output_dir: Path
+    ) -> None:
         super().__init__()
-        self._request = request
+        self._sample_yaml = sample_yaml
+        self._processing_results = processing_results
+        self._output_dir = output_dir
 
     def run(self) -> None:
         try:
             message = _run_merge(
-                self._request.sample_yaml,
-                self._request.processing_results,
-                self._request.input_dir,
-                self._request.output_dir,
+                self._sample_yaml,
+                self._processing_results,
+                self._output_dir,
             )
             self.finished.emit(True, message)
         except Exception as e:

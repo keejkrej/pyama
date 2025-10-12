@@ -9,12 +9,10 @@ import pandas as pd
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QFileDialog,
     QComboBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QProgressBar,
@@ -25,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from pyama_qt.config import DEFAULT_DIR
 from pyama_qt.components.parameter_widget import ParameterWidget
+from pyama_qt.components.path_selector import PathSelector, PathType
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +62,8 @@ class ProcessingConfigPanel(QWidget):
         self._progress_bar.setVisible(False)
 
     def bind(self) -> None:
-        self._nd2_button.clicked.connect(self._on_microscopy_clicked)
-        self._output_button.clicked.connect(self._on_output_clicked)
+        self._microscopy_selector.path_changed.connect(self._on_microscopy_path_changed)
+        self._output_selector.path_changed.connect(self._on_output_path_changed)
         self._process_button.clicked.connect(self.process_requested.emit)
         self._pc_combo.currentIndexChanged.connect(self._emit_channel_selection)
         self._fl_list.itemClicked.connect(self._on_fl_item_clicked)
@@ -78,16 +77,14 @@ class ProcessingConfigPanel(QWidget):
         group = QGroupBox("Input")
         layout = QVBoxLayout(group)
 
-        header = QHBoxLayout()
-        header.addWidget(QLabel("Microscopy File:"))
-        header.addStretch()
-        self._nd2_button = QPushButton("Browse")
-        header.addWidget(self._nd2_button)
-        layout.addLayout(header)
-
-        self._microscopy_path_field = QLineEdit()
-        self._microscopy_path_field.setReadOnly(True)
-        layout.addWidget(self._microscopy_path_field)
+        self._microscopy_selector = PathSelector(
+            label="Microscopy File:",
+            path_type=PathType.FILE,
+            dialog_title="Select Microscopy File",
+            file_filter="Microscopy Files (*.nd2 *.czi);;ND2 Files (*.nd2);;CZI Files (*.czi);;All Files (*)",
+            default_dir=DEFAULT_DIR,
+        )
+        layout.addWidget(self._microscopy_selector)
 
         self._channel_container = self._build_channel_section()
         layout.addWidget(self._channel_container)
@@ -124,16 +121,13 @@ class ProcessingConfigPanel(QWidget):
         group = QGroupBox("Output")
         layout = QVBoxLayout(group)
 
-        header = QHBoxLayout()
-        header.addWidget(QLabel("Save Directory:"))
-        header.addStretch()
-        self._output_button = QPushButton("Browse")
-        header.addWidget(self._output_button)
-        layout.addLayout(header)
-
-        self._output_dir_field = QLineEdit()
-        self._output_dir_field.setReadOnly(True)
-        layout.addWidget(self._output_dir_field)
+        self._output_selector = PathSelector(
+            label="Save Directory:",
+            path_type=PathType.DIRECTORY,
+            dialog_title="Select Output Directory",
+            default_dir=DEFAULT_DIR,
+        )
+        layout.addWidget(self._output_selector)
 
         self._param_panel = ParameterWidget()
         self._initialize_parameter_defaults()
@@ -153,28 +147,19 @@ class ProcessingConfigPanel(QWidget):
     # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
-    def _on_microscopy_clicked(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Microscopy File",
-            DEFAULT_DIR,
-            "Microscopy Files (*.nd2 *.czi);;ND2 Files (*.nd2);;CZI Files (*.czi);;All Files (*)",
-            options=QFileDialog.Option.DontUseNativeDialog,
-        )
-        if file_path:
-            logger.info("Microscopy file chosen: %s", file_path)
-            self.file_selected.emit(Path(file_path))
+    def _on_microscopy_path_changed(self, path_str: str) -> None:
+        """Handle microscopy file path changes from PathSelector."""
+        if path_str:
+            path = Path(path_str)
+            logger.info("Microscopy file chosen: %s", path)
+            self.file_selected.emit(path)
 
-    def _on_output_clicked(self) -> None:
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Output Directory",
-            DEFAULT_DIR,
-            options=QFileDialog.Option.DontUseNativeDialog,
-        )
-        if directory:
-            logger.info("Output directory chosen: %s", directory)
-            self.output_dir_selected.emit(Path(directory))
+    def _on_output_path_changed(self, path_str: str) -> None:
+        """Handle output directory path changes from PathSelector."""
+        if path_str:
+            path = Path(path_str)
+            logger.info("Output directory chosen: %s", path)
+            self.output_dir_selected.emit(path)
 
     def _on_fl_item_clicked(self, item: QListWidgetItem) -> None:
         """Handle individual item clicks in the fluorescence list."""
@@ -215,14 +200,11 @@ class ProcessingConfigPanel(QWidget):
     # ------------------------------------------------------------------
     def display_microscopy_path(self, path: Path | None) -> None:
         """Show the selected microscopy file."""
-        if path:
-            self._microscopy_path_field.setText(path.name)
-        else:
-            self._microscopy_path_field.setText("No microscopy file selected")
+        self._microscopy_selector.set_path(str(path) if path else "")
 
     def display_output_directory(self, path: Path | None) -> None:
         """Show the chosen output directory."""
-        self._output_dir_field.setText(str(path or ""))
+        self._output_selector.set_path(str(path) if path else "")
 
     def set_channel_options(
         self,

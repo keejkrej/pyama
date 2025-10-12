@@ -1,35 +1,104 @@
 import logging
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
-    QLabel,
-    QLineEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
 )
 
+from pyama_qt.components import PathSelector, PathType
 from pyama_qt.config import DEFAULT_DIR
-from pyama_qt.components.sample_table import SampleTable
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class MergeRequestPayload:
-    """Lightweight container describing merge inputs."""
+class SampleTable(QTableWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(0, 2, parent)
+        self.setHorizontalHeaderLabels(["Sample Name", "FOVs (e.g., 0-5, 7, 9-11)"])
+        header = self.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.verticalHeader().setVisible(False)
+        self.setAlternatingRowColors(True)
 
-    sample_yaml: Path
-    processing_results_yaml: Path
-    data_dir: Path
-    output_dir: Path
+    def add_empty_row(self) -> None:
+        row = self.rowCount()
+        self.insertRow(row)
+        name_item = QTableWidgetItem("")
+        fovs_item = QTableWidgetItem("")
+        name_item.setFlags(name_item.flags() | Qt.ItemFlag.ItemIsEditable)
+        fovs_item.setFlags(fovs_item.flags() | Qt.ItemFlag.ItemIsEditable)
+        self.setItem(row, 0, name_item)
+        self.setItem(row, 1, fovs_item)
+        self.setCurrentCell(row, 0)
+
+    def add_row(self, name: str, fovs_text: str) -> None:
+        row = self.rowCount()
+        self.insertRow(row)
+        self.setItem(row, 0, QTableWidgetItem(name))
+        self.setItem(row, 1, QTableWidgetItem(fovs_text))
+
+    def remove_selected_row(self) -> None:
+        indexes = self.selectionModel().selectedRows()
+        if not indexes:
+            return
+        for idx in sorted(indexes, key=lambda i: i.row(), reverse=True):
+            self.removeRow(idx.row())
+
+    def to_samples(self) -> list[dict[str, Any]]:
+        """Convert table data to samples list with validation. Emit error if invalid."""
+        samples = []
+        seen_names = set()
+
+        for row in range(self.rowCount()):
+            name_item = self.item(row, 0)
+            fovs_item = self.item(row, 1)
+            name = (name_item.text() if name_item else "").strip()
+            fovs_text = (fovs_item.text() if fovs_item else "").strip()
+
+            # Validate name
+            if not name:
+                raise ValueError(f"Row {row + 1}: Sample name is required")
+            if name in seen_names:
+                raise ValueError(f"Row {row + 1}: Duplicate sample name '{name}'")
+            seen_names.add(name)
+
+            # Parse and validate FOVs
+            if not fovs_text:
+                raise ValueError(
+                    f"Row {row + 1} ('{name}'): At least one FOV is required"
+                )
+
+            samples.append({"name": name, "fovs": fovs_text})
+
+        return samples
+
+    def load_samples(self, samples: list[dict[str, Any]]) -> None:
+        """Load samples data into the table."""
+        self.setRowCount(0)
+        for sample in samples:
+            name = str(sample.get("name", ""))
+            fovs_val = sample.get("fovs", [])
+
+            if isinstance(fovs_val, list):
+                fovs_text = ", ".join(str(int(v)) for v in fovs_val)
+            elif isinstance(fovs_val, str):
+                fovs_text = fovs_val
+            else:
+                fovs_text = ""
+
+            self.add_row(name, fovs_text)
 
 
 class ProcessingMergePanel(QWidget):
@@ -38,8 +107,13 @@ class ProcessingMergePanel(QWidget):
     # Signals for controller
     load_samples_requested = Signal(Path)
     save_samples_requested = Signal(Path)
-    merge_requested = Signal(object)  # Emits MergeRequestPayload
+    merge_requested = Signal()  # Simple signal - controller reads from model
     samples_changed = Signal(list[dict[str, Any]])  # For real-time updates if needed
+
+    # Path change signals
+    sample_yaml_path_changed = Signal(Path)
+    processing_results_path_changed = Signal(Path)
+    merge_output_dir_changed = Signal(Path)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -94,50 +168,32 @@ class ProcessingMergePanel(QWidget):
         group = QGroupBox("Merge Samples")
         layout = QVBoxLayout(group)
 
-        # File/folder selectors
-        # Sample YAML selector
-        sample_row = QHBoxLayout()
-        sample_row.addWidget(QLabel("Sample YAML:"))
-        sample_row.addStretch()
-        sample_browse_btn = QPushButton("Browse")
-        sample_browse_btn.clicked.connect(self._choose_sample)
-        sample_row.addWidget(sample_browse_btn)
-        layout.addLayout(sample_row)
-        self.sample_edit = QLineEdit()
-        layout.addWidget(self.sample_edit)
+        # File/folder selectors using PathSelector component
+        self.sample_selector = PathSelector(
+            label="Sample YAML:",
+            path_type=PathType.FILE,
+            dialog_title="Select sample.yaml",
+            file_filter="YAML Files (*.yaml *.yml)",
+            default_dir=DEFAULT_DIR,
+        )
+        layout.addWidget(self.sample_selector)
 
-        # Processing Results YAML selector
-        processing_results_row = QHBoxLayout()
-        processing_results_row.addWidget(QLabel("Processing Results YAML:"))
-        processing_results_row.addStretch()
-        processing_results_browse_btn = QPushButton("Browse")
-        processing_results_browse_btn.clicked.connect(self._choose_processing_results)
-        processing_results_row.addWidget(processing_results_browse_btn)
-        layout.addLayout(processing_results_row)
-        self.processing_results_edit = QLineEdit()
-        layout.addWidget(self.processing_results_edit)
+        self.processing_results_selector = PathSelector(
+            label="Processing Results YAML:",
+            path_type=PathType.FILE,
+            dialog_title="Select processing_results.yaml",
+            file_filter="YAML Files (*.yaml *.yml)",
+            default_dir=DEFAULT_DIR,
+        )
+        layout.addWidget(self.processing_results_selector)
 
-        # CSV folder selector
-        data_row = QHBoxLayout()
-        data_row.addWidget(QLabel("CSV folder:"))
-        data_row.addStretch()
-        data_browse_btn = QPushButton("Browse")
-        data_browse_btn.clicked.connect(self._choose_data_dir)
-        data_row.addWidget(data_browse_btn)
-        layout.addLayout(data_row)
-        self.data_edit = QLineEdit()
-        layout.addWidget(self.data_edit)
-
-        # Output folder selector
-        output_row = QHBoxLayout()
-        output_row.addWidget(QLabel("Output folder:"))
-        output_row.addStretch()
-        output_browse_btn = QPushButton("Browse")
-        output_browse_btn.clicked.connect(self._choose_output_dir)
-        output_row.addWidget(output_browse_btn)
-        layout.addLayout(output_row)
-        self.output_edit = QLineEdit()
-        layout.addWidget(self.output_edit)
+        self.output_selector = PathSelector(
+            label="Output folder:",
+            path_type=PathType.DIRECTORY,
+            dialog_title="Select output folder",
+            default_dir=DEFAULT_DIR,
+        )
+        layout.addWidget(self.output_selector)
 
         # Run button
         actions = QHBoxLayout()
@@ -158,8 +214,16 @@ class ProcessingMergePanel(QWidget):
         # Merge button
         self.run_btn.clicked.connect(self._on_merge_requested)
 
-        # Optional: Connect table changes to emit samples_changed if real-time needed
-        # For now, emit on load/save
+        # Path selector changes
+        self.sample_selector.path_changed.connect(
+            lambda path: self.sample_yaml_path_changed.emit(Path(path))
+        )
+        self.processing_results_selector.path_changed.connect(
+            lambda path: self.processing_results_path_changed.emit(Path(path))
+        )
+        self.output_selector.path_changed.connect(
+            lambda path: self.merge_output_dir_changed.emit(Path(path))
+        )
 
     def _on_load_requested(self) -> None:
         """Request load via signal."""
@@ -190,71 +254,8 @@ class ProcessingMergePanel(QWidget):
             pass
 
     def _on_merge_requested(self) -> None:
-        """Request merge via signal after basic validation."""
-        try:
-            sample_text = self.sample_edit.text().strip()
-            processing_text = self.processing_results_edit.text().strip()
-            data_text = self.data_edit.text().strip()
-            output_text = self.output_edit.text().strip()
-
-            if not all([sample_text, processing_text, data_text, output_text]):
-                raise ValueError("All paths must be specified")
-
-            payload = MergeRequestPayload(
-                sample_yaml=Path(sample_text).expanduser(),
-                processing_results_yaml=Path(processing_text).expanduser(),
-                data_dir=Path(data_text).expanduser(),
-                output_dir=Path(output_text).expanduser(),
-            )
-            self.merge_requested.emit(payload)
-        except ValueError as exc:
-            logger.warning("Invalid merge request: %s", exc)
-
-    def _choose_sample(self) -> None:
-        """Browse for sample YAML file."""
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select sample.yaml",
-            DEFAULT_DIR,
-            "YAML Files (*.yaml *.yml)",
-            options=QFileDialog.Option.DontUseNativeDialog,
-        )
-        if path:
-            self.sample_edit.setText(path)
-
-    def _choose_processing_results(self) -> None:
-        """Browse for processing results YAML file."""
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select processing_results.yaml",
-            DEFAULT_DIR,
-            "YAML Files (*.yaml *.yml)",
-            options=QFileDialog.Option.DontUseNativeDialog,
-        )
-        if path:
-            self.processing_results_edit.setText(path)
-
-    def _choose_data_dir(self) -> None:
-        """Browse for CSV data directory."""
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "Select FOV CSV folder",
-            DEFAULT_DIR,
-            options=QFileDialog.Option.DontUseNativeDialog,
-        )
-        if path:
-            self.data_edit.setText(path)
-
-    def _choose_output_dir(self) -> None:
-        """Browse for output directory."""
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "Select output folder",
-            DEFAULT_DIR,
-            options=QFileDialog.Option.DontUseNativeDialog,
-        )
-        if path:
-            self.output_edit.setText(path)
+        """Request merge via signal - controller will read paths from model."""
+        self.merge_requested.emit()
 
     # ------------------------------------------------------------------
     # Controller helpers
@@ -272,13 +273,10 @@ class ProcessingMergePanel(QWidget):
         return self.table.to_samples()
 
     def set_sample_yaml_path(self, path: Path | str) -> None:
-        self.sample_edit.setText(str(path))
+        self.sample_selector.set_path(path)
 
     def set_processing_results_path(self, path: Path | str) -> None:
-        self.processing_results_edit.setText(str(path))
-
-    def set_data_directory(self, path: Path | str) -> None:
-        self.data_edit.setText(str(path))
+        self.processing_results_selector.set_path(path)
 
     def set_output_directory(self, path: Path | str) -> None:
-        self.output_edit.setText(str(path))
+        self.output_selector.set_path(path)

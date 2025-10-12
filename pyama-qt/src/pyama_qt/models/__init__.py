@@ -9,12 +9,10 @@ from .analysis import (
 )
 from .processing import (
     ChannelSelection,
+    MergeModel,
     Parameters,
-    ProcessingConfigModel,
     ProcessingModel,
-    WorkflowStatusModel,
-    WorkflowStartRequest,
-    MergeRequest,
+    WorkflowModel,
 )
 from .visualization import (
     CellQuality,
@@ -37,11 +35,9 @@ __all__ = [
     "ProcessingModel",
     "VisualizationModel",
     "ChannelSelection",
+    "MergeModel",
     "Parameters",
-    "ProcessingConfigModel",
-    "WorkflowStatusModel",
-    "MergeRequest",
-    "WorkflowStartRequest",
+    "WorkflowModel",
     "CellQuality",
     "FeatureData",
     "ImageCacheModel",

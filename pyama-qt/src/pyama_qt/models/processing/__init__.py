@@ -1,15 +1,13 @@
 """Processing models for the PyAMA-Qt application."""
 
-from .config_model import ProcessingConfigModel, ChannelSelection, Parameters
-from .model import ProcessingModel, WorkflowStartRequest, MergeRequest
-from .status_model import WorkflowStatusModel
+from .merge_model import MergeModel
+from .model import ProcessingModel
+from .workflow_model import WorkflowModel, ChannelSelection, Parameters
 
 __all__ = [
-    "ProcessingConfigModel",
+    "WorkflowModel",
     "ProcessingModel",
-    "WorkflowStatusModel",
-    "WorkflowStartRequest",
-    "MergeRequest",
+    "MergeModel",
     "ChannelSelection",
     "Parameters",
 ]

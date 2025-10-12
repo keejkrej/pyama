@@ -2,10 +2,11 @@
 
 from .mpl_canvas import MplCanvas
 from .parameter_widget import ParameterWidget
-from .sample_table import SampleTable
+from .path_selector import PathSelector, PathType
 
 __all__ = [
     "MplCanvas",
     "ParameterWidget",
-    "SampleTable",
+    "PathSelector",
+    "PathType",
 ]
