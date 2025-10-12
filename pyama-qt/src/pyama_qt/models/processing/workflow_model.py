@@ -71,6 +71,13 @@ class WorkflowModel(QObject):
         self._microscopy_path = path
         self.microscopyPathChanged.emit(path)
 
+    @Property(
+        object,
+        notify=metadataChanged,  # type: ignore[arg-type]
+    )
+    def metadata(self) -> MicroscopyMetadata | None:
+        return self._metadata
+
     @metadata.setter  # type: ignore[arg-type]
     def metadata(self, metadata: MicroscopyMetadata | None) -> None:
         """Set metadata from microscopy loading."""
@@ -89,13 +96,6 @@ class WorkflowModel(QObject):
         except Exception:
             logger.exception("Failed to load microscopy")
             raise
-
-    @Property(
-        object,
-        notify=metadataChanged,  # type: ignore[arg-type]
-    )
-    def metadata(self) -> MicroscopyMetadata | None:
-        return self._metadata
 
     @Property(
         object,

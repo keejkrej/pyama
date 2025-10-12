@@ -3,18 +3,13 @@
 from .image_model import ImageCacheModel, PositionData
 from .model import VisualizationModel
 from .project_model import ProjectModel
-from .trace_feature_model import TraceFeatureModel, FeatureData
-from .trace_selection_model import TraceSelectionModel
-from .trace_table_model import TraceTableModel, CellQuality
+from .trace_model import TraceModel, FeatureData
 
 __all__ = [
     "ImageCacheModel",
     "VisualizationModel",
     "ProjectModel",
-    "TraceFeatureModel",
-    "TraceSelectionModel",
-    "TraceTableModel",
+    "TraceModel",
     "PositionData",
     "FeatureData",
-    "CellQuality",
 ]

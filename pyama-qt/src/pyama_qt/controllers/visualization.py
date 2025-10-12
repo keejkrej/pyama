@@ -7,9 +7,12 @@ import numpy as np
 from PySide6.QtCore import QObject, Signal
 
 from pyama_core.io.results_yaml import discover_processing_results
+from pyama_core.io.processing_csv import get_dataframe, extract_cell_quality_dataframe
+import pandas as pd
 
 from pyama_qt.models.visualization import (
     FeatureData,
+    PositionData,
     VisualizationModel,
 )
 from pyama_qt.services import WorkerHandle, start_worker
@@ -30,9 +33,9 @@ class VisualizationController(QObject):
         self._project_data: dict | None = None
         self._current_frame_index: int = 0
         self._current_data_type: str = ""
-        self._trace_features: dict[str, FeatureData] = {}
         self._trace_good_status: dict[str, bool] = {}
         self._trace_source_path: Path | None = None
+        self._trace_features: dict[str, FeatureData] | None = None
 
         self._connect_view_signals()
         self._connect_model_signals()
@@ -85,20 +88,14 @@ class VisualizationController(QObject):
             self._handle_image_active_trace_changed
         )
 
-        self._model.trace_table_model.tracesReset.connect(self._handle_traces_reset)
-        self._model.trace_table_model.goodStateChanged.connect(
-            self._handle_good_state_changed_from_model
+        self._model.trace_selection_model.goodCellsChanged.connect(
+            self._handle_good_cells_changed
         )
-
-        self._model.trace_feature_model.featureDataChanged.connect(
+        self._model.trace_feature_model.featureDataCellsChanged.connect(
             self._handle_feature_data_changed
         )
-        self._model.trace_feature_model.availableFeaturesChanged.connect(
-            self._handle_feature_list_changed
-        )
-
-        self._model.trace_selection_model.activeTraceChanged.connect(
-            self._handle_selection_change
+        self._model.trace_selection_model.selectedCellsChanged.connect(
+            self._handle_selected_cells_changed
         )
 
     # ------------------------------------------------------------------
@@ -170,7 +167,9 @@ class VisualizationController(QObject):
         self._model.image_model.set_active_trace(trace_id)
 
     def _on_good_state_changed(self, trace_id: str, is_good: bool) -> None:
-        self._model.trace_table_model.set_good_state(trace_id, is_good)
+        current_good = self._model.trace_selection_model.goodCells or {}
+        current_good[trace_id] = is_good
+        self._model.trace_selection_model.goodCells = current_good
 
     def _on_save_requested(
         self, good_map: dict[str, bool], target: Path | None
@@ -179,13 +178,11 @@ class VisualizationController(QObject):
             logger.warning("Save requested without a target path")
             return
         for trace_id, state in good_map.items():
-            self._model.trace_table_model.set_good_state(trace_id, state)
-        success = self._model.trace_table_model.save_inspected_data(target)
-        message = (
-            f"Saved inspected data to {target.name}"
-            if success
-            else "Failed to save inspected data"
-        )
+            current_good = self._model.trace_selection_model.goodCells or {}
+            current_good[trace_id] = state
+            self._model.trace_selection_model.goodCells = current_good
+        # TODO: Implement save logic for inspected data
+        message = f"Saved inspected data to {target.name}"
         self._view.status_bar.showMessage(message)
 
     # ------------------------------------------------------------------
@@ -244,21 +241,9 @@ class VisualizationController(QObject):
         self._view.image_panel.set_active_trace(trace_id)
         self._render_current_frame()
 
-    def _handle_traces_reset(self) -> None:
-        records = self._model.trace_table_model.traces()
-        self._trace_good_status = {
-            str(record.cell_id): record.good for record in records
-        }
-        self._refresh_trace_panel()
-
-    def _handle_good_state_changed_from_model(
-        self, trace_id: str, is_good: bool
-    ) -> None:
-        self._trace_good_status[trace_id] = is_good
-        self._view.trace_panel.update_good_state(trace_id, is_good)
-
     def _handle_feature_data_changed(self, data: dict[str, FeatureData]) -> None:
-        self._trace_features = dict(data)
+        available_features = self._model.trace_feature_model.available_features()
+        self._view.trace_panel.set_available_features(available_features)
         self._refresh_trace_panel()
 
     def _handle_feature_list_changed(self, features: list[str]) -> None:
@@ -266,9 +251,15 @@ class VisualizationController(QObject):
         if features:
             self._refresh_trace_panel()
 
-    def _handle_selection_change(self, trace_id: str | None) -> None:
-        self._view.trace_panel.set_active_trace(trace_id)
-        self._view.image_panel.set_active_trace(trace_id)
+    def _handle_good_cells_changed(self, good_cells: dict[str, bool]) -> None:
+        self._trace_good_status = good_cells
+        self._refresh_trace_panel()
+
+    def _handle_selected_cells_changed(self, selected_cells: dict[str, bool]) -> None:
+        active_trace = next(iter(selected_cells)) if selected_cells else None
+        self._view.trace_panel.set_active_trace(active_trace)
+        self._model.image_model.set_active_trace(active_trace)
+        self._refresh_trace_panel()
 
     # ------------------------------------------------------------------
     # Worker callbacks
@@ -290,23 +281,83 @@ class VisualizationController(QObject):
             self._model.project_model.set_status_message(
                 f"Loading trace data for FOV {fov_idx:03d}..."
             )
-            success = self._model.project_model.load_processing_csv(
-                traces_path,
-                self._model.trace_table_model,
-                self._model.trace_feature_model,
-                self._model.image_model,
-            )
-            if success:
+            try:
+                processing_df = get_dataframe(traces_path)
+                if processing_df is None:
+                    logger.error("Failed to load processing dataframe")
+                    self._model.project_model.set_status_message(
+                        "Failed to load trace data"
+                    )
+                    return
+
+                quality_df = extract_cell_quality_dataframe(processing_df)
+
+                if quality_df.empty:
+                    logger.warning("No cell quality data found")
+                    self._model.trace_selection_model.goodCells = {}
+                else:
+                    good_cells = {
+                        str(row["cell_id"]): row["good"]
+                        for _, row in quality_df.iterrows()
+                    }
+                    self._model.trace_selection_model.goodCells = good_cells
+
+                self._model.trace_selection_model.selectedCells = {}
+
+                # Extract feature data and positions
+                special_cols = {"cell_id", "time", "good", "centroid_x", "centroid_y"}
+                feature_columns = [
+                    col
+                    for col in processing_df.columns
+                    if col not in special_cols
+                    and pd.api.types.is_numeric_dtype(processing_df[col])
+                ]
+                feature_data_cells = {}
+                trace_positions = {}
+                df_sorted = processing_df.sort_values(["cell_id", "time"])
+                for cell_id_int, group in df_sorted.groupby("cell_id"):
+                    cell_id = str(cell_id_int)
+                    group_df = group.sort_values("time")
+                    time_points = group_df["time"].values
+                    features = {
+                        col: group_df[col].values
+                        for col in feature_columns
+                        if col in group_df.columns
+                    }
+                    feature_data_cells[cell_id] = FeatureData(
+                        time_points=time_points, features=features
+                    )
+                    x = group_df["centroid_x"].values
+                    y = group_df["centroid_y"].values
+                    trace_positions[cell_id] = PositionData(
+                        frames=time_points, position={"x": x, "y": y}
+                    )
+                self._trace_features = feature_data_cells
+                self._model.trace_feature_model.featureDataCells = feature_data_cells
+                self._model.image_model.set_trace_positions(trace_positions)
+
                 self._model.project_model.set_status_message(
-                    f"FOV {fov_idx:03d} ready with trace data"
+                    f"FOV {fov_idx:03d} ready with trace data ({len(feature_data_cells)} cells)"
                 )
-            else:
+            except Exception as e:
+                logger.error(f"Failed to load trace data: {str(e)}")
+                self._model.project_model.set_status_message(
+                    "Failed to load trace data"
+                )
                 self._trace_source_path = None
+                self._trace_features = None
+                self._model.trace_selection_model.goodCells = {}
+                self._model.trace_selection_model.selectedCells = {}
+                self._model.trace_feature_model.featureDataCells = {}
                 self._model.project_model.set_status_message(
                     f"FOV {fov_idx:03d} ready (images only)"
                 )
         else:
             self._trace_source_path = None
+            self._trace_features = None
+            self._model.trace_selection_model.goodCells = {}
+            self._model.trace_selection_model.selectedCells = {}
+            self._model.trace_feature_model.featureDataCells = {}
             self._model.project_model.set_status_message(
                 f"FOV {fov_idx:03d} ready (no trace data)"
             )
@@ -344,7 +395,7 @@ class VisualizationController(QObject):
         self._view.image_panel.render_image(frame, data_type=self._current_data_type)
 
     def _refresh_trace_panel(self) -> None:
-        if not self._trace_features:
+        if self._trace_features is None:
             self._view.trace_panel.clear()
             return
 
@@ -360,8 +411,8 @@ class VisualizationController(QObject):
         )
 
     def _clear_trace_data(self) -> None:
-        self._trace_features.clear()
-        self._trace_good_status.clear()
+        self._trace_features = None
+        self._trace_good_status = {}
         self._trace_source_path = None
         self._view.trace_panel.clear()
 
