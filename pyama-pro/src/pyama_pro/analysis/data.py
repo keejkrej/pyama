@@ -92,6 +92,7 @@ class DataPanel(QWidget):
         bool, str
     )  # Emitted when data loading finishes (success, message)
     file_saved = Signal(str, str)  # Emitted when a file is saved (filename, directory)
+    time_mapping_loaded = Signal(bool, str)  # Emitted when time mapping is loaded (success, message)
 
     # ------------------------------------------------------------------------
     # INITIALIZATION
@@ -177,7 +178,7 @@ class DataPanel(QWidget):
         interval_layout.addWidget(QLabel("Frame interval:"))
         interval_layout.addStretch()
         self._frame_interval_edit = QLineEdit()
-        self._frame_interval_edit.setText(str(self._frame_interval))
+        self._frame_interval_edit.setText(f"{self._frame_interval:.4f}")
         self._frame_interval_edit.setFixedWidth(80)
         self._frame_interval_edit.setToolTip("Time interval between frames (e.g., 0.1667 for 10 min)")
         interval_layout.addWidget(self._frame_interval_edit)
@@ -516,14 +517,21 @@ class DataPanel(QWidget):
             df = pd.read_csv(path)
             if "frame" not in df.columns or "time" not in df.columns:
                 logger.error("Time mapping CSV must have 'frame' and 'time' columns")
+                self.time_mapping_loaded.emit(
+                    False, "Time mapping CSV must have 'frame' and 'time' columns"
+                )
                 return
             self._time_mapping = dict(zip(df["frame"].astype(int), df["time"].astype(float)))
             self._time_mapping_label.setText(f"Time mapping: {path.name}")
             self._clear_mapping_button.setEnabled(True)
             self._frame_interval_edit.setEnabled(False)
             logger.info("Loaded time mapping from %s (%d entries)", path, len(self._time_mapping))
+            self.time_mapping_loaded.emit(
+                True, f"Loaded time mapping from {path.name} ({len(self._time_mapping)} entries)"
+            )
         except Exception as e:
             logger.error("Failed to load time mapping: %s", e)
+            self.time_mapping_loaded.emit(False, f"Failed to load time mapping: {e}")
 
     @Slot()
     def _on_load_fitted_results_clicked(self) -> None:
