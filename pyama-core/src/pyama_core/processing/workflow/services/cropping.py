@@ -104,12 +104,14 @@ class CroppingService(BaseProcessingService):
 
         # Get cropping parameters from context
         padding = context.params.get("crop_padding", 5)
+        mask_margin = context.params.get("mask_margin", 0)
         min_frames = context.params.get("crop_min_frames", 1)
 
         logger.info(
-            "FOV %d: Cropping cells (padding=%d, min_frames=%d)...",
+            "FOV %d: Cropping cells (padding=%d, mask_margin=%d, min_frames=%d)...",
             fov,
             padding,
+            mask_margin,
             min_frames,
         )
 
@@ -119,6 +121,7 @@ class CroppingService(BaseProcessingService):
             channels=channels,
             backgrounds=backgrounds,
             padding=padding,
+            mask_margin=mask_margin,
             min_frames=min_frames,
             progress_callback=partial(self.progress_callback, fov),
             cancel_event=cancel_event,

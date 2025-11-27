@@ -11,6 +11,7 @@ crop data organized by cell ID.
 import numpy as np
 from dataclasses import dataclass
 from typing import Callable
+from scipy.ndimage import binary_dilation, binary_erosion
 from skimage.measure import regionprops
 
 
@@ -72,12 +73,39 @@ def _compute_cell_bboxes(
     return cell_bboxes
 
 
+def _apply_mask_margin(mask: np.ndarray, margin: int) -> np.ndarray:
+    """Apply dilation or erosion to a mask based on margin value.
+
+    Args:
+        mask: 2D boolean mask.
+        margin: Positive = dilate (grow), negative = erode (shrink), 0 = no change.
+
+    Returns:
+        Modified mask. Returns original if margin is 0 or mask becomes empty.
+    """
+    if margin == 0:
+        return mask
+
+    size = abs(margin)
+    struct = np.ones((size * 2 + 1, size * 2 + 1), dtype=bool)
+
+    if margin > 0:
+        return binary_dilation(mask, structure=struct)
+    else:
+        result = binary_erosion(mask, structure=struct)
+        # If erosion makes mask empty, return original
+        if not result.any():
+            return mask
+        return result
+
+
 def _extract_cell_crops(
     cell_id: int,
     bboxes: list[tuple[int, int, int, int, int]],
     labeled: np.ndarray,
     channels: dict[str, np.ndarray],
     backgrounds: dict[str, np.ndarray],
+    mask_margin: int = 0,
 ) -> CellCrop:
     """Extract crops for a single cell across all its frames.
 
@@ -87,6 +115,7 @@ def _extract_cell_crops(
         labeled: Full labeled array (T, H, W).
         channels: Dict mapping channel name to (T, H, W) arrays.
         backgrounds: Dict mapping channel name to (T, H, W) background arrays.
+        mask_margin: Pixels to dilate (positive) or erode (negative) the mask.
 
     Returns:
         CellCrop with extracted data.
@@ -104,6 +133,9 @@ def _extract_cell_crops(
         # Extract mask for this cell in this frame
         label_crop = labeled[t, y0:y1, x0:x1]
         mask = label_crop == cell_id
+
+        # Apply mask margin (dilation/erosion)
+        mask = _apply_mask_margin(mask, mask_margin)
         masks.append(mask)
 
         # Extract crops from each channel
@@ -131,6 +163,7 @@ def crop_cells(
     channels: dict[str, np.ndarray] | None = None,
     backgrounds: dict[str, np.ndarray] | None = None,
     padding: int = 0,
+    mask_margin: int = 0,
     min_frames: int = 1,
     progress_callback: Callable | None = None,
     cancel_event=None,
@@ -148,6 +181,10 @@ def crop_cells(
         backgrounds: Optional dict mapping channel names to (T, H, W) background arrays.
             Keys should match the fluorescence channels in `channels`.
         padding: Pixels to pad around each bounding box.
+        mask_margin: Pixels to dilate (positive) or erode (negative) the cell mask.
+            Positive values grow the mask to include more area around the cell.
+            Negative values shrink the mask to exclude edge pixels.
+            Default is 0 (no change).
         min_frames: Minimum number of frames a cell must be present.
             Cells with fewer frames are excluded.
         progress_callback: Optional callable (current, total, msg) for progress.
@@ -215,6 +252,7 @@ def crop_cells(
             labeled=labeled,
             channels=channels,
             backgrounds=backgrounds,
+            mask_margin=mask_margin,
         )
         results.append(crop)
 
