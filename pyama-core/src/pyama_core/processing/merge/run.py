@@ -10,12 +10,8 @@ from typing import Any, Callable, Iterable
 import pandas as pd
 import yaml
 
+from pyama_core.io import naming, load_config
 from pyama_core.io.processing_csv import get_dataframe
-from pyama_core.io.results_yaml import (
-    get_time_units_from_yaml,
-    get_trace_csv_path_from_yaml,
-    load_processing_results_yaml,
-)
 from pyama_core.io.trace_paths import resolve_trace_path
 from pyama_core.types.processing import Channels, Result, FeatureMaps
 
@@ -23,46 +19,28 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# DATA STRUCTURES
-# =============================================================================
-
-
-# =============================================================================
 # CHANNEL CONFIGURATION
 # =============================================================================
 
 
-def get_channel_feature_config(proc_results: dict) -> list[tuple[int, list[str]]]:
-    """Determine the channel/feature selections from processing results."""
-    channels_data = proc_results.get("channels")
-    if channels_data is None:
-        raise ValueError("Processing results missing 'channels' section")
-
-    try:
-        channel_config = Channels.from_serialized(channels_data)
-    except Exception as exc:  # pragma: no cover - defensive
-        raise ValueError(
-            f"Invalid channel configuration in processing results: {exc}"
-        ) from exc
-
+def get_channel_feature_config_from_channels(channels: Channels) -> list[tuple[int, list[str]]]:
+    """Determine the channel/feature selections from Channels config."""
     config: list[tuple[int, list[str]]] = []
 
-    pc_channel = channel_config.get_pc_channel()
+    pc_channel = channels.get_pc_channel()
     if pc_channel is not None:
-        pc_features = channel_config.get_pc_features()
-        # Only include PC channel if it has features explicitly configured in YAML
+        pc_features = channels.get_pc_features()
         if pc_features:
             config.append((pc_channel, sorted(set(pc_features))))
 
-    fl_feature_map = channel_config.get_fl_feature_map()
+    fl_feature_map = channels.get_fl_feature_map()
     for channel in sorted(fl_feature_map):
         features = fl_feature_map[channel]
-        # Only include FL channel if it has features explicitly configured in YAML
         if features:
             config.append((channel, sorted(set(features))))
 
     if not config:
-        raise ValueError("No channels found in processing results")
+        raise ValueError("No channels found in processing config")
 
     return config
 
@@ -185,19 +163,19 @@ def extract_channel_dataframe(
     df: pd.DataFrame, channel: int, configured_features: list[str]
 ) -> pd.DataFrame:
     """Return a dataframe containing only configured features for a single channel.
-    
+
     Args:
         df: Unified trace DataFrame with channel-suffixed columns
         channel: Channel ID to extract
         configured_features: List of feature names configured for this channel
-        
+
     Returns:
         DataFrame with base columns and only the configured features for this channel
     """
     suffix = f"_ch_{channel}"
     base_fields = ["fov"] + [field.name for field in dataclass_fields(Result)]
     base_cols = [col for col in base_fields if col in df.columns]
-    
+
     # Only extract features that are configured for this channel
     feature_cols = []
     rename_map = {}
@@ -255,10 +233,10 @@ def write_feature_csv(
             feature_maps = feature_maps_by_fov.get(fov)
             if not feature_maps:
                 continue
-            
+
             if feature_name not in feature_maps.features:
                 continue
-            
+
             feature_map = feature_maps.features[feature_name]
             for cell in sorted(feature_maps.cells):
                 value = feature_map.get((time, cell))
@@ -288,28 +266,40 @@ def write_feature_csv(
 
 def run_merge(
     sample_yaml: Path,
-    processing_results: Path,
     output_dir: Path,
+    input_dir: Path | None = None,
+    config_path: Path | None = None,
+    time_units: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> str:
     """Execute merge logic - return success message or raise error.
-    
+
     Args:
         sample_yaml: Path to samples YAML file
-        processing_results: Path to processing_results.yaml
         output_dir: Directory to write merged CSV files
+        input_dir: Directory containing processed FOV folders (default: sample_yaml parent)
+        config_path: Path to processing_config.yaml (default: input_dir/processing_config.yaml)
+        time_units: Time units for output (default: read from config or None)
         progress_callback: Optional callback(current, total, message) for progress updates
     """
-    config = read_samples_yaml(sample_yaml)
-    samples = config["samples"]
+    samples_config = read_samples_yaml(sample_yaml)
+    samples = samples_config["samples"]
 
-    proc_results = load_processing_results_yaml(processing_results)
-    channel_feature_config = get_channel_feature_config(proc_results)
-    time_units = get_time_units_from_yaml(proc_results)
+    # Determine input directory
+    if input_dir is None:
+        input_dir = sample_yaml.parent
 
-    # Use processing results directory as input directory
-    input_dir = processing_results.parent
+    # Load processing config
+    if config_path is None:
+        config_path = input_dir / "processing_config.yaml"
 
+    if not config_path.exists():
+        raise FileNotFoundError(f"Processing config not found: {config_path}")
+
+    proc_config = load_config(config_path)
+    channel_feature_config = get_channel_feature_config_from_channels(proc_config.channels)
+
+    # Collect all FOVs from samples
     all_fovs: set[int] = set()
     for sample in samples:
         fovs = parse_fovs_field(sample.get("fovs", []))
@@ -318,26 +308,29 @@ def run_merge(
     feature_maps_by_fov_channel: dict[tuple[int, int], FeatureMaps] = {}
     traces_cache: dict[Path, pd.DataFrame] = {}
 
-    # Load trace CSVs per FOV (unified schema: one CSV per FOV, not per channel)
+    # Load trace CSVs per FOV using file discovery
     sorted_fovs = sorted(all_fovs)
     total_fovs = len(sorted_fovs)
     loaded_fovs = 0
-    for fov_idx, fov in enumerate(sorted_fovs):
-        # Get the unified trace CSV for this FOV (preferring inspected version)
-        original_path = get_trace_csv_path_from_yaml(proc_results, fov)
-        csv_path = resolve_trace_path(original_path) if original_path else None
-        
-        if csv_path is None:
-            logger.debug(
-                "No trace CSV entry found for FOV %s", fov
-            )
+
+    for fov in sorted_fovs:
+        # Discover trace CSV for this FOV
+        fov_path = naming.fov_dir(input_dir, fov)
+        if not fov_path.exists():
+            logger.debug("FOV directory not found: %s", fov_path)
             continue
 
-        # Resolve relative paths relative to input directory
-        if not csv_path.is_absolute():
-            csv_path = input_dir / csv_path
-        if not csv_path.exists():
-            logger.warning("Trace CSV file does not exist: %s", csv_path)
+        # Find trace CSV file
+        trace_files = list(fov_path.glob("*_traces.csv"))
+        if not trace_files:
+            logger.debug("No trace CSV found for FOV %s", fov)
+            continue
+
+        original_path = trace_files[0]
+        csv_path = resolve_trace_path(original_path)
+
+        if csv_path is None or not csv_path.exists():
+            logger.warning("Trace CSV file does not exist: %s", original_path)
             continue
 
         # Load the unified CSV once per FOV
@@ -399,7 +392,7 @@ def run_merge(
                         if feature_maps.features[feature_name]:
                             has_data = True
                             break
-                
+
                 if not has_data:
                     logger.debug(
                         "Skipping feature '%s' for sample '%s', channel %s: no data found",

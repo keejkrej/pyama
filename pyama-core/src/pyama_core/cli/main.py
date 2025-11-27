@@ -573,10 +573,11 @@ def merge() -> None:
     )
     typer.echo("")
 
-    default_processing = sample_yaml_path.parent / "processing_results.yaml"
-    processing_results_path = _prompt_existing_file(
-        "Enter the path to processing_results.yaml",
-        default=default_processing if default_processing.exists() else None,
+    default_input = sample_yaml_path.parent
+    input_dir = _prompt_directory(
+        "Enter the input directory containing processed FOV folders",
+        default=default_input,
+        must_exist=True,
     )
 
     output_folder_default = sample_yaml_path.parent / "merge_output"
@@ -592,8 +593,8 @@ def merge() -> None:
     try:
         message = run_core_merge(
             sample_yaml=sample_yaml_path,
-            processing_results=processing_results_path,
             output_dir=output_folder,
+            input_dir=input_dir,
         )
     except Exception as exc:  # pragma: no cover - runtime path
         typer.secho(f"Merge failed: {exc}", err=True, fg=typer.colors.RED)
