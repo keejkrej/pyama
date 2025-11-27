@@ -185,6 +185,27 @@ def run_single_worker(
             # _cleanup_fov_folders(output_dir, fovs[0], fovs[-1])
             return (fovs, 1, len(fovs) - 1, "Cancelled after segmentation", context)
 
+        logger.info("Starting Tracking for FOVs %d-%d", fovs[0], fovs[-1])
+        tracking.process_all_fovs(
+            metadata=metadata,
+            context=context,
+            output_dir=output_dir,
+            fov_start=fovs[0],
+            fov_end=fovs[-1],
+            cancel_event=cancel_event,
+        )
+        # Context merge happens automatically since we're using threads
+        # No need to send context through queue
+
+        # Check for cancellation after tracking
+        if cancel_event and cancel_event.is_set():
+            logger.info(
+                f"Worker for FOVs {fovs[0]}-{fovs[-1]} cancelled after tracking"
+            )
+            # Commented out cleanup to preserve partial results for debugging
+            # _cleanup_fov_folders(output_dir, fovs[0], fovs[-1])
+            return (fovs, 2, len(fovs) - 2, "Cancelled after tracking", context)
+
         logger.info(
             "Starting Background Estimation for FOVs %d-%d", fovs[0], fovs[-1]
         )
@@ -206,28 +227,7 @@ def run_single_worker(
             )
             # Commented out cleanup to preserve partial results for debugging
             # _cleanup_fov_folders(output_dir, fovs[0], fovs[-1])
-            return (fovs, 2, len(fovs) - 2, "Cancelled after background estimation", context)
-
-        logger.info("Starting Tracking for FOVs %d-%d", fovs[0], fovs[-1])
-        tracking.process_all_fovs(
-            metadata=metadata,
-            context=context,
-            output_dir=output_dir,
-            fov_start=fovs[0],
-            fov_end=fovs[-1],
-            cancel_event=cancel_event,
-        )
-        # Context merge happens automatically since we're using threads
-        # No need to send context through queue
-
-        # Check for cancellation after tracking
-        if cancel_event and cancel_event.is_set():
-            logger.info(
-                f"Worker for FOVs {fovs[0]}-{fovs[-1]} cancelled after tracking"
-            )
-            # Commented out cleanup to preserve partial results for debugging
-            # _cleanup_fov_folders(output_dir, fovs[0], fovs[-1])
-            return (fovs, 3, len(fovs) - 3, "Cancelled after tracking", context)
+            return (fovs, 3, len(fovs) - 3, "Cancelled after background estimation", context)
 
         logger.info("Starting Extraction for FOVs %d-%d", fovs[0], fovs[-1])
         trace_extraction.process_all_fovs(
