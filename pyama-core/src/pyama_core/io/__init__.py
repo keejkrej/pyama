@@ -20,6 +20,8 @@ from pyama_core.io.analysis_csv import (
     discover_csv_files,
 )
 
+from pyama_core.io import naming
+
 
 __all__ = [
     # Unified microscopy functions
@@ -34,4 +36,6 @@ __all__ = [
     "create_analysis_dataframe",
     "get_analysis_stats",
     "discover_csv_files",
+    # File naming utilities
+    "naming",
 ]
