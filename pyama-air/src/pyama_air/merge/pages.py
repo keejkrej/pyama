@@ -270,23 +270,23 @@ class FileSelectionPage(QWizardPage):
         self.sample_yaml_edit.setReadOnly(True)
         file_layout.addWidget(self.sample_yaml_edit)
 
-        # Processing results file
-        processing_results_row = QHBoxLayout()
-        processing_results_row.addWidget(QLabel("Processing Results:"))
-        processing_results_row.addStretch()
-        self.processing_results_browse_btn = QPushButton("Browse")
-        self.processing_results_browse_btn.clicked.connect(
-            self._browse_processing_results
+        # Input directory (folder of processed FOVs)
+        input_dir_row = QHBoxLayout()
+        input_dir_row.addWidget(QLabel("Folder of processed FOVs:"))
+        input_dir_row.addStretch()
+        self.input_dir_browse_btn = QPushButton("Browse")
+        self.input_dir_browse_btn.clicked.connect(
+            self._browse_input_dir
         )
-        processing_results_row.addWidget(self.processing_results_browse_btn)
-        file_layout.addLayout(processing_results_row)
+        input_dir_row.addWidget(self.input_dir_browse_btn)
+        file_layout.addLayout(input_dir_row)
 
-        self.processing_results_edit = QLineEdit()
-        self.processing_results_edit.setPlaceholderText(
-            "Select processing_results.yaml file..."
+        self.input_dir_edit = QLineEdit()
+        self.input_dir_edit.setPlaceholderText(
+            "Select folder containing processed FOVs..."
         )
-        self.processing_results_edit.setReadOnly(True)
-        file_layout.addWidget(self.processing_results_edit)
+        self.input_dir_edit.setReadOnly(True)
+        file_layout.addWidget(self.input_dir_edit)
 
         # Output directory
         output_row = QHBoxLayout()
@@ -310,9 +310,9 @@ class FileSelectionPage(QWizardPage):
         if self._page_data.sample_yaml_path:
             self.sample_yaml_edit.setText(str(self._page_data.sample_yaml_path))
         # Display other paths if already set
-        if self._page_data.processing_results_path:
-            self.processing_results_edit.setText(
-                str(self._page_data.processing_results_path)
+        if self._page_data.input_dir:
+            self.input_dir_edit.setText(
+                str(self._page_data.input_dir)
             )
         if self._page_data.output_dir:
             self.output_dir_edit.setText(str(self._page_data.output_dir))
@@ -332,19 +332,18 @@ class FileSelectionPage(QWizardPage):
             self.sample_yaml_edit.setText(str(self._page_data.sample_yaml_path))
 
     @Slot()
-    def _browse_processing_results(self) -> None:
-        """Browse for processing results file."""
-        file_path, _ = QFileDialog.getOpenFileName(
+    def _browse_input_dir(self) -> None:
+        """Browse for input directory containing processed FOVs."""
+        dir_path = QFileDialog.getExistingDirectory(
             self,
-            "Select Processing Results File",
+            "Select Folder of Processed FOVs",
             "",
-            "YAML Files (*.yaml *.yml);;All Files (*)",
             options=QFileDialog.Option.DontUseNativeDialog,
         )
-        if file_path:
-            self._page_data.processing_results_path = Path(file_path)
-            self.processing_results_edit.setText(
-                str(self._page_data.processing_results_path)
+        if dir_path:
+            self._page_data.input_dir = Path(dir_path)
+            self.input_dir_edit.setText(
+                str(self._page_data.input_dir)
             )
 
     @Slot()
@@ -363,7 +362,7 @@ class FileSelectionPage(QWizardPage):
         """Validate the page before proceeding."""
         return (
             self._page_data.sample_yaml_path is not None
-            and self._page_data.processing_results_path is not None
+            and self._page_data.input_dir is not None
             and self._page_data.output_dir is not None
         )
 
@@ -428,7 +427,7 @@ class ExecutionPage(QWizardPage):
         for sample in config.samples:
             summary += f"  {sample['name']}: {sample['fovs']}\n"
         summary += f"\nSamples YAML: {config.sample_yaml_path}\n"
-        summary += f"Processing Results: {config.processing_results_path}\n"
+        summary += f"Input Directory: {config.input_dir}\n"
         summary += f"Output Directory: {config.output_dir}\n"
 
         self.summary_label.setText(summary)
@@ -450,8 +449,8 @@ class ExecutionPage(QWizardPage):
 
             message = run_core_merge(
                 sample_yaml=config.sample_yaml_path,
-                processing_results=config.processing_results_path,
                 output_dir=config.output_dir,
+                input_dir=config.input_dir,
             )
 
             self.status_label.setText(f"Merge completed: {message}")

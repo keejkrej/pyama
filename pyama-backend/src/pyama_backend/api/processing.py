@@ -174,8 +174,8 @@ class MergeRequest(BaseModel):
     """Request model for merging processing results."""
 
     sample_yaml: str = Field(..., description="Path to samples YAML file")
-    processing_results_yaml: str = Field(
-        ..., description="Path to processing results YAML file"
+    input_dir: str = Field(
+        ..., description="Path to folder containing processed FOVs"
     )
     output_dir: str = Field(..., description="Output directory for merged files")
 
@@ -474,8 +474,8 @@ async def start_workflow(request: StartWorkflowRequest) -> StartWorkflowResponse
                     )
                     result = {
                         "output_dir": str(output_dir),
-                        "results_file": str(
-                            output_dir / "processing_results.yaml"
+                        "config_file": str(
+                            output_dir / "processing_config.yaml"
                         ),
                     }
                     job_manager.set_result(job_id, result)
@@ -635,9 +635,9 @@ async def merge_results(request: MergeRequest) -> MergeResponse:
         Response with merge results or error
     """
     try:
-        # Validate input files exist
+        # Validate input paths exist
         sample_yaml = Path(request.sample_yaml)
-        processing_results_yaml = Path(request.processing_results_yaml)
+        input_dir = Path(request.input_dir)
 
         if not sample_yaml.exists():
             logger.error("Sample YAML not found: %s", sample_yaml)
@@ -646,13 +646,13 @@ async def merge_results(request: MergeRequest) -> MergeResponse:
                 error=f"Sample YAML not found: {sample_yaml}",
             )
 
-        if not processing_results_yaml.exists():
+        if not input_dir.exists():
             logger.error(
-                "Processing results YAML not found: %s", processing_results_yaml
+                "Input directory not found: %s", input_dir
             )
             return MergeResponse(
                 success=False,
-                error=f"Processing results YAML not found: {processing_results_yaml}",
+                error=f"Input directory not found: {input_dir}",
             )
 
         # Create output directory
@@ -663,10 +663,14 @@ async def merge_results(request: MergeRequest) -> MergeResponse:
         logger.info(
             "Starting merge: %s + %s -> %s",
             sample_yaml,
-            processing_results_yaml,
+            input_dir,
             output_dir,
         )
-        result_message = run_merge(sample_yaml, processing_results_yaml, output_dir)
+        result_message = run_merge(
+            sample_yaml=sample_yaml,
+            output_dir=output_dir,
+            input_dir=input_dir,
+        )
 
         # Get list of created files
         merged_files = []

@@ -125,7 +125,7 @@ The visualization tab should be used before merging CSV files for quality contro
 **Set file paths:**
 
 - Click **Browse** next to **Sample YAML:** and select your samples.yaml file
-- Click **Browse** next to **Processing Results YAML:** and select `processing_results.yaml` (found in your save folder)
+- Click **Browse** next to **Folder of processed FOVs:** and select the folder containing processed FOV directories (your save folder from processing)
 - Click **Browse** next to **Output folder:** and select where merged results should be saved (generally same as save folder)
 
 ### Step 4: Run Merge
@@ -204,6 +204,6 @@ The visualization tab should be used before merging CSV files for quality contro
 - **Workflow Order**: Complete processing → visualization/inspection → merging → analysis for best results
 - **Quality Control**: Mark traces as "bad" during visualization to exclude them from merged results
 - **Parameter Exploration**: Navigate through FOVs in the quality panel to explore different fits and validate your model
-- **File Locations**: Keep track of where your processing_results.yaml and samples.yaml files are saved for easy access
+- **File Locations**: Keep track of your processing output directory and samples.yaml files for easy access
 - **Model Detection**: When loading fitted results, the model dropdown updates automatically to match the saved model type
 - **FOV Navigation**: Use Previous/Next buttons in the quality panel to browse traces grouped by FOV for easier quality assessment

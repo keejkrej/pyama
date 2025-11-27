@@ -215,7 +215,6 @@ class Result:
 
     cell: int
     frame: int
-    time: float
     good: bool
     position_x: float
     position_y: float
@@ -291,10 +290,10 @@ class TileSupport:
 
 @dataclass
 class FeatureMaps:
-    """Container for feature values per timepoint and cell."""
+    """Container for feature values per frame and cell."""
 
-    features: dict[str, dict[tuple[float, int], float]]
-    times: list[float]
+    features: dict[str, dict[tuple[int, int], float]]
+    frames: list[int]
     cells: list[int]
 
 

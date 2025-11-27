@@ -24,6 +24,9 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -122,6 +125,8 @@ class DataPanel(QWidget):
         self._raw_data: pd.DataFrame | None = None
         self._raw_csv_path: Path | None = None
         self._selected_cell: str | None = None
+        self._frame_interval: float = 1 / 6  # Default: 10 min per frame (in hours)
+        self._time_mapping: dict[int, float] | None = None  # frame -> time mapping
 
         # Fitting state (from FittingModel)
         self._is_fitting: bool = False
@@ -166,6 +171,33 @@ class DataPanel(QWidget):
         """
         group = QGroupBox("Data Visualization")
         group_layout = QVBoxLayout(group)
+
+        # Frame interval input
+        interval_layout = QHBoxLayout()
+        interval_layout.addWidget(QLabel("Frame interval:"))
+        interval_layout.addStretch()
+        self._frame_interval_edit = QLineEdit()
+        self._frame_interval_edit.setText(str(self._frame_interval))
+        self._frame_interval_edit.setFixedWidth(80)
+        self._frame_interval_edit.setToolTip("Time interval between frames (e.g., 0.1667 for 10 min)")
+        interval_layout.addWidget(self._frame_interval_edit)
+        interval_layout.addWidget(QLabel("hours"))
+        group_layout.addLayout(interval_layout)
+
+        # Time mapping file (for non-equidistant frames)
+        mapping_layout = QHBoxLayout()
+        self._time_mapping_label = QLabel("Time mapping: (none)")
+        mapping_layout.addWidget(self._time_mapping_label)
+        mapping_layout.addStretch()
+        self._load_mapping_button = QPushButton("Load...")
+        self._load_mapping_button.setFixedWidth(60)
+        self._load_mapping_button.setToolTip("Load CSV with frame,time columns for non-equidistant time points")
+        mapping_layout.addWidget(self._load_mapping_button)
+        self._clear_mapping_button = QPushButton("Clear")
+        self._clear_mapping_button.setFixedWidth(50)
+        self._clear_mapping_button.setEnabled(False)
+        mapping_layout.addWidget(self._clear_mapping_button)
+        group_layout.addLayout(mapping_layout)
 
         # Load CSV button
         self._load_button = QPushButton("Load CSV")
@@ -233,6 +265,8 @@ class DataPanel(QWidget):
         self._load_fitted_results_button.clicked.connect(
             self._on_load_fitted_results_clicked
         )
+        self._load_mapping_button.clicked.connect(self._on_load_mapping_clicked)
+        self._clear_mapping_button.clicked.connect(self._on_clear_mapping_clicked)
         self._start_button.clicked.connect(self._on_start_clicked)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
 
@@ -260,10 +294,19 @@ class DataPanel(QWidget):
         filename = path.name
         self.data_loading_started.emit()
 
-        saved_csv_path: Path | None = None
+        # Get frame interval from line edit (if no time mapping)
+        if self._time_mapping is None:
+            try:
+                self._frame_interval = float(self._frame_interval_edit.text())
+            except ValueError:
+                self._frame_interval = 1 / 6  # Default to 10 min
 
         try:
-            df = load_analysis_csv(path)
+            df = load_analysis_csv(
+                path,
+                frame_interval=self._frame_interval,
+                time_mapping=self._time_mapping,
+            )
             self._raw_data = df
             self._raw_csv_path = path
             try:
@@ -294,9 +337,19 @@ class DataPanel(QWidget):
         and updates the model dropdown accordingly. This ensures the UI is
         synchronized with the loaded fitted results.
 
+        Note: Raw data must be loaded first with the correct frame interval
+        for the fitted curves to display correctly.
+
         Args:
             path: Path to the fitted results CSV file
         """
+        if self._raw_data is None:
+            logger.warning("No raw data loaded - fitted curves may not display correctly")
+            self.data_loading_finished.emit(
+                False, "Load analysis CSV first before loading fitted results"
+            )
+            return
+
         self.data_loading_started.emit()
         logger.info("Loading fitted results from %s", path)
         try:
@@ -353,11 +406,23 @@ class DataPanel(QWidget):
 
         # Plot mean line in red
         if all_values:
-            # Compute mean across all traces (assuming same time points)
-            mean_values = np.mean(all_values, axis=0)
-            # Use time from first cell
-            first_cell = cell_ids[0]
-            time_values = data.loc[first_cell]["time"].values
+            # Get unique frames across all traces
+            all_frames = np.sort(data["frame"].unique())
+            n_frames = len(all_frames)
+
+            # Build frame-aligned array with NaN for missing values
+            padded = np.full((len(all_values), n_frames), np.nan)
+            for i, (fov, cell) in enumerate(cell_ids):
+                cell_data = data.loc[(fov, cell)]
+                cell_frames = cell_data["frame"].values
+                cell_values = cell_data["value"].values
+                # Find indices where this cell's frames match the global frames
+                frame_indices = np.searchsorted(all_frames, cell_frames)
+                padded[i, frame_indices] = cell_values
+
+            mean_values = np.nanmean(padded, axis=0)
+            # Convert frames to time for x-axis display
+            time_values = data.loc[data["frame"].isin(all_frames)].groupby("frame")["time"].first().values
             lines_data.append((time_values, mean_values))
             styles_data.append(
                 {
@@ -422,6 +487,43 @@ class DataPanel(QWidget):
         if file_path:
             logger.debug("UI Action: Loading CSV file - %s", file_path)
             self._load_csv(Path(file_path))
+
+    @Slot()
+    def _on_load_mapping_clicked(self) -> None:
+        """Handle load time mapping button click."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Time Mapping CSV",
+            str(DEFAULT_DIR),
+            "CSV Files (*.csv)",
+            options=QFileDialog.Option.DontUseNativeDialog,
+        )
+        if file_path:
+            self._load_time_mapping(Path(file_path))
+
+    @Slot()
+    def _on_clear_mapping_clicked(self) -> None:
+        """Handle clear time mapping button click."""
+        self._time_mapping = None
+        self._time_mapping_label.setText("Time mapping: (none)")
+        self._clear_mapping_button.setEnabled(False)
+        self._frame_interval_edit.setEnabled(True)
+        logger.info("Time mapping cleared")
+
+    def _load_time_mapping(self, path: Path) -> None:
+        """Load time mapping from CSV file with frame,time columns."""
+        try:
+            df = pd.read_csv(path)
+            if "frame" not in df.columns or "time" not in df.columns:
+                logger.error("Time mapping CSV must have 'frame' and 'time' columns")
+                return
+            self._time_mapping = dict(zip(df["frame"].astype(int), df["time"].astype(float)))
+            self._time_mapping_label.setText(f"Time mapping: {path.name}")
+            self._clear_mapping_button.setEnabled(True)
+            self._frame_interval_edit.setEnabled(False)
+            logger.info("Loaded time mapping from %s (%d entries)", path, len(self._time_mapping))
+        except Exception as e:
+            logger.error("Failed to load time mapping: %s", e)
 
     @Slot()
     def _on_load_fitted_results_clicked(self) -> None:
@@ -593,6 +695,8 @@ class DataPanel(QWidget):
             model_type=request.model_type,
             model_params=request.model_params,
             model_bounds=request.model_bounds,
+            frame_interval=self._frame_interval,
+            time_mapping=self._time_mapping,
         )
 
         # Connect worker signals
@@ -696,6 +800,8 @@ class AnalysisFittingWorker(QObject):
         model_type: str,
         model_params: dict[str, float],
         model_bounds: dict[str, tuple[float, float]],
+        frame_interval: float = 1.0,
+        time_mapping: dict[int, float] | None = None,
     ) -> None:
         """Initialize the analysis worker.
 
@@ -704,12 +810,16 @@ class AnalysisFittingWorker(QObject):
             model_type: Type of model to use for fitting
             model_params: Dictionary of model parameter values
             model_bounds: Dictionary of model parameter bounds
+            frame_interval: Time interval per frame in hours (default: 1.0)
+            time_mapping: Optional dict mapping frame -> time (overrides frame_interval)
         """
         super().__init__()
         self._csv_file = csv_file
         self._model_type = model_type
         self._model_params = model_params
         self._model_bounds = model_bounds
+        self._frame_interval = frame_interval
+        self._time_mapping = time_mapping
         self._is_cancelled = False
 
     # ------------------------------------------------------------------------
@@ -749,6 +859,8 @@ class AnalysisFittingWorker(QObject):
                     self._model_type,
                     model_params=self._model_params,
                     model_bounds=self._model_bounds,
+                    frame_interval=self._frame_interval,
+                    time_mapping=self._time_mapping,
                 )
 
                 if results_df is not None:

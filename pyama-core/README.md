@@ -89,8 +89,8 @@ from pyama_core.processing.merge import run_merge
 # Merge results
 message = run_merge(
     sample_yaml=Path("samples.yaml"),
-    processing_results_yaml=Path("processing_results.yaml"),
     output_dir=Path("output"),
+    input_dir=Path("processed_fovs"),  # folder containing fov_000, fov_001, etc.
 )
 ```
 
@@ -260,7 +260,8 @@ MODELS = {
 
 - `load_microscopy_file()`: Load microscopy metadata
 - `get_microscopy_frame()`: Extract single frame
-- `load_processing_results_yaml()`: Load processing results from YAML file
+- `load_config()`: Load processing config from YAML file
+- `discover_fovs()`: Discover FOV directories in output folder
 
 ### Analysis Functions
 

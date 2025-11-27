@@ -38,6 +38,8 @@ class FittingService:
         model_params: dict[str, float] | None = None,
         model_bounds: dict[str, tuple[float, float]] | None = None,
         *,
+        frame_interval: float = 1.0,
+        time_mapping: dict[int, float] | None = None,
         progress_reporter: Callable[[dict], None] | None = None,
     ) -> tuple[pd.DataFrame | None, Path | None]:
         """Fit traces in a CSV file and save results.
@@ -47,6 +49,8 @@ class FittingService:
             model_type: Model type to fit.
             model_params: Optional manual parameter overrides (fixed and fit).
             model_bounds: Optional manual bounds for fit parameters.
+            frame_interval: Time interval per frame in hours (default: 1.0).
+            time_mapping: Optional dict mapping frame -> time (overrides frame_interval).
             progress_reporter: Optional callable to receive progress events.
 
         Returns:
@@ -65,7 +69,7 @@ class FittingService:
             len(model_bounds or {}),
         )
 
-        df = load_analysis_csv(csv_file)
+        df = load_analysis_csv(csv_file, frame_interval=frame_interval, time_mapping=time_mapping)
         model = get_model(model_type)
 
         fixed_params = self._build_fixed_params(model, model_params)

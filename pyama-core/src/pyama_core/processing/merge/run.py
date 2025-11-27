@@ -24,7 +24,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_channel_feature_config_from_channels(channels: Channels) -> list[tuple[int, list[str]]]:
-    """Determine the channel/feature selections from Channels config."""
+    """Determine the channel/feature selections from Channels config.
+
+    Returns:
+        List of (channel_id, features) tuples.
+    """
     config: list[tuple[int, list[str]]] = []
 
     pc_channel = channels.get_pc_channel()
@@ -128,22 +132,22 @@ def read_samples_yaml(path: Path) -> dict[str, Any]:
 
 def build_feature_maps(rows: list[dict], feature_names: list[str]) -> FeatureMaps:
     """Build feature maps filtered by 'good' rows."""
-    feature_maps: dict[str, dict[tuple[float, int], float]] = {
+    feature_maps: dict[str, dict[tuple[int, int], float]] = {
         feature_name: {} for feature_name in feature_names
     }
-    times_set: set[float] = set()
+    frames_set: set[int] = set()
     cells_set: set[int] = set()
 
     for row in rows:
         if "good" in row and not row["good"]:
             continue
-        time = row.get("time")
+        frame = row.get("frame")
         cell = row.get("cell")
-        if time is None or cell is None:
+        if frame is None or cell is None:
             continue
 
-        key = (float(time), int(cell))
-        times_set.add(float(time))
+        key = (int(frame), int(cell))
+        frames_set.add(int(frame))
         cells_set.add(int(cell))
 
         for feature_name in feature_names:
@@ -154,7 +158,7 @@ def build_feature_maps(rows: list[dict], feature_names: list[str]) -> FeatureMap
 
     return FeatureMaps(
         features=feature_maps,
-        times=sorted(times_set),
+        frames=sorted(frames_set),
         cells=sorted(cells_set),
     )
 
@@ -195,30 +199,29 @@ def extract_channel_dataframe(
     return channel_df
 
 
-def get_all_times(
+def get_all_frames(
     feature_maps_by_fov: dict[int, FeatureMaps], fovs: Iterable[int]
-) -> list[float]:
-    """Collect sorted unique time points across FOVs."""
-    times: set[float] = set()
+) -> list[int]:
+    """Collect sorted unique frame indices across FOVs."""
+    frames: set[int] = set()
     for fov in fovs:
         feature_maps = feature_maps_by_fov.get(fov)
         if feature_maps:
-            times.update(feature_maps.times)
-    return sorted(times)
+            frames.update(feature_maps.frames)
+    return sorted(frames)
 
 
 def write_feature_csv(
     out_path: Path,
-    times: list[float],
+    frames: list[int],
     fovs: Iterable[int],
     feature_name: str,
     feature_maps_by_fov: dict[int, FeatureMaps],
     channel: int,
-    time_units: str | None = None,
 ) -> None:
     """Write a feature CSV in tidy/long format.
 
-    Output format: time, fov, cell, value
+    Output format: frame, fov, cell, value
     Only includes FOVs and cells that have data available.
     """
     fov_list = list(fovs)
@@ -226,9 +229,9 @@ def write_feature_csv(
     # Filter to only include FOVs that have data
     available_fovs = [fov for fov in fov_list if fov in feature_maps_by_fov]
 
-    # Build rows in long format: time, fov, cell, value
+    # Build rows in long format: frame, fov, cell, value
     rows = []
-    for time in times:
+    for frame in frames:
         for fov in available_fovs:
             feature_maps = feature_maps_by_fov.get(fov)
             if not feature_maps:
@@ -239,10 +242,10 @@ def write_feature_csv(
 
             feature_map = feature_maps.features[feature_name]
             for cell in sorted(feature_maps.cells):
-                value = feature_map.get((time, cell))
+                value = feature_map.get((frame, cell))
                 if value is not None:
                     rows.append({
-                        "time": time,
+                        "frame": frame,
                         "fov": fov,
                         "cell": cell,
                         "value": value,
@@ -250,13 +253,7 @@ def write_feature_csv(
 
     df = pd.DataFrame(rows)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if time_units:
-        with out_path.open("w", encoding="utf-8") as handle:
-            handle.write(f"# Time units: {time_units}\n")
-            df.to_csv(handle, index=False, float_format="%.6f")
-    else:
-        df.to_csv(out_path, index=False, float_format="%.6f")
+    df.to_csv(out_path, index=False, float_format="%.6f")
 
 
 # =============================================================================
@@ -269,7 +266,6 @@ def run_merge(
     output_dir: Path,
     input_dir: Path | None = None,
     config_path: Path | None = None,
-    time_units: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> str:
     """Execute merge logic - return success message or raise error.
@@ -279,7 +275,6 @@ def run_merge(
         output_dir: Directory to write merged CSV files
         input_dir: Directory containing processed FOV folders (default: sample_yaml parent)
         config_path: Path to processing_config.yaml (default: input_dir/processing_config.yaml)
-        time_units: Time units for output (default: read from config or None)
         progress_callback: Optional callback(current, total, message) for progress updates
     """
     samples_config = read_samples_yaml(sample_yaml)
@@ -381,7 +376,7 @@ def run_merge(
                 )
                 continue
 
-            times = get_all_times(channel_feature_maps, sample_fovs)
+            frames = get_all_frames(channel_feature_maps, sample_fovs)
 
             for feature_name in features:
                 # Only write CSV if the feature actually has data in any FOV
@@ -404,12 +399,11 @@ def run_merge(
                 output_path = output_dir / output_filename
                 write_feature_csv(
                     output_path,
-                    times,
+                    frames,
                     sample_fovs,
                     feature_name,
                     channel_feature_maps,
                     channel,
-                    time_units,
                 )
                 created_files.append(output_path)
                 logger.info("Created: %s", output_filename)

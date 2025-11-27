@@ -108,9 +108,9 @@ class MergeRunner(QObject):
 
         try:
             message = run_merge(
-                self._request.sample_yaml,
-                self._request.processing_results_yaml,
-                self._request.output_dir,
+                sample_yaml=self._request.sample_yaml,
+                output_dir=self._request.output_dir,
+                input_dir=self._request.input_dir,
                 progress_callback=progress_callback,
             )
             self.finished.emit(True, message)
@@ -407,16 +407,16 @@ class MergePanel(QWidget):
         self.sample_edit = QLineEdit()
         layout.addWidget(self.sample_edit)
 
-        # Processing Results YAML selector
-        processing_results_row = QHBoxLayout()
-        processing_results_row.addWidget(QLabel("Processing Results YAML:"))
-        processing_results_row.addStretch()
-        processing_results_browse_btn = QPushButton("Browse")
-        processing_results_browse_btn.clicked.connect(self._choose_processing_results)
-        processing_results_row.addWidget(processing_results_browse_btn)
-        layout.addLayout(processing_results_row)
-        self.processing_results_edit = QLineEdit()
-        layout.addWidget(self.processing_results_edit)
+        # Input directory selector (processed FOV folders)
+        input_dir_row = QHBoxLayout()
+        input_dir_row.addWidget(QLabel("Folder of processed FOVs:"))
+        input_dir_row.addStretch()
+        input_dir_browse_btn = QPushButton("Browse")
+        input_dir_browse_btn.clicked.connect(self._choose_input_dir)
+        input_dir_row.addWidget(input_dir_browse_btn)
+        layout.addLayout(input_dir_row)
+        self.input_dir_edit = QLineEdit()
+        layout.addWidget(self.input_dir_edit)
 
         # Output folder selector
         output_row = QHBoxLayout()
@@ -553,9 +553,9 @@ class MergePanel(QWidget):
         in a background thread to prevent UI blocking.
         """
         logger.debug(
-            "UI Click: Run merge button (sample_yaml=%s, processing_results=%s, output=%s)",
+            "UI Click: Run merge button (sample_yaml=%s, input_dir=%s, output=%s)",
             self.sample_edit.text(),
-            self.processing_results_edit.text(),
+            self.input_dir_edit.text(),
             self.output_edit.text(),
         )
 
@@ -565,26 +565,25 @@ class MergePanel(QWidget):
 
         try:
             sample_text = self.sample_edit.text().strip()
-            processing_text = self.processing_results_edit.text().strip()
+            input_dir_text = self.input_dir_edit.text().strip()
             output_text = self.output_edit.text().strip()
 
-            if not all([sample_text, processing_text, output_text]):
+            if not all([sample_text, input_dir_text, output_text]):
                 return
 
-            # Use the processing results YAML directory as input directory
             sample_yaml_path = Path(sample_text).expanduser()
-            processing_results_yaml_path = Path(processing_text).expanduser()
+            input_dir = Path(input_dir_text).expanduser()
             output_dir = Path(output_text).expanduser()
 
             request = MergeRequest(
                 sample_yaml=sample_yaml_path,
-                processing_results_yaml=processing_results_yaml_path,
+                input_dir=input_dir,
                 output_dir=output_dir,
             )
             logger.info(
-                "Starting merge (samples=%s, processing_results=%s, output_dir=%s)",
+                "Starting merge (samples=%s, input_dir=%s, output_dir=%s)",
                 sample_yaml_path,
-                processing_results_yaml_path,
+                input_dir,
                 output_dir,
             )
 
@@ -644,25 +643,25 @@ class MergePanel(QWidget):
             self.sample_edit.setText(path)
 
     @Slot()
-    def _choose_processing_results(self) -> None:
-        """Handle processing results YAML browse button click.
+    def _choose_input_dir(self) -> None:
+        """Handle input directory browse button click.
 
-        Opens a file dialog to select a processing results YAML file.
+        Opens a directory dialog to select the input directory containing
+        processed FOV folders.
         """
         logger.debug(
-            "UI Click: Browse processing results YAML button (start_dir=%s)",
+            "UI Click: Browse input directory button (start_dir=%s)",
             DEFAULT_DIR,
         )
-        path, _ = QFileDialog.getOpenFileName(
+        path = QFileDialog.getExistingDirectory(
             self,
-            "Select processing_results.yaml",
+            "Select folder of processed FOVs",
             DEFAULT_DIR,
-            "YAML Files (*.yaml *.yml)",
             options=QFileDialog.Option.DontUseNativeDialog,
         )
         if path:
-            logger.debug("UI Action: Set processing results YAML path - %s", path)
-            self.processing_results_edit.setText(path)
+            logger.debug("UI Action: Set input directory - %s", path)
+            self.input_dir_edit.setText(path)
 
     @Slot()
     def _choose_output_dir(self) -> None:
@@ -715,13 +714,13 @@ class MergePanel(QWidget):
         """
         self.sample_edit.setText(str(path))
 
-    def set_processing_results_path(self, path: Path | str) -> None:
-        """Set the processing results YAML file path in the UI.
+    def set_input_dir(self, path: Path | str) -> None:
+        """Set the input directory path in the UI.
 
         Args:
-            path: Path to the processing results YAML file
+            path: Path to the input directory containing processed FOVs
         """
-        self.processing_results_edit.setText(str(path))
+        self.input_dir_edit.setText(str(path))
 
     def set_output_directory(self, path: Path | str) -> None:
         """Set the output directory path in the UI.

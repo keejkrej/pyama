@@ -5,7 +5,7 @@ This module defines utilities for handling CSV files consumed by the
 processing module. The format includes FOV information, cell tracking data,
 and extracted features.
 
-Format: fov, cell, frame, time, good, position_x, position_y, and dynamic feature columns
+Format: fov, cell, frame, good, position_x, position_y, and dynamic feature columns
 """
 
 from pathlib import Path
@@ -200,7 +200,7 @@ def extract_all_cells_data(df: pd.DataFrame) -> dict:
         {
             "cell_id": {
                 "quality": bool,
-                "features": {"time": array, "feature1": array, ...},
+                "features": {"frame": array, "feature1": array, ...},
                 "positions": {"frames": array, "position_x": array, "position_y": array}
             },
             ...

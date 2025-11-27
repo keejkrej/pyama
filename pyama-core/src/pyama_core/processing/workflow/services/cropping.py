@@ -83,14 +83,16 @@ class CroppingService(BaseProcessingService):
         # Get cropping parameters from config
         padding = config.get_param("crop_padding", 5)
         mask_margin = config.get_param("mask_margin", 0)
-        min_frames = config.get_param("crop_min_frames", 1)
+        min_frames = config.get_param("min_frames", 30)
+        border_margin = config.get_param("border_margin", 50)
 
         logger.info(
-            "FOV %d: Cropping cells (padding=%d, mask_margin=%d, min_frames=%d)...",
+            "FOV %d: Cropping cells (padding=%d, mask_margin=%d, min_frames=%d, border_margin=%d)...",
             fov,
             padding,
             mask_margin,
             min_frames,
+            border_margin,
         )
 
         # Extract crops
@@ -101,6 +103,7 @@ class CroppingService(BaseProcessingService):
             padding=padding,
             mask_margin=mask_margin,
             min_frames=min_frames,
+            border_margin=border_margin,
             progress_callback=partial(self.progress_callback, fov),
             cancel_event=cancel_event,
         )

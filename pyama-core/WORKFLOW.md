@@ -346,7 +346,7 @@ After completing the workflow, the output directory contains:
 
 ```
 output_dir/
-├── processing_results.yaml          # Metadata: channels, paths, parameters
+├── processing_config.yaml           # Metadata: channels, parameters
 ├── fov_000/
 │   ├── {basename}_fov_000_pc_ch_{pc_id}.npy          # Raw PC stack
 │   ├── {basename}_fov_000_fl_ch_{fl_id}.npy          # Raw FL stacks (one per channel)

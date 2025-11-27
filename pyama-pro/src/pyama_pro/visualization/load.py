@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyama_core.io.results_yaml import load_processing_results_yaml
+from pyama_core.io import naming, load_config, config_path
 from pyama_pro.constants import DEFAULT_DIR
 
 logger = logging.getLogger(__name__)
@@ -272,14 +272,63 @@ class LoadPanel(QWidget):
         self.project_loading_started.emit()
 
         try:
-            yaml_file = project_path / "processing_results.yaml"
-            if not yaml_file.exists():
+            # Discover FOVs from directory structure
+            fovs = naming.discover_fovs(project_path)
+            if not fovs:
                 raise FileNotFoundError(
-                    f"processing_results.yaml not found in {project_path}. "
-                    "Processing results must be loaded from YAML file."
+                    f"No FOV directories found in {project_path}. "
+                    "Expected directories named fov_000, fov_001, etc."
                 )
-            project_results = load_processing_results_yaml(yaml_file)
-            project_data = project_results.to_dict()
+
+            # Load config if available
+            cfg_path = config_path(project_path)
+            channels_config = None
+            if cfg_path.exists():
+                try:
+                    config = load_config(cfg_path)
+                    channels_config = config.channels.to_raw()
+                except Exception as e:
+                    logger.warning("Failed to load config: %s", e)
+
+            # Build fov_data by discovering files in each FOV directory
+            fov_data: dict[int, dict[str, Path]] = {}
+            for fov in fovs:
+                fov_dir = naming.fov_dir(project_path, fov)
+                fov_files: dict[str, Path] = {}
+
+                # Discover all NPY files
+                for npy_file in fov_dir.glob("*.npy"):
+                    # Parse the file type from the name
+                    name = npy_file.stem
+                    if "_pc_ch_" in name:
+                        fov_files["pc"] = npy_file
+                    elif "_fl_ch_" in name and "_background" not in name:
+                        # Extract channel number for multiple FL channels
+                        ch_idx = name.split("_fl_ch_")[-1]
+                        fov_files[f"fl_ch_{ch_idx}"] = npy_file
+                    elif "_seg_labeled_ch_" in name:
+                        fov_files["seg_labeled"] = npy_file
+                    elif "_seg_ch_" in name:
+                        fov_files["seg"] = npy_file
+                    elif "_fl_background_ch_" in name:
+                        ch_idx = name.split("_fl_background_ch_")[-1]
+                        fov_files[f"fl_background_ch_{ch_idx}"] = npy_file
+
+                # Discover traces CSV
+                traces_files = list(fov_dir.glob("*_traces.csv"))
+                if traces_files:
+                    fov_files["traces"] = traces_files[0]
+
+                fov_data[fov] = fov_files
+
+            project_data = {
+                "project_path": project_path,
+                "n_fov": len(fovs),
+                "fov_data": fov_data,
+                "channels": channels_config,
+                "time_units": None,
+            }
+
             self._project_data = project_data
             self._update_ui_with_project_data(project_data)
             self.project_loaded.emit(project_data)

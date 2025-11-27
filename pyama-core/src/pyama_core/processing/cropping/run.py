@@ -164,7 +164,8 @@ def crop_cells(
     backgrounds: dict[str, np.ndarray] | None = None,
     padding: int = 0,
     mask_margin: int = 0,
-    min_frames: int = 1,
+    min_frames: int = 30,
+    border_margin: int = 50,
     progress_callback: Callable | None = None,
     cancel_event=None,
 ) -> list[CellCrop]:
@@ -186,12 +187,15 @@ def crop_cells(
             Negative values shrink the mask to exclude edge pixels.
             Default is 0 (no change).
         min_frames: Minimum number of frames a cell must be present.
-            Cells with fewer frames are excluded.
+            Cells with fewer frames are excluded. Default is 30.
+        border_margin: Minimum distance from image border in pixels.
+            Cells that touch within this margin of any edge are excluded.
+            Default is 50 pixels. Set to 0 to disable border filtering.
         progress_callback: Optional callable (current, total, msg) for progress.
         cancel_event: Optional threading.Event for cancellation.
 
     Returns:
-        List of CellCrop objects, one per cell that meets min_frames threshold.
+        List of CellCrop objects, one per cell that meets filtering criteria.
 
     Raises:
         ValueError: If labeled is not 3D or channel shapes don't match.
@@ -226,13 +230,30 @@ def crop_cells(
     if cancel_event and cancel_event.is_set():
         return []
 
+    n_frames, height, width = labeled.shape
     cell_bboxes = _compute_cell_bboxes(labeled, padding=padding)
 
-    # Filter cells by minimum frame count
-    cell_ids = [
-        cid for cid, bboxes in cell_bboxes.items()
-        if len(bboxes) >= min_frames
-    ]
+    # Filter cells by minimum frame count and border proximity
+    cell_ids = []
+    for cid, bboxes in cell_bboxes.items():
+        # Check minimum frames
+        if len(bboxes) < min_frames:
+            continue
+
+        # Check border proximity (if border_margin > 0)
+        if border_margin > 0:
+            touches_border = False
+            for t, y0, x0, y1, x1 in bboxes:
+                if (x0 < border_margin or
+                    x1 > width - border_margin or
+                    y0 < border_margin or
+                    y1 > height - border_margin):
+                    touches_border = True
+                    break
+            if touches_border:
+                continue
+
+        cell_ids.append(cid)
 
     if progress_callback:
         progress_callback(1, 3, "Extracting crops")

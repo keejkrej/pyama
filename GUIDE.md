@@ -13,11 +13,11 @@
 11. Cancel stops new batches while letting running workers finish safely.
 12. Use Assign FOVs to map ranges like 0-3,5-7 onto descriptive sample names.
 13. Save the assignment table to YAML so merges and CLI runs stay in sync.
-14. Load the samples YAML plus processing_results.yaml in the Merge section.
+14. Load the samples YAML and select the folder of processed FOVs in the Merge section.
 15. Select an output folder (often the processing folder) for merged CSVs.
 16. Run Merge to immediately build one CSV per sample.
 17. After the workflow, note the summary message pointing to output paths.
-18. Expect processing_results.yaml, per-FOV trace CSVs, and masks in the save folder.
+18. Expect processing_config.yaml, per-FOV trace CSVs, and masks in the save folder.
 
 # Visualization Tab Quick Guide
 

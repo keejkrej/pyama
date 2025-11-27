@@ -6,7 +6,6 @@ import logging
 from functools import partial
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
@@ -58,19 +57,6 @@ class ExtractionService(BaseProcessingService):
 
         logger.info("FOV %d: Extracting features from cropped H5...", fov)
 
-        # Compute times array
-        def _compute_times(frame_count: int) -> np.ndarray:
-            try:
-                tp = getattr(metadata, "timepoints", None)
-                if tp is not None and len(tp) == frame_count:
-                    times_ms = np.asarray(tp, dtype=float)
-                    return times_ms / 60000.0
-            except Exception:
-                pass
-            return np.arange(frame_count, dtype=float)
-
-        times = _compute_times(metadata.n_frames)
-
         # Build channel configs from config
         channel_configs: list[ChannelFeatureConfig] = []
 
@@ -79,6 +65,7 @@ class ExtractionService(BaseProcessingService):
         if pc_features and pc_channel is not None:
             channel_configs.append(ChannelFeatureConfig(
                 channel_name=f"pc_ch_{pc_channel}",
+                channel_id=pc_channel,
                 background_name=None,
                 features=sorted(dict.fromkeys(pc_features)),
                 background_weight=0.0,  # No background for PC
@@ -90,6 +77,7 @@ class ExtractionService(BaseProcessingService):
             if features:
                 channel_configs.append(ChannelFeatureConfig(
                     channel_name=f"fl_ch_{ch}",
+                    channel_id=ch,
                     background_name=f"fl_ch_{ch}",
                     features=sorted(dict.fromkeys(features)),
                     background_weight=background_weight,
@@ -110,7 +98,6 @@ class ExtractionService(BaseProcessingService):
         # Single call to extract all features from all channels
         df = extract_trace_from_crops(
             crops_h5_path=crops_path,
-            times=times,
             channel_configs=channel_configs,
             progress_callback=partial(self.progress_callback, fov),
             cancel_event=cancel_event,
@@ -124,7 +111,7 @@ class ExtractionService(BaseProcessingService):
             logger.info("FOV %d: No traces extracted, creating empty CSV", fov)
         else:
             df.insert(0, "fov", fov)
-            df.sort_values(["cell", "frame", "time"], inplace=True)
+            df.sort_values(["cell", "frame"], inplace=True)
 
         df.to_csv(traces_path, index=False, float_format="%.6f")
         logger.info("FOV %d: Traces written to %s", fov, traces_path)

@@ -197,31 +197,25 @@ def inspect_results(context, output_dir):
     else:
         print("   Directory does not exist")
     
-    # Check for processing results YAML
-    yaml_path = output_dir / "processing_results.yaml"
+    # Check for processing config YAML
+    yaml_path = output_dir / "processing_config.yaml"
     if yaml_path.exists():
-        print(f"\n✓ Processing results YAML found: {yaml_path}")
-        
+        print(f"\n✓ Processing config YAML found: {yaml_path}")
+
         try:
-            from pyama_core.io.results_yaml import load_processing_results_yaml
-            results = load_processing_results_yaml(yaml_path)
-            
-            print("   YAML contents:")
-            if "channels" in results:
-                ch = results["channels"]
-                if "pc" in ch:
-                    print(f"     Phase contrast: {ch['pc']}")
-                if "fl" in ch:
-                    print(f"     Fluorescence: {ch['fl']}")
-            
-            if "results" in results:
-                fovs = list(results["results"].keys())
-                print(f"     FOVs: {fovs}")
-                for fov_id in fovs:
-                    fov_data = results["results"][fov_id]
-                    print(f"       FOV {fov_id}: {list(fov_data.keys())}")
+            from pyama_core.io.config import load_config
+            config = load_config(yaml_path)
+
+            print("   Config contents:")
+            channels = config.channels
+            if channels.pc is not None:
+                print(f"     Phase contrast: {channels.pc}")
+            if channels.fl:
+                print(f"     Fluorescence: {channels.fl}")
+            if config.params:
+                print(f"     Params: {config.params}")
         except Exception as e:
-            print(f"   ❌ Error loading YAML: {e}")
+            print(f"   ❌ Error loading config: {e}")
 
 
 def main():

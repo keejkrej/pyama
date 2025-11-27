@@ -110,14 +110,14 @@ The `ProcessingContext` dataclass (in `pyama_core.processing.types`) is the cent
 
 - Output directory paths
 - Channel configurations (`Channels` dataclass with `pc` and `fl` fields)
-- Per-FOV result artifacts (`results` dict mapping FOV index to `ResultsPerFOV`)
-- Processing parameters and time units
-- Results are serialized to `processing_results.yaml` and can be merged across multiple workflow runs
+- Processing parameters
+- Config is saved to `processing_config.yaml` for reference
+- FOV outputs are discovered by file naming conventions (e.g., `fov_000/`, `fov_001/`)
 
-**Result schema highlights**
+**Output schema highlights**
 
 - `channels.pc` serializes as `[phase_channel, [feature1, ...]]` and `channels.fl` as `[[channel, [feature1, ...]], ...]`, capturing both channel IDs and the enabled feature sets.
-- `results[fov_id].traces` points to a single merged CSV per FOV. Feature columns are suffixed with `_ch_{channel_id}` (e.g., `intensity_total_ch_1`, `area_ch_0`) so downstream tools can isolate per-channel data.
+- Per-FOV trace CSVs are at `fov_{id}/{basename}_fov_{id}_traces.csv`. Feature columns are suffixed with `_ch_{channel_id}` (e.g., `intensity_total_ch_1`, `area_ch_0`) so downstream tools can isolate per-channel data.
 
 ### Qt Application Structure
 
