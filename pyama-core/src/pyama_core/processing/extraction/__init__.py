@@ -1,3 +1,7 @@
-from pyama_core.processing.extraction.run import extract_trace
+from pyama_core.processing.extraction.run import (
+    extract_trace,
+    extract_trace_from_crops,
+    ChannelFeatureConfig,
+)
 
-__all__ = ["extract_trace"]
+__all__ = ["extract_trace", "extract_trace_from_crops", "ChannelFeatureConfig"]

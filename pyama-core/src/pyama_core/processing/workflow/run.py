@@ -19,6 +19,7 @@ from pyama_core.processing.workflow.services import (
     SegmentationService,
     BackgroundEstimationService,
     TrackingService,
+    CroppingService,
     ExtractionService,
     ProcessingContext,
     ensure_context,
@@ -145,8 +146,9 @@ def run_single_worker(
     try:
         context = ensure_context(context)
         segmentation = SegmentationService()
-        background_estimation = BackgroundEstimationService()
         tracking = TrackingService()
+        background_estimation = BackgroundEstimationService()
+        cropping = CroppingService()
         trace_extraction = ExtractionService()
 
         output_dir = context.output_dir
@@ -228,6 +230,27 @@ def run_single_worker(
             # Commented out cleanup to preserve partial results for debugging
             # _cleanup_fov_folders(output_dir, fovs[0], fovs[-1])
             return (fovs, 3, len(fovs) - 3, "Cancelled after background estimation", context)
+
+        logger.info("Starting Cropping for FOVs %d-%d", fovs[0], fovs[-1])
+        cropping.process_all_fovs(
+            metadata=metadata,
+            context=context,
+            output_dir=output_dir,
+            fov_start=fovs[0],
+            fov_end=fovs[-1],
+            cancel_event=cancel_event,
+        )
+        # Context merge happens automatically since we're using threads
+        # No need to send context through queue
+
+        # Check for cancellation after cropping
+        if cancel_event and cancel_event.is_set():
+            logger.info(
+                f"Worker for FOVs {fovs[0]}-{fovs[-1]} cancelled after cropping"
+            )
+            # Commented out cleanup to preserve partial results for debugging
+            # _cleanup_fov_folders(output_dir, fovs[0], fovs[-1])
+            return (fovs, 4, len(fovs) - 4, "Cancelled after cropping", context)
 
         logger.info("Starting Extraction for FOVs %d-%d", fovs[0], fovs[-1])
         trace_extraction.process_all_fovs(
