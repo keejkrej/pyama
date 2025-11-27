@@ -3,15 +3,14 @@ Copy service for extracting frames from ND2 files to NPY format.
 """
 
 from pathlib import Path
-import numpy as np
 import logging
-from numpy.lib.format import open_memmap
+from functools import partial
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
+from pyama_core.processing.copying import copy_frames
 from pyama_core.io import (
     MicroscopyMetadata,
     load_microscopy_file,
-    get_microscopy_frame,
 )
 from pyama_core.types.processing import (
     ProcessingContext,
@@ -75,47 +74,23 @@ class CopyingService(BaseProcessingService):
                     fov_paths.pc = (int(ch), Path(ch_path))
                 continue
 
-            # Create memory-mapped array and write data
+            # Copy frames using the functional API
             logger.info("FOV %d: Copying %s channel %s...", fov, kind.upper(), ch)
-            ch_memmap = None
-            try:
-                ch_memmap = open_memmap(
-                    ch_path, mode="w+", dtype=np.uint16, shape=(T, H, W)
-                )
-                for t in range(T):
-                    # Check for cancellation before processing each frame
-                    if cancel_event and cancel_event.is_set():
-                        logger.info(
-                            "Copying cancelled at FOV %d, channel %s, frame %d",
-                            fov,
-                            ch,
-                            t,
-                        )
-                        # Clean up the memmap file since copying was interrupted
-                        try:
-                            del ch_memmap
-                            ch_path.unlink(missing_ok=True)  # Remove partial file
-                        except Exception:
-                            pass
-                        return
+            success = copy_frames(
+                img=img,
+                fov=fov,
+                channel=ch,
+                n_frames=T,
+                output_path=ch_path,
+                height=H,
+                width=W,
+                progress_callback=partial(self.progress_callback, fov),
+                cancel_event=cancel_event,
+            )
 
-                    ch_memmap[t] = get_microscopy_frame(img, fov, ch, t)
-                    self.progress_callback(fov, t, T, "Copying")
-                # Flush changes to disk
-                ch_memmap.flush()
-            except Exception:
-                if ch_memmap is not None:
-                    try:
-                        del ch_memmap
-                    except Exception:
-                        pass
-                raise
-            finally:
-                if ch_memmap is not None:
-                    try:
-                        del ch_memmap
-                    except Exception:
-                        pass
+            if not success:
+                logger.info("FOV %d: Copying cancelled for channel %s", fov, ch)
+                return
 
             fov_paths = context.results.setdefault(fov, ensure_results_entry())
             if kind == "fl":
