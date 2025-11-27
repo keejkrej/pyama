@@ -39,7 +39,6 @@ class ExtractionService(BaseProcessingService):
 
         # Get params
         background_weight = 1.0
-        erosion_size = 0
         if context.params:
             background_weight = context.params.get("background_weight", 1.0)
             try:
@@ -47,12 +46,6 @@ class ExtractionService(BaseProcessingService):
                 background_weight = max(0.0, min(1.0, background_weight))
             except (ValueError, TypeError):
                 background_weight = 1.0
-
-            erosion_size = context.params.get("erosion_size", 0)
-            try:
-                erosion_size = max(0, int(erosion_size))
-            except (ValueError, TypeError):
-                erosion_size = 0
 
         fov_dir = output_dir / f"fov_{fov:03d}"
 
@@ -138,7 +131,6 @@ class ExtractionService(BaseProcessingService):
             channel_configs=channel_configs,
             progress_callback=partial(self.progress_callback, fov),
             cancel_event=cancel_event,
-            erosion_size=erosion_size,
         )
 
         if cancel_event and cancel_event.is_set():
