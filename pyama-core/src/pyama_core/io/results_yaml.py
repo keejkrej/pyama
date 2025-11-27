@@ -60,14 +60,14 @@ def load_processing_results_yaml(file_path: Path) -> ProcessingResults:
         data_files: dict[str, Path] = {}
 
         for data_type, file_info in (fov_files or {}).items():
-            if data_type == "traces":
+            # Handle simple path fields (traces, crops)
+            if data_type in ("traces", "crops"):
                 if file_info is None:
                     continue
                 path = Path(file_info)
                 corrected_path = _correct_file_path(path, output_dir)
                 if corrected_path and corrected_path.exists():
-                    # Always store the original path from YAML
-                    data_files["traces"] = corrected_path
+                    data_files[data_type] = corrected_path
                 continue
 
             # Handle NPY files - they can be single or multi-channel
@@ -352,6 +352,10 @@ def deserialize_from_dict(data: dict) -> Any:
                         fov_entry.fl_background.append(
                             (int(fl_bg_item[0]), Path(fl_bg_item[1]))
                         )
+
+            crops_value = fov_data.get("crops")
+            if isinstance(crops_value, (str, Path)):
+                fov_entry.crops = Path(crops_value)
 
             traces_value = fov_data.get("traces")
             if isinstance(traces_value, (str, Path)):
