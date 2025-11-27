@@ -21,6 +21,13 @@ from pyama_core.io.analysis_csv import (
 )
 
 from pyama_core.io import naming
+from pyama_core.io.config import (
+    ProcessingConfig,
+    load_config,
+    save_config,
+    ensure_config,
+    config_path,
+)
 
 
 __all__ = [
@@ -38,4 +45,10 @@ __all__ = [
     "discover_csv_files",
     # File naming utilities
     "naming",
+    # Processing config
+    "ProcessingConfig",
+    "load_config",
+    "save_config",
+    "ensure_config",
+    "config_path",
 ]

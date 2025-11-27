@@ -10,12 +10,7 @@ from functools import partial
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
 from pyama_core.processing.cropping import crop_cells
-from pyama_core.io import MicroscopyMetadata
-from pyama_core.types.processing import (
-    ProcessingContext,
-    ensure_context,
-    ensure_results_entry,
-)
+from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
 
 
 logger = logging.getLogger(__name__)
@@ -29,42 +24,34 @@ class CroppingService(BaseProcessingService):
     def process_fov(
         self,
         metadata: MicroscopyMetadata,
-        context: ProcessingContext,
+        config: ProcessingConfig,
         output_dir: Path,
         fov: int,
         cancel_event=None,
     ) -> None:
-        context = ensure_context(context)
+        config = ensure_config(config)
         base_name = metadata.base_name
-        fov_dir = output_dir / f"fov_{fov:03d}"
 
-        if context.results is None:
-            context.results = {}
-        fov_paths = context.results.setdefault(fov, ensure_results_entry())
+        # Get channels from config
+        pc_channel = config.channels.get_pc_channel()
+        fl_channels = config.channels.get_fl_channels()
 
-        # Get labeled segmentation path from tracking results
-        seg_labeled_entry = fov_paths.seg_labeled
-        if isinstance(seg_labeled_entry, tuple) and len(seg_labeled_entry) == 2:
-            pc_id, seg_labeled_path = int(seg_labeled_entry[0]), seg_labeled_entry[1]
-        else:
-            seg_labeled_path = seg_labeled_entry
-        if seg_labeled_path is None:
-            ch = pc_id if "pc_id" in locals() and pc_id is not None else 0
-            seg_labeled_path = (
-                fov_dir / f"{base_name}_fov_{fov:03d}_seg_labeled_ch_{ch}.npy"
-            )
-        if not Path(seg_labeled_path).exists():
+        if pc_channel is None:
+            logger.warning("FOV %d: No PC channel configured, skipping cropping", fov)
+            return
+
+        # Use naming module for paths
+        seg_labeled_path = naming.seg_labeled(output_dir, base_name, fov, pc_channel)
+        crops_path = naming.crops_h5(output_dir, base_name, fov)
+
+        if not seg_labeled_path.exists():
             raise FileNotFoundError(
                 f"Tracked segmentation not found: {seg_labeled_path}"
             )
 
-        # Output path
-        crops_path = fov_dir / f"{base_name}_fov_{fov:03d}_crops.h5"
-
         # Skip if already exists
         if crops_path.exists():
             logger.info("FOV %d: Crops file already exists, skipping", fov)
-            fov_paths.crops = Path(crops_path)
             return
 
         logger.info("FOV %d: Loading tracked segmentation...", fov)
@@ -75,37 +62,28 @@ class CroppingService(BaseProcessingService):
         backgrounds: dict[str, np.ndarray] = {}
 
         # Phase contrast
-        pc_entry = fov_paths.pc
-        if isinstance(pc_entry, tuple) and len(pc_entry) == 2:
-            pc_ch, pc_path = int(pc_entry[0]), pc_entry[1]
-            if Path(pc_path).exists():
-                logger.info("FOV %d: Loading phase contrast channel %d...", fov, pc_ch)
-                channels[f"pc_ch_{pc_ch}"] = np.load(pc_path, mmap_mode="r")
+        pc_path = naming.pc_stack(output_dir, base_name, fov, pc_channel)
+        if pc_path.exists():
+            logger.info("FOV %d: Loading phase contrast channel %d...", fov, pc_channel)
+            channels[f"pc_ch_{pc_channel}"] = np.load(pc_path, mmap_mode="r")
 
-        # Fluorescence channels
-        fl_entries = fov_paths.fl
-        if isinstance(fl_entries, list):
-            for fl_ch, fl_path in fl_entries:
-                if Path(fl_path).exists():
-                    logger.info(
-                        "FOV %d: Loading fluorescence channel %d...", fov, fl_ch
-                    )
-                    channels[f"fl_ch_{fl_ch}"] = np.load(fl_path, mmap_mode="r")
+        # Fluorescence channels and backgrounds
+        for fl_ch in fl_channels:
+            fl_path = naming.fl_stack(output_dir, base_name, fov, fl_ch)
+            bg_path = naming.fl_background(output_dir, base_name, fov, fl_ch)
 
-        # Background estimations for fluorescence channels
-        fl_bg_entries = fov_paths.fl_background
-        if isinstance(fl_bg_entries, list):
-            for fl_ch, bg_path in fl_bg_entries:
-                if Path(bg_path).exists():
-                    logger.info(
-                        "FOV %d: Loading background for channel %d...", fov, fl_ch
-                    )
-                    backgrounds[f"fl_ch_{fl_ch}"] = np.load(bg_path, mmap_mode="r")
+            if fl_path.exists():
+                logger.info("FOV %d: Loading fluorescence channel %d...", fov, fl_ch)
+                channels[f"fl_ch_{fl_ch}"] = np.load(fl_path, mmap_mode="r")
 
-        # Get cropping parameters from context
-        padding = context.params.get("crop_padding", 5)
-        mask_margin = context.params.get("mask_margin", 0)
-        min_frames = context.params.get("crop_min_frames", 1)
+            if bg_path.exists():
+                logger.info("FOV %d: Loading background for channel %d...", fov, fl_ch)
+                backgrounds[f"fl_ch_{fl_ch}"] = np.load(bg_path, mmap_mode="r")
+
+        # Get cropping parameters from config
+        padding = config.get_param("crop_padding", 5)
+        mask_margin = config.get_param("mask_margin", 0)
+        min_frames = config.get_param("crop_min_frames", 1)
 
         logger.info(
             "FOV %d: Cropping cells (padding=%d, mask_margin=%d, min_frames=%d)...",
@@ -148,8 +126,6 @@ class CroppingService(BaseProcessingService):
             logger.info("FOV %d: Cropping cancelled during save", fov)
             return
 
-        # Record output path
-        fov_paths.crops = Path(crops_path)
         logger.info("FOV %d: Cropping completed, saved %d cells", fov, len(cell_crops))
 
     def _save_crops_h5(self, path: Path, cell_crops, cancel_event=None) -> None:

@@ -13,12 +13,7 @@ from functools import partial
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
 from pyama_core.processing.background import estimate_background
-from pyama_core.io import MicroscopyMetadata
-from pyama_core.types.processing import (
-    ProcessingContext,
-    ensure_context,
-    ensure_results_entry,
-)
+from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
 
 
 logger = logging.getLogger(__name__)
@@ -32,89 +27,73 @@ class BackgroundEstimationService(BaseProcessingService):
     def process_fov(
         self,
         metadata: MicroscopyMetadata,
-        context: ProcessingContext,
+        config: ProcessingConfig,
         output_dir: Path,
         fov: int,
         cancel_event=None,
     ) -> None:
-        context = ensure_context(context)
+        config = ensure_config(config)
         base_name = metadata.base_name
-        fov_dir = output_dir / f"fov_{fov:03d}"
 
-        if context.results is None:
-            context.results = {}
-        fov_paths = context.results.setdefault(fov, ensure_results_entry())
+        # Get channels from config
+        pc_channel = config.channels.get_pc_channel()
+        fl_channels = config.channels.get_fl_channels()
 
-        # Gather fluorescence tuples (ch, path)
-        fl_entries = fov_paths.fl
-        if not isinstance(fl_entries, list):
-            fl_entries = []
-        if not fl_entries:
+        if not fl_channels:
             logger.info(
                 "FOV %d: No fluorescence channels, skipping background estimation", fov
             )
             return
 
-        def _sanitize(name: str) -> str:
-            try:
-                safe = "".join(
-                    c if c.isalnum() or c in ("-", "_") else "_" for c in name
-                )
-                while "__" in safe:
-                    safe = safe.replace("__", "_")
-                return safe.strip("_") or "unnamed"
-            except Exception:
-                return "unnamed"
+        if pc_channel is None:
+            logger.warning(
+                "FOV %d: No PC channel configured, skipping background estimation", fov
+            )
+            return
 
         # Load segmentation once
-        bin_entry = fov_paths.seg
-        if isinstance(bin_entry, tuple) and len(bin_entry) == 2:
-            seg_path = bin_entry[1]
-        else:
-            # Fallback if context missing path
-            seg_path = fov_dir / f"{base_name}_fov_{fov:03d}_seg_ch_0.npy"
-        if not Path(seg_path).exists():
+        seg_path = naming.seg_mask(output_dir, base_name, fov, pc_channel)
+        if not seg_path.exists():
             raise FileNotFoundError(f"Segmentation data not found: {seg_path}")
+
         logger.info("FOV %d: Loading segmentation data...", fov)
         segmentation_data = open_memmap(seg_path, mode="r")
 
-        fl_background_list = fov_paths.fl_background
+        for ch in fl_channels:
+            fl_path = naming.fl_stack(output_dir, base_name, fov, ch)
+            background_path = naming.fl_background(output_dir, base_name, fov, ch)
 
-        for ch, fl_raw_path in fl_entries:
-            background_path = (
-                fov_dir / f"{base_name}_fov_{fov:03d}_fl_background_ch_{ch}.npy"
-            )
-            # If output exists, record and skip this channel
-            if Path(background_path).exists():
+            # If output exists, skip this channel
+            if background_path.exists():
                 logger.info(
-                    "FOV %d: Background interpolation for ch %s already exists, skipping",
+                    "FOV %d: Background for channel %d already exists, skipping",
                     fov,
                     ch,
                 )
-                try:
-                    fl_background_list.append((int(ch), Path(background_path)))
-                except Exception:
-                    pass
                 continue
 
-            logger.info("FOV %d: Loading fluorescence data for channel %s...", fov, ch)
-            fluor_data = open_memmap(fl_raw_path, mode="r")
+            if not fl_path.exists():
+                logger.warning(
+                    "FOV %d: Fluorescence data not found for channel %d, skipping",
+                    fov,
+                    ch,
+                )
+                continue
+
+            logger.info("FOV %d: Loading fluorescence data for channel %d...", fov, ch)
+            fluor_data = open_memmap(fl_path, mode="r")
 
             if fluor_data.ndim != 3:
                 raise ValueError(
                     f"Unexpected fluorescence data dims: {fluor_data.shape}"
                 )
-            n_frames, height, width = (
-                int(fluor_data.shape[0]),
-                int(fluor_data.shape[1]),
-                int(fluor_data.shape[2]),
-            )
+            n_frames, height, width = fluor_data.shape
 
             if segmentation_data.shape != (n_frames, height, width):
-                error_msg = (
-                    f"Unexpected shape for segmentation data: {segmentation_data.shape}"
+                raise ValueError(
+                    f"Shape mismatch: segmentation {segmentation_data.shape} vs "
+                    f"fluorescence {fluor_data.shape}"
                 )
-                raise ValueError(error_msg)
 
             background_memmap = open_memmap(
                 background_path,
@@ -124,7 +103,7 @@ class BackgroundEstimationService(BaseProcessingService):
             )
 
             logger.info(
-                "FOV %d: Starting background estimation for channel %s...", fov, ch
+                "FOV %d: Starting background estimation for channel %d...", fov, ch
             )
             try:
                 estimate_background(
@@ -134,25 +113,18 @@ class BackgroundEstimationService(BaseProcessingService):
                     progress_callback=partial(self.progress_callback, fov),
                     cancel_event=cancel_event,
                 )
-                # Flush changes to disk
                 background_memmap.flush()
             except InterruptedError:
                 if background_memmap is not None:
                     del background_memmap
                 raise
 
-            logger.info("FOV %d: Cleaning up channel %s...", fov, ch)
+            logger.info("FOV %d: Cleaning up channel %d...", fov, ch)
             if background_memmap is not None:
                 del background_memmap
-
-            # Record output tuple
-            try:
-                fl_background_list.append((int(ch), Path(background_path)))
-            except Exception:
-                pass
 
         logger.info(
             "FOV %d: Background estimation completed for %d channel(s)",
             fov,
-            len(fl_entries),
+            len(fl_channels),
         )

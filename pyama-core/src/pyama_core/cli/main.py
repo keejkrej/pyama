@@ -21,10 +21,10 @@ from pyama_core.processing.merge import (
     run_merge as run_core_merge,
 )
 from pyama_core.processing.workflow.run import run_complete_workflow
+from pyama_core.io import ProcessingConfig
 from pyama_core.types.processing import (
     ChannelSelection,
     Channels,
-    ProcessingContext,
 )
 
 output_mode_option = typer.Option(
@@ -485,14 +485,7 @@ def workflow() -> None:
     output_dir = Path(output_dir_input).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Prompt for time units
-    time_units_input = typer.prompt(
-        "Time units for output (e.g., 'hours', 'minutes', 'seconds')", default="hours"
-    ).strip()
-    time_units = time_units_input if time_units_input else "hours"
-
-    context = ProcessingContext(
-        output_dir=output_dir,
+    config = ProcessingConfig(
         channels=Channels(
             pc=ChannelSelection(channel=pc_channel, features=sorted(pc_features)),
             fl=[
@@ -501,11 +494,12 @@ def workflow() -> None:
             ],
         ),
         params={},
-        time_units=time_units,
     )
 
-    typer.secho("\nPrepared context:", bold=True)
-    typer.echo(context)
+    typer.secho("\nPrepared config:", bold=True)
+    typer.echo(f"  PC channel: {pc_channel}, features: {pc_features}")
+    typer.echo(f"  FL channels: {fl_feature_map}")
+    typer.echo(f"  Output: {output_dir}")
 
     default_fov_end = max(metadata.n_fovs - 1, 0)
 
@@ -537,7 +531,8 @@ def workflow() -> None:
     try:
         success = run_complete_workflow(
             metadata=metadata,
-            context=context,
+            config=config,
+            output_dir=output_dir,
             fov_start=fov_start,
             fov_end=fov_end,
             batch_size=batch_size,

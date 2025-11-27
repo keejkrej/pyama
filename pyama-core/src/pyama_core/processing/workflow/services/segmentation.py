@@ -8,13 +8,8 @@ from functools import partial
 import logging
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
-from pyama_core.io import MicroscopyMetadata
+from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
 from pyama_core.processing.segmentation import segment_cell
-from pyama_core.types.processing import (
-    ProcessingContext,
-    ensure_context,
-    ensure_results_entry,
-)
 from numpy.lib.format import open_memmap
 
 
@@ -29,64 +24,39 @@ class SegmentationService(BaseProcessingService):
     def process_fov(
         self,
         metadata: MicroscopyMetadata,
-        context: ProcessingContext,
+        config: ProcessingConfig,
         output_dir: Path,
         fov: int,
         cancel_event=None,
     ) -> None:
-        context = ensure_context(context)
-        basename = metadata.base_name
-        fov_dir = output_dir / f"fov_{fov:03d}"
+        config = ensure_config(config)
+        base_name = metadata.base_name
 
-        if context.results is None:
-            context.results = {}
-        fov_paths = context.results.setdefault(fov, ensure_results_entry())
+        # Get PC channel from config
+        pc_channel = config.channels.get_pc_channel()
+        if pc_channel is None:
+            logger.warning("FOV %d: No PC channel configured, skipping segmentation", fov)
+            return
 
-        # pc may be a tuple (channel_id, path) or legacy Path
-        pc_entry = fov_paths.pc
-        pc_id = None
-        pc_raw_path = None
-        if isinstance(pc_entry, tuple) and len(pc_entry) == 2:
-            pc_id, pc_raw_path = int(pc_entry[0]), pc_entry[1]
-        else:
-            pc_raw_path = pc_entry
-        if pc_raw_path is None:
-            # Fallback to simplified naming if context missing path
-            assumed_id = 0 if pc_id is None else pc_id
-            pc_raw_path = fov_dir / f"{basename}_fov_{fov:03d}_pc_ch_{assumed_id}.npy"
+        # Use naming module for paths
+        pc_path = naming.pc_stack(output_dir, base_name, fov, pc_channel)
+        seg_path = naming.seg_mask(output_dir, base_name, fov, pc_channel)
 
-        if not Path(pc_raw_path).exists():
-            error_msg = f"Phase contrast file not found: {pc_raw_path}"
-            raise FileNotFoundError(error_msg)
+        if not pc_path.exists():
+            raise FileNotFoundError(f"Phase contrast file not found: {pc_path}")
 
-        # Build simplified seg filename
-        seg_entry = fov_paths.seg
-        if isinstance(seg_entry, tuple) and len(seg_entry) == 2:
-            seg_path = seg_entry[1]
-        else:
-            assumed_id = 0 if pc_id is None else pc_id
-            seg_path = fov_dir / f"{basename}_fov_{fov:03d}_seg_ch_{assumed_id}.npy"
-
-        # If output already exists, record and skip
-        if Path(seg_path).exists():
+        # If output already exists, skip
+        if seg_path.exists():
             logger.info("FOV %d: Segmentation already exists, skipping", fov)
-            try:
-                if pc_id is None:
-                    fov_paths.seg = (0, Path(seg_path))
-                else:
-                    fov_paths.seg = (int(pc_id), Path(seg_path))
-            except Exception:
-                pass
             return
 
         logger.info("FOV %d: Loading phase contrast data...", fov)
-        phase_contrast_data = np.load(pc_raw_path, mmap_mode="r")
+        phase_contrast_data = np.load(pc_path, mmap_mode="r")
 
         if phase_contrast_data.ndim != 3:
-            error_msg = (
+            raise ValueError(
                 f"Unexpected dims for phase contrast data: {phase_contrast_data.shape}"
             )
-            raise ValueError(error_msg)
 
         logger.info("FOV %d: Applying segmentation...", fov)
         seg_memmap = None
@@ -100,7 +70,6 @@ class SegmentationService(BaseProcessingService):
                 progress_callback=partial(self.progress_callback, fov),
                 cancel_event=cancel_event,
             )
-            # Flush changes to disk
             seg_memmap.flush()
         except InterruptedError:
             if seg_memmap is not None:
@@ -115,13 +84,5 @@ class SegmentationService(BaseProcessingService):
                     del seg_memmap
                 except Exception:
                     pass
-        # Record output as a tuple (pc_id, path) if id known
-        try:
-            if pc_id is None:
-                fov_paths.seg = (0, Path(seg_path))
-            else:
-                fov_paths.seg = (int(pc_id), Path(seg_path))
-        except Exception:
-            pass
 
         logger.info("FOV %d: Segmentation completed", fov)
