@@ -284,26 +284,32 @@ PyAMA uses consistent CSV formats for data exchange between components.
 Input format for analysis. Contains trace data in tidy/long format with one observation per row.
 
 **Columns:**
-- `time` - Time point (typically in hours after conversion)
+- `frame` - Frame index (0-based integer)
 - `fov` - Field of view index (integer)
 - `cell` - Cell ID within the FOV (integer)
 - `value` - Measurement value (e.g., intensity)
 
 **Example:**
 ```csv
-time,fov,cell,value
-0.0,0,0,1.234
-0.0,0,1,2.345
-0.5,0,0,1.456
-0.5,0,1,2.567
-0.0,1,0,3.456
+frame,fov,cell,value
+0,0,0,1.234
+0,0,1,2.345
+1,0,0,1.456
+1,0,1,2.567
+0,1,0,3.456
 ```
 
-**Loading behavior:** `load_analysis_csv()` returns a DataFrame with MultiIndex `(fov, cell)` and columns `time`, `value` for efficient cell-wise access:
+**Loading behavior:** `load_analysis_csv()` returns a DataFrame with MultiIndex `(fov, cell)` and columns `frame`, `time`, `value`. The `time` column is computed from `frame` using either a `frame_interval` parameter (default: 1.0 hours) or a `time_mapping` dict for non-equidistant time points:
 ```python
-df = load_analysis_csv(path)
+# Using frame interval (equidistant time points)
+df = load_analysis_csv(path, frame_interval=1/6)  # 10 min per frame
+
+# Using time mapping (non-equidistant time points)
+time_mapping = {0: 0.0, 1: 0.167, 2: 0.5, ...}  # frame -> time in hours
+df = load_analysis_csv(path, time_mapping=time_mapping)
+
 # Access cell (fov=0, cell=1) data:
-cell_data = df.loc[(0, 1)]  # Returns DataFrame with time, value columns
+cell_data = df.loc[(0, 1)]  # Returns DataFrame with frame, time, value columns
 ```
 
 #### Fitted Results CSV
@@ -334,7 +340,6 @@ Output from extraction step. Contains per-cell, per-frame features with channel 
 - `fov` - Field of view index
 - `cell` - Cell ID
 - `frame` - Frame index (0-based)
-- `time` - Time in minutes
 - `good` - Quality flag (boolean)
 - `position_x`, `position_y` - Cell centroid
 - `bbox_x0`, `bbox_y0`, `bbox_x1`, `bbox_y1` - Bounding box
@@ -342,10 +347,12 @@ Output from extraction step. Contains per-cell, per-frame features with channel 
 
 **Example:**
 ```csv
-fov,cell,frame,time,good,position_x,position_y,intensity_total_ch_1,area_ch_0
-0,0,0,0.0,True,100.5,200.3,1234.5,450
-0,0,1,5.0,True,101.2,199.8,1356.2,455
+fov,cell,frame,good,position_x,position_y,intensity_total_ch_1,area_ch_0
+0,0,0,True,100.5,200.3,1234.5,450
+0,0,1,True,101.2,199.8,1356.2,455
 ```
+
+**Note:** Processing CSVs only contain `frame`, not `time`. Time is computed at analysis load time using `frame_interval` or `time_mapping`.
 
 ## Workflow Execution Philosophy
 

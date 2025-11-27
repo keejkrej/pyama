@@ -33,7 +33,6 @@ The PyAMA-Core processing workflow processes time-lapse microscopy images throug
 - Channel selections (which PC channel, which FL channels)
 - Feature list to extract per channel
 - Processing parameters (optional)
-- Time units (typically "min" for minutes)
 
 ## Workflow Steps
 
@@ -319,24 +318,24 @@ For each time frame `t`:
 
 5. **Generate CSV:**
    - Create one CSV file per FOV: `{basename}_fov_{fov:03d}_traces.csv`
-   - Each row = one cell at one time point
+   - Each row = one cell at one frame
    - Columns: base fields + all feature columns (suffixed by channel ID)
-   - Sorted by `[cell, frame, time]`
+   - Sorted by `[cell, frame]`
 
 **Output:**
 
 - Trace CSV file: `{basename}_fov_{fov:03d}_traces.csv`
   - Format: Comma-separated values
-  - Columns include: `fov`, `cell`, `frame`, `time`, `good`, `position_x`, `position_y`, `bbox_x0`, `bbox_y0`, `bbox_x1`, `bbox_y1`, plus all requested features per channel
-  - Each row represents one cell at one time point
+  - Columns include: `fov`, `cell`, `frame`, `good`, `position_x`, `position_y`, `bbox_x0`, `bbox_y0`, `bbox_x1`, `bbox_y1`, plus all requested features per channel
+  - Each row represents one cell at one frame
   - Feature columns are suffixed: `{feature}_ch_{channel_id}`
 
 **Notes:**
 
 - Features are extracted per-channel, allowing independent analysis of different fluorescence markers
 - Corrected fluorescence stacks are preferred (if available) over raw stacks for better accuracy
-- Time is converted to minutes from original metadata (milliseconds) or defaulted to frame indices
-- Filtered traces ensure only complete, high-quality cell trajectories are included in analysis
+- CSVs contain only `frame` indices; time is computed at analysis load time using `frame_interval` or `time_mapping`
+- Cell filtering (min_frames, border_margin) is applied during the cropping stage
 
 ---
 

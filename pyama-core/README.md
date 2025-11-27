@@ -52,18 +52,17 @@ fl_selection = ChannelSelection(channel=1, features=["intensity_total"])
 
 channels = Channels(pc=pc_selection, fl=[fl_selection])
 
-# Create processing context
-context = ProcessingContext(
+# Create processing config
+config = ProcessingConfig(
     output_dir=Path("output"),
     channels=channels,
     params={},
-    time_units="min",
 )
 
 # Run workflow
 success = run_complete_workflow(
     metadata=metadata,
-    context=context,
+    config=config,
     fov_start=0,
     fov_end=metadata.n_fovs - 1,
     batch_size=2,
@@ -173,18 +172,17 @@ metadata.channel_names  # List of channel names
 metadata.shape       # Image shape (height, width)
 ```
 
-### ProcessingContext
+### ProcessingConfig
 
 Configuration for workflow execution:
 
 ```python
-from pyama_core.types.processing import ProcessingContext
+from pyama_core.types.processing import ProcessingConfig
 
-context = ProcessingContext(
+config = ProcessingConfig(
     output_dir=Path("output"),
     channels=Channels(...),
     params={"background_weight": 1.0},  # Background correction weight [0, 1] (default: 1.0 = full subtraction)
-    time_units="min",
 )
 ```
 
@@ -254,7 +252,7 @@ MODELS = {
 ### Workflow Functions
 
 - `run_complete_workflow()`: Execute full processing pipeline
-- `ensure_context()`: Validate and normalize processing context
+- `ensure_config()`: Validate and normalize processing config
 
 ### I/O Functions
 
