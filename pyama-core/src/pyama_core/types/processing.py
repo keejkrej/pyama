@@ -210,6 +210,7 @@ class ResultsPerFOV:
     seg: tuple[int, Path] | None = None
     seg_labeled: tuple[int, Path] | None = None
     fl_background: list[tuple[int, Path]] = field(default_factory=list)
+    crops: Path | None = None
     traces: Path | None = None
 
 
