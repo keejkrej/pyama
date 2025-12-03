@@ -51,12 +51,7 @@ export function QualityPanel({
 
   return (
     <Card className="border-neutral-800 bg-neutral-900">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-semibold text-neutral-50">
-          Fitting Quality
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-6">
         {/* Fitted trace canvas */}
         <FittedTracePlot
           results={fittingResults}
@@ -122,7 +117,7 @@ export function QualityPanel({
         {totalQualityPages > 1 && (
           <div className="flex items-center justify-between text-xs">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               className="h-7 px-2"
               onClick={() => onPageChange(Math.max(0, qualityPage - 1))}
@@ -134,7 +129,7 @@ export function QualityPanel({
               Page {qualityPage + 1} of {totalQualityPages}
             </span>
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               className="h-7 px-2"
               onClick={() =>

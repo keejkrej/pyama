@@ -111,20 +111,25 @@ export default function VisualizationPage() {
 
       <main className="mx-auto max-w-[1600px] px-6 py-8">
         {/* Header */}
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-neutral-400">Visualization</p>
-          <h1 className="text-3xl font-semibold text-neutral-50">FOV Visualization</h1>
-          <p className="text-sm text-neutral-400">{statusMessage}</p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
+          <div className="space-y-3">
+            <h1 className="text-4xl font-semibold leading-tight text-neutral-50 uppercase tracking-widest">
+              Visualization
+            </h1>
+          </div>
+          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm">
+            <p className="font-semibold text-neutral-50">Status</p>
+            <p className="text-xs text-neutral-400 truncate" title={statusMessage}>
+              {statusMessage}
+            </p>
+          </div>
         </div>
 
         {/* 3-Panel Layout */}
         <div className="grid gap-4 lg:grid-cols-[1fr_2fr_1fr]">
           {/* Load Panel */}
           <Card className="border-neutral-800 bg-neutral-900">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-semibold text-neutral-50">Load Project</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               {/* Output Directory */}
               <div>
                 <Label className="mb-1 text-xs text-neutral-400">Output Directory</Label>
@@ -132,7 +137,7 @@ export default function VisualizationPage() {
                   <div className="flex-1 truncate rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-300">
                     {outputDir || "Not selected"}
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => setShowPicker(true)}>
+                  <Button variant="default" size="sm" onClick={() => setShowPicker(true)}>
                     Browse
                   </Button>
                 </div>

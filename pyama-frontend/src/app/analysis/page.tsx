@@ -123,14 +123,18 @@ export default function AnalysisPage() {
 
       <main className="mx-auto max-w-[1600px] px-6 py-8">
         {/* Header */}
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-neutral-400">
-            Analysis
-          </p>
-          <h1 className="text-3xl font-semibold text-neutral-50">
-            Fitting Analysis
-          </h1>
-          <p className="text-sm text-neutral-400">{statusMessage}</p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
+          <div className="space-y-3">
+            <h1 className="text-4xl font-semibold leading-tight text-neutral-50 uppercase tracking-widest">
+              Analysis
+            </h1>
+          </div>
+          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm">
+            <p className="font-semibold text-neutral-50">Status</p>
+            <p className="text-xs text-neutral-400 truncate" title={statusMessage}>
+              {statusMessage}
+            </p>
+          </div>
         </div>
 
         {/* 3-Panel Layout */}

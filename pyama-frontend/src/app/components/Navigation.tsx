@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BackendStatus } from "./BackendStatus";
 
 const navItems = [
   { href: "/", label: "Processing" },
@@ -14,7 +15,7 @@ export function Navigation() {
 
   return (
     <nav className="sticky top-0 z-40 border-b border-neutral-800 bg-neutral-950/95 backdrop-blur supports-[backdrop-filter]:bg-neutral-950/80">
-      <div className="mx-auto max-w-7xl px-6">
+      <div className="mx-auto max-w-[1600px] px-6">
         <div className="flex h-14 items-center justify-between">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
@@ -39,8 +40,8 @@ export function Navigation() {
               })}
             </div>
           </div>
-          <div className="text-xs text-neutral-500">
-            Python Analysis for Microscopy Applications
+          <div className="flex items-center gap-4">
+            <BackendStatus />
           </div>
         </div>
       </div>

@@ -37,11 +37,8 @@ export function SampleManager({
             <CardTitle className="text-sm font-semibold text-neutral-50">
               Assign FOVs
             </CardTitle>
-            <p className="text-xs text-neutral-400">
-              Map samples to FOV ranges
-            </p>
           </div>
-          <Button size="sm" variant="secondary" onClick={addSample}>
+          <Button size="sm" variant="default" onClick={addSample}>
             <Plus className="mr-1 h-3 w-3" />
             Add Sample
           </Button>
@@ -61,7 +58,7 @@ export function SampleManager({
               {samples.map((sample) => (
                 <TableRow
                   key={sample.id}
-                  className="hover:bg-neutral-800/50 border-neutral-800"
+                  className="hover:bg-neutral-900/50 border-neutral-800"
                 >
                   <TableCell className="py-2">
                     <Input
@@ -86,7 +83,7 @@ export function SampleManager({
                   <TableCell className="py-2 text-right">
                     <Button
                       size="icon"
-                      variant="ghost"
+                      variant="default"
                       className="h-6 w-6 hover:text-red-400"
                       onClick={() => removeSample(sample.id)}
                     >
@@ -96,7 +93,7 @@ export function SampleManager({
                 </TableRow>
               ))}
               {samples.length === 0 && (
-                <TableRow>
+                <TableRow className="hover:bg-neutral-900/50 border-neutral-800">
                   <TableCell
                     colSpan={3}
                     className="h-24 text-center text-neutral-500 text-xs"
@@ -110,10 +107,10 @@ export function SampleManager({
         </div>
 
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={onLoadYaml}>
+          <Button size="sm" variant="default" onClick={onLoadYaml}>
             Load from YAML
           </Button>
-          <Button size="sm" variant="outline" onClick={onSaveYaml}>
+          <Button size="sm" variant="default" onClick={onSaveYaml}>
             Save to YAML
           </Button>
         </div>

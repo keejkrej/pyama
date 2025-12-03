@@ -64,7 +64,7 @@ export function ChannelConfiguration({
             {channelNames.map((name, idx) => (
               <Badge
                 key={`${name}-${idx}`}
-                variant="outline"
+                variant="default"
                 className="border-neutral-700 text-neutral-300 font-normal text-[10px]"
               >
                 {idx}: {name || "Channel"}
@@ -76,27 +76,27 @@ export function ChannelConfiguration({
       <CardContent className="space-y-4">
         {/* Phase Contrast */}
         <div className="space-y-3 rounded-md border border-neutral-800 bg-neutral-950/50 p-3">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-neutral-200">
               Phase Contrast
             </span>
-            <Select
-              value={phaseChannel?.toString() ?? ""}
-              onValueChange={(val) => setPhaseChannel(val ? Number(val) : null)}
-              disabled={isProcessing || channelNames.length === 0}
-            >
-              <SelectTrigger className="w-[180px] h-8 text-xs">
-                <SelectValue placeholder="Select channel" />
-              </SelectTrigger>
-              <SelectContent>
-                {channelNames.map((name, idx) => (
-                  <SelectItem key={`${name}-${idx}`} value={idx.toString()}>
-                    {idx}: {name || "Channel"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
+          <Select
+            value={phaseChannel?.toString() ?? ""}
+            onValueChange={(val) => setPhaseChannel(val ? Number(val) : null)}
+            disabled={isProcessing || channelNames.length === 0}
+          >
+            <SelectTrigger className="w-[180px] h-8 text-xs">
+              <SelectValue placeholder="Channel" />
+            </SelectTrigger>
+            <SelectContent>
+              {channelNames.map((name, idx) => (
+                <SelectItem key={`${name}-${idx}`} value={idx.toString()}>
+                  {idx}: {name || "Channel"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="flex flex-wrap gap-2">
             {availablePhaseFeatures.length > 0 ? (
               availablePhaseFeatures.map((feature) => {
@@ -118,11 +118,7 @@ export function ChannelConfiguration({
                   </button>
                 );
               })
-            ) : (
-              <span className="text-[11px] text-neutral-500">
-                Load a microscopy file to choose phase features.
-              </span>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -173,7 +169,7 @@ export function ChannelConfiguration({
 
             <Button
               size="sm"
-              variant="secondary"
+              variant="default"
               onClick={addFlMapping}
               disabled={
                 isProcessing ||
@@ -207,7 +203,7 @@ export function ChannelConfiguration({
                       </div>
                       <Button
                         size="icon"
-                        variant="ghost"
+                        variant="default"
                         className="h-6 w-6 hover:text-red-400"
                         onClick={() => removeFlMapping(Number(channel), feature)}
                         disabled={isProcessing}

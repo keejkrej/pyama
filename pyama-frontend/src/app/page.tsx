@@ -314,11 +314,15 @@ export default function Home() {
     key: keyof WorkflowParameters,
     value: string
   ) => {
+    // No validation - just try to parse, update if valid, otherwise do nothing
     const numValue =
       key === "background_weight" ? parseFloat(value) : parseInt(value, 10);
     if (!isNaN(numValue)) {
       setParameters((prev) => ({ ...prev, [key]: numValue }));
+    } else if (value === "") {
+      setParameters((prev) => ({ ...prev, [key]: 0 }));
     }
+    // If invalid, don't update - allows typing anything
   };
 
   // =============================================================================
@@ -563,24 +567,19 @@ export default function Home() {
       />
 
       {/* Main Content */}
-      <main className="relative mx-auto max-w-7xl px-6 py-12">
+      <main className="relative mx-auto max-w-[1600px] px-6 py-8">
         {/* Header */}
-        <div className="mb-10 flex flex-wrap items-start justify-between gap-6">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-neutral-400">
+            <h1 className="text-4xl font-semibold leading-tight text-neutral-50 uppercase tracking-widest">
               Processing
-            </p>
-            <h1 className="text-4xl font-semibold leading-tight text-neutral-50">
-              PyAMA Processing Workspace
             </h1>
-            <p className="max-w-3xl text-sm text-neutral-300">
-              Configure and run microscopy image processing workflows with
-              real-time progress tracking.
-            </p>
           </div>
-          <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm">
+          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm ml-auto">
             <p className="font-semibold text-neutral-50">Status</p>
-            <p className="text-xs text-neutral-400">{statusMessage}</p>
+            <p className="text-xs text-neutral-400 truncate" title={statusMessage}>
+              {statusMessage}
+            </p>
           </div>
         </div>
 
@@ -588,73 +587,57 @@ export default function Home() {
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
           {/* Workflow Section */}
           <section className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold uppercase tracking-[0.12em] text-neutral-50">
-                Workflow
-              </h2>
-              {isProcessing && (
-                <Badge
-                  variant="secondary"
-                  className="bg-blue-500/20 text-blue-200 hover:bg-blue-500/20"
-                >
-                  Processing...
-                </Badge>
-              )}
-            </div>
-
             <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
               {/* Input Section */}
               <div className="space-y-5 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-neutral-50">
-                      Input
-                    </p>
-                    <p className="text-xs text-neutral-400">
-                      Microscopy file and channel selection
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleSplitMode}
-                    className="text-xs border-neutral-700 bg-neutral-800"
-                  >
-                    {splitMode ? (
-                      <>
-                        Split files <ToggleRight className="ml-2 h-4 w-4" />
-                      </>
-                    ) : (
-                      <>
-                        Split files <ToggleLeft className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-neutral-50">
+                    Input
+                  </p>
                 </div>
 
                 {/* Microscopy File Selection */}
-                <div className="rounded-lg border border-dashed border-neutral-700 bg-neutral-900 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">
-                        Microscopy File
-                      </p>
-                      <p
-                        className="text-sm font-semibold text-neutral-50 truncate"
-                        title={selectionLabel("microscopy", "No file selected")}
+                <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 space-y-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-neutral-300">
+                      <span>Microscopy File</span>
+                      <Button
+                        className="h-6 text-[10px]"
+                        size="sm"
+                        disabled={isProcessing}
+                        onClick={() =>
+                          openPicker({
+                            key: "microscopy",
+                            title: "Choose microscopy file",
+                            description: "Select an ND2 / CZI / OME-TIFF file",
+                            filterExtensions: [
+                              ".nd2",
+                              ".czi",
+                              ".ome.tif",
+                              ".ome.tiff",
+                              ".tif",
+                              ".tiff",
+                            ],
+                          })
+                        }
                       >
-                        {selectionLabel("microscopy", "No file selected")}
-                      </p>
-                      <p className="text-xs text-neutral-400">
-                        Supports ND2 / CZI / OME-TIFF
-                      </p>
+                        Browse
+                      </Button>
+                    </div>
+                    <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
+                      {selectionLabel("microscopy", "unselected")}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between pt-2 border-t border-neutral-800">
+                    <div className="flex-1 min-w-0">
                       {loadingMetadata && (
                         <p className="text-xs text-neutral-500">
                           Loading metadata...
                         </p>
                       )}
                       {metadata && (
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-neutral-300">
+                        <div className="grid grid-cols-2 gap-2 text-[11px] text-neutral-300">
                           <span>
                             Channels:{" "}
                             {metadata.n_channels ?? channelNames.length}
@@ -666,27 +649,20 @@ export default function Home() {
                       )}
                     </div>
                     <Button
-                      variant="secondary"
                       size="sm"
-                      disabled={isProcessing}
-                      onClick={() =>
-                        openPicker({
-                          key: "microscopy",
-                          title: "Choose microscopy file",
-                          description: "Select an ND2 / CZI / OME-TIFF file",
-                          filterExtensions: [
-                            ".nd2",
-                            ".czi",
-                            ".ome.tif",
-                            ".ome.tiff",
-                            ".tif",
-                            ".tiff",
-                          ],
-                        })
-                      }
+                      variant="default"
+                      onClick={toggleSplitMode}
+                      className="h-7 text-xs"
                     >
-                      <Folder className="mr-2 h-3 w-3" />
-                      Browse
+                      {splitMode ? (
+                        <>
+                          Split files <ToggleRight className="ml-2 h-3 w-3" />
+                        </>
+                      ) : (
+                        <>
+                          Split files <ToggleLeft className="ml-2 h-3 w-3" />
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -719,48 +695,33 @@ export default function Home() {
                       <p className="text-sm font-semibold text-neutral-50">
                         Output
                       </p>
-                      <p className="text-xs text-neutral-400">
-                        Destination & Parameters
-                      </p>
                     </div>
                   </div>
 
                   {/* Output Directory */}
-                  <div className="rounded-lg border border-dashed border-neutral-700 bg-neutral-900 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">
-                          Save Directory
-                        </p>
-                        <p
-                          className="text-sm font-semibold text-neutral-50 truncate"
-                          title={selectionLabel(
-                            "processingOutput",
-                            "No directory selected"
-                          )}
+                  <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs text-neutral-300">
+                        <span>Save Directory</span>
+                        <Button
+                          className="h-6 text-[10px]"
+                          size="sm"
+                          disabled={isProcessing}
+                          onClick={() =>
+                            openPicker({
+                              key: "processingOutput",
+                              title: "Choose output directory",
+                              description: "Select the processing output folder",
+                              directory: true,
+                            })
+                          }
                         >
-                          {selectionLabel(
-                            "processingOutput",
-                            "No directory selected"
-                          )}
-                        </p>
+                          Browse
+                        </Button>
                       </div>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={isProcessing}
-                        onClick={() =>
-                          openPicker({
-                            key: "processingOutput",
-                            title: "Choose output directory",
-                            description: "Select the processing output folder",
-                            directory: true,
-                          })
-                        }
-                      >
-                        <Folder className="mr-2 h-3 w-3" />
-                        Browse
-                      </Button>
+                      <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
+                        {selectionLabel("processingOutput", "unselected")}
+                      </div>
                     </div>
                   </div>
 
@@ -786,20 +747,6 @@ export default function Home() {
 
           {/* Merge Section */}
           <section className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold uppercase tracking-[0.12em] text-neutral-50">
-                Merge
-              </h2>
-              {isMerging && (
-                <Badge
-                  variant="secondary"
-                  className="bg-green-500/20 text-green-200 hover:bg-green-500/20"
-                >
-                  Merging...
-                </Badge>
-              )}
-            </div>
-
             <div className="space-y-4">
               <SampleManager
                 samples={samples}
@@ -816,17 +763,15 @@ export default function Home() {
                   <p className="text-sm font-semibold text-neutral-50">
                     Merge Samples
                   </p>
-                  <p className="text-xs text-neutral-400">Combine results</p>
                 </div>
 
                 <div className="space-y-3 text-sm text-neutral-200">
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-neutral-400">
+                    <div className="flex items-center justify-between text-xs text-neutral-300">
                       <span>Sample YAML</span>
                       <Button
-                        variant="outline"
-                        size="sm"
                         className="h-6 text-[10px]"
+                        size="sm"
                         disabled={isMerging}
                         onClick={() =>
                           openPicker({
@@ -842,17 +787,16 @@ export default function Home() {
                       </Button>
                     </div>
                     <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
-                      {selections.sampleYaml || "sample.yaml (unselected)"}
+                      {selections.sampleYaml || "unselected"}
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-neutral-400">
+                    <div className="flex items-center justify-between text-xs text-neutral-300">
                       <span>Processed FOVs Folder</span>
                       <Button
-                        variant="outline"
-                        size="sm"
                         className="h-6 text-[10px]"
+                        size="sm"
                         disabled={isMerging}
                         onClick={() =>
                           openPicker({
@@ -868,17 +812,16 @@ export default function Home() {
                       </Button>
                     </div>
                     <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
-                      {selections.inputDir || "Input directory (unselected)"}
+                      {selections.inputDir || "unselected"}
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-neutral-400">
+                    <div className="flex items-center justify-between text-xs text-neutral-300">
                       <span>Output Folder</span>
                       <Button
-                        variant="outline"
-                        size="sm"
                         className="h-6 text-[10px]"
+                        size="sm"
                         disabled={isMerging}
                         onClick={() =>
                           openPicker({
@@ -894,7 +837,7 @@ export default function Home() {
                       </Button>
                     </div>
                     <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
-                      {selections.mergeOutput || "/output/path (unselected)"}
+                      {selections.mergeOutput || "unselected"}
                     </div>
                   </div>
 

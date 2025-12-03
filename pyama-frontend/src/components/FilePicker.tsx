@@ -132,14 +132,14 @@ export function FilePicker({
               {(config.directory || config.mode === "save") && (
                 <Button
                   size="sm"
-                  variant="secondary"
+                  variant="default"
                   onClick={handleConfirmSelection}
                   disabled={loading || (config.mode === "save" && !saveFileName.trim())}
                 >
                   {config.mode === "save" ? "Save here" : "Use this folder"}
                 </Button>
               )}
-              <Button size="sm" variant="ghost" onClick={onClose}>
+              <Button size="sm" variant="default" onClick={onClose}>
                 Close
               </Button>
             </div>
@@ -157,7 +157,7 @@ export function FilePicker({
             </div>
             <Button
               size="icon"
-              variant="outline"
+              variant="default"
               onClick={goUp}
               disabled={!currentPath || currentPath === "/"}
               title="Go Up"
@@ -166,12 +166,12 @@ export function FilePicker({
             </Button>
             <Button
               size="icon"
-              variant="outline"
+              variant="default"
               onClick={() => loadDirectory(currentPath, config)}
               disabled={loading}
               title="Refresh"
             >
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              <RefreshCw className="h-4 w-4 text-neutral-50" />
             </Button>
           </div>
 

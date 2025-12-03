@@ -181,7 +181,7 @@ export function TraceViewer({
                     Cell {trace.cell}
                   </span>
                   <Button
-                    variant="ghost"
+                    variant="default"
                     size="sm"
                     className="h-6 px-2 text-xs text-neutral-500 hover:text-neutral-300"
                     onClick={(e) => {
@@ -205,7 +205,7 @@ export function TraceViewer({
         {totalTracePages > 1 && (
           <div className="flex items-center justify-between text-xs">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               className="h-7 px-2"
               onClick={() => onPageChange(Math.max(0, tracePage - 1))}
@@ -217,7 +217,7 @@ export function TraceViewer({
               Page {tracePage + 1} of {totalTracePages}
             </span>
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               className="h-7 px-2"
               onClick={() =>

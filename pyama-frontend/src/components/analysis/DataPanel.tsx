@@ -45,10 +45,7 @@ export function DataPanel({
 }: DataPanelProps) {
   return (
     <Card className="border-neutral-800 bg-neutral-900">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-semibold text-neutral-50">Data & Fitting</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-6">
         {/* Load CSV */}
         <div>
           <Label className="mb-1 text-xs text-neutral-400">Trace CSV</Label>
@@ -56,7 +53,7 @@ export function DataPanel({
             <div className="flex-1 truncate rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-300">
               {csvPath ? csvPath.split("/").pop() : "Not selected"}
             </div>
-            <Button variant="secondary" size="sm" onClick={onBrowse}>
+            <Button variant="default" size="sm" onClick={onBrowse}>
               Browse
             </Button>
           </div>
@@ -151,7 +148,7 @@ export function DataPanel({
           </div>
         </div>
 
-        <Button variant="outline" className="w-full" onClick={onLoadResults}>
+        <Button variant="default" className="w-full" onClick={onLoadResults}>
           Load Fitted Results
         </Button>
 
@@ -160,7 +157,7 @@ export function DataPanel({
           <Button className="flex-1" onClick={onStartFitting} disabled={isFitting || !csvPath}>
             {isFitting ? "Fitting..." : "Start Fitting"}
           </Button>
-          <Button variant="secondary" onClick={onCancelFitting} disabled={!isFitting}>
+          <Button variant="default" onClick={onCancelFitting} disabled={!isFitting}>
             Cancel
           </Button>
         </div>

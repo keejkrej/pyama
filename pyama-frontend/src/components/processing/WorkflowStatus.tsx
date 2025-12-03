@@ -31,7 +31,7 @@ export function WorkflowStatus({
               {isProcessing ? "Processing..." : "Start Complete Workflow"}
             </Button>
             <Button
-              variant="outline"
+              variant="default"
               className="border-neutral-700 bg-neutral-800 hover:border-red-500/50 hover:text-red-200 disabled:opacity-50"
               onClick={onCancel}
               disabled={!isProcessing}
@@ -47,15 +47,18 @@ export function WorkflowStatus({
               className="h-2 bg-neutral-800"
               // indicatorClassName="bg-blue-500" // shadcn Progress handles this via class or utility
             />
-            <p className="text-xs text-neutral-400 text-center">
-              {currentJob?.progress
-                ? `${currentJob.progress.current}/${currentJob.progress.total} FOVs (${currentJob.progress.percentage.toFixed(
-                    1
-                  )}%)`
-                : isProcessing
-                ? "Processing in progress..."
-                : "Ready to start workflow"}
-            </p>
+            {currentJob?.progress && (
+              <p className="text-xs text-neutral-400 text-center">
+                {currentJob.progress.current}/{currentJob.progress.total} FOVs ({currentJob.progress.percentage.toFixed(
+                  1
+                )}%)
+              </p>
+            )}
+            {isProcessing && !currentJob?.progress && (
+              <p className="text-xs text-neutral-400 text-center">
+                Processing in progress...
+              </p>
+            )}
           </div>
         </div>
       </CardContent>

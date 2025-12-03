@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "PyAMA",
-  description: "Python Analysis for Microscopy Applications",
+  description: "Python-based Automated Microscopy Analysis",
 };
 
 export default function RootLayout({

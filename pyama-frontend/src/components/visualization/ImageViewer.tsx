@@ -127,7 +127,7 @@ export function ImageViewer({
         {/* Frame Controls */}
         <div className="mt-3 flex items-center justify-center gap-2">
           <Button
-            variant="outline"
+            variant="default"
             size="icon"
             className="h-8 w-8"
             onClick={() => onFrameChange(-10)}
@@ -136,7 +136,7 @@ export function ImageViewer({
             <ChevronsLeft className="h-4 w-4" />
           </Button>
           <Button
-            variant="outline"
+            variant="default"
             size="icon"
             className="h-8 w-8"
             onClick={() => onFrameChange(-1)}
@@ -148,7 +148,7 @@ export function ImageViewer({
             Frame {currentFrame + 1} / {maxFrames || 1}
           </span>
           <Button
-            variant="outline"
+            variant="default"
             size="icon"
             className="h-8 w-8"
             onClick={() => onFrameChange(1)}
@@ -157,7 +157,7 @@ export function ImageViewer({
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button
-            variant="outline"
+            variant="default"
             size="icon"
             className="h-8 w-8"
             onClick={() => onFrameChange(10)}

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { WorkflowParameters } from "@/types/processing";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ const parameterConfig: {
   type: "int" | "float";
 }[] = [
   { key: "fov_start", label: "FOV Start", type: "int" },
-  { key: "fov_end", label: "FOV End (-1 for all)", type: "int" },
+  { key: "fov_end", label: "FOV End", type: "int" },
   { key: "batch_size", label: "Batch Size", type: "int" },
   { key: "n_workers", label: "Workers", type: "int" },
   { key: "background_weight", label: "Background Weight", type: "float" },
@@ -31,6 +32,36 @@ export function WorkflowParametersPanel({
   onManualModeChange,
   isProcessing,
 }: WorkflowParametersPanelProps) {
+  // Local state to track raw input values (allows typing anything)
+  const [inputValues, setInputValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    parameterConfig.forEach(({ key }) => {
+      initial[key] = parameters[key].toString();
+    });
+    return initial;
+  });
+
+  // Sync input values when parameters change externally (but preserve user's current typing)
+  useEffect(() => {
+    const newValues: Record<string, string> = {};
+    parameterConfig.forEach(({ key }) => {
+      // Only update if user hasn't modified this field (not in inputValues means it was reset)
+      if (!(key in inputValues)) {
+        newValues[key] = parameters[key].toString();
+      }
+    });
+    if (Object.keys(newValues).length > 0) {
+      setInputValues((prev) => ({ ...prev, ...newValues }));
+    }
+  }, [parameters]);
+
+  const handleInputChange = (key: keyof WorkflowParameters, value: string) => {
+    // Store whatever they type
+    setInputValues((prev) => ({ ...prev, [key]: value }));
+    // Try to parse and update parent, but don't block if invalid
+    onChange(key, value);
+  };
+
   return (
     <Card className="border-neutral-800 bg-neutral-900">
       <CardHeader className="pb-3">
@@ -39,15 +70,10 @@ export function WorkflowParametersPanel({
             Parameters
           </CardTitle>
           <Button
-            variant={manualMode ? "secondary" : "outline"}
             size="sm"
             onClick={() => onManualModeChange(!manualMode)}
             disabled={isProcessing}
-            className={
-              manualMode
-                ? "bg-blue-500/20 text-blue-200 hover:bg-blue-500/30 border-blue-500/50"
-                : "border-neutral-700 bg-neutral-800 text-neutral-200"
-            }
+            className="h-7 text-xs"
           >
             {manualMode ? "Manual Mode" : "Auto Mode"}
           </Button>
@@ -60,20 +86,14 @@ export function WorkflowParametersPanel({
             className="grid grid-cols-[1.2fr_1fr] items-center gap-3 text-sm"
           >
             <Label className="text-neutral-200 font-normal">{label}</Label>
-            {manualMode ? (
-              <Input
-                type="number"
-                step={type === "float" ? "0.1" : "1"}
-                value={parameters[key]}
-                onChange={(e) => onChange(key, e.target.value)}
-                disabled={isProcessing}
-                className="h-8 text-right"
-              />
-            ) : (
-              <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-1.5 text-right text-neutral-200 text-sm">
-                {parameters[key]}
-              </div>
-            )}
+            <Input
+              type="text"
+              inputMode={type === "float" ? "decimal" : "numeric"}
+              value={inputValues[key] ?? parameters[key].toString()}
+              onChange={(e) => handleInputChange(key, e.target.value)}
+              disabled={!manualMode || isProcessing}
+              className="h-8 text-right"
+            />
           </div>
         ))}
       </CardContent>
