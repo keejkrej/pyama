@@ -7,6 +7,7 @@ Each feature module must define an extract_* function.
 from collections.abc import Callable
 
 from pyama_core.processing.extraction.features.fluorescence import intensity_total
+from pyama_core.processing.extraction.features.fluorescence import particle_num
 from pyama_core.processing.extraction.features.phase_contrast import area
 from pyama_core.types.processing import ExtractionContext
 
@@ -24,6 +25,7 @@ FLUORESCENCE_FEATURES: dict[str, Callable] = {}
 
 # Register fluorescence features
 FLUORESCENCE_FEATURES["intensity_total"] = intensity_total.extract_intensity_total
+FLUORESCENCE_FEATURES["particle_num"] = particle_num.extract_particle_num
 
 # Flattened lookup used by the extraction pipeline.
 FEATURE_EXTRACTORS: dict[str, Callable] = {

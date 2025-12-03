@@ -31,7 +31,7 @@ This opens a modern GUI window with two main wizards:
 1. **Click "Merge Wizard"** from the Tools menu or main window
 2. Follow the step-by-step configuration:
    - **Assign FOVs**: Add samples and their FOV ranges (e.g., `sample1`, `0-5`)
-   - **Load Processing Results**: Select the `processing_results.yaml` file
+   - **Select Input Directory**: Choose the folder containing processed FOVs
    - **Set Output Directory**: Choose where to save merged CSVs
 3. **Click "Run Merge"** to combine CSV files
 4. Merged files will be created with sample names
@@ -86,7 +86,7 @@ The merge command prompts you for:
    - Enter multiple samples separated by newlines
    - Enter "done" when finished
 2. **Sample YAML Path**: Where to save/load sample configuration
-3. **Processing Results YAML**: Path to `processing_results.yaml`
+3. **Input Directory**: Path to folder containing processed FOVs
 4. **Output Directory**: Where to save merged CSVs
 
 ### Help Commands

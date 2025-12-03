@@ -41,6 +41,19 @@ uv run python tests/test_workflow.py
 uv run python tests/test_algo.py
 ```
 
+#### Testing rules (agents must follow)
+
+- Only implement essential tests that demonstrate correctness visually for core algorithms.
+  - Event detection: include noisy step-up and step-down only; each test saves a plot with a vertical event line.
+  - Particle counting: include a single scenario with many Gaussian particles on a noisy background; assert all particles are detected and draw bounding boxes.
+- Plots must always be saved under `tests/_plots/` (Windows-friendly path). Allow override via `PYAMA_PLOT_DIR` env var.
+- Use deterministic RNG (`np.random.seed(...)` or `RandomState`) inside tests to avoid flakiness.
+- Keep assertions robust and minimal (e.g., count matches expected, event index near the step), avoid tight numerical tolerances on noisy data.
+- Do not depend on OS-specific temp directories; never write to `/tmp` in tests.
+- Keep tests top-level functions (no classes/fixtures unless necessary) to reduce boilerplate and speed up runs.
+- Ensure tests can run headless; use Matplotlib without interactive backends and always close figures (`plt.close(fig)`).
+- Add `tests/_plots/` to `.gitignore` so generated images aren’t committed.
+
 #### Frontend Testing Pages
 
 **IMPORTANT**: All test pages in `pyama-frontend/src/app/test/` must display what is being tested with bulleted lists and code tags:
@@ -110,14 +123,14 @@ The `ProcessingContext` dataclass (in `pyama_core.processing.types`) is the cent
 
 - Output directory paths
 - Channel configurations (`Channels` dataclass with `pc` and `fl` fields)
-- Per-FOV result artifacts (`results` dict mapping FOV index to `ResultsPerFOV`)
-- Processing parameters and time units
-- Results are serialized to `processing_results.yaml` and can be merged across multiple workflow runs
+- Processing parameters
+- Config is saved to `processing_config.yaml` for reference
+- FOV outputs are discovered by file naming conventions (e.g., `fov_000/`, `fov_001/`)
 
-**Result schema highlights**
+**Output schema highlights**
 
 - `channels.pc` serializes as `[phase_channel, [feature1, ...]]` and `channels.fl` as `[[channel, [feature1, ...]], ...]`, capturing both channel IDs and the enabled feature sets.
-- `results[fov_id].traces` points to a single merged CSV per FOV. Feature columns are suffixed with `_ch_{channel_id}` (e.g., `intensity_total_ch_1`, `area_ch_0`) so downstream tools can isolate per-channel data.
+- Per-FOV trace CSVs are at `fov_{id}/{basename}_fov_{id}_traces.csv`. Feature columns are suffixed with `_ch_{channel_id}` (e.g., `intensity_total_ch_1`, `area_ch_0`) so downstream tools can isolate per-channel data.
 
 ### Qt Application Structure
 
@@ -284,26 +297,32 @@ PyAMA uses consistent CSV formats for data exchange between components.
 Input format for analysis. Contains trace data in tidy/long format with one observation per row.
 
 **Columns:**
-- `time` - Time point (typically in hours after conversion)
+- `frame` - Frame index (0-based integer)
 - `fov` - Field of view index (integer)
 - `cell` - Cell ID within the FOV (integer)
 - `value` - Measurement value (e.g., intensity)
 
 **Example:**
 ```csv
-time,fov,cell,value
-0.0,0,0,1.234
-0.0,0,1,2.345
-0.5,0,0,1.456
-0.5,0,1,2.567
-0.0,1,0,3.456
+frame,fov,cell,value
+0,0,0,1.234
+0,0,1,2.345
+1,0,0,1.456
+1,0,1,2.567
+0,1,0,3.456
 ```
 
-**Loading behavior:** `load_analysis_csv()` returns a DataFrame with MultiIndex `(fov, cell)` and columns `time`, `value` for efficient cell-wise access:
+**Loading behavior:** `load_analysis_csv()` returns a DataFrame with MultiIndex `(fov, cell)` and columns `frame`, `time`, `value`. The `time` column is computed from `frame` using either a `frame_interval` parameter (default: 1.0 hours) or a `time_mapping` dict for non-equidistant time points:
 ```python
-df = load_analysis_csv(path)
+# Using frame interval (equidistant time points)
+df = load_analysis_csv(path, frame_interval=1/6)  # 10 min per frame
+
+# Using time mapping (non-equidistant time points)
+time_mapping = {0: 0.0, 1: 0.167, 2: 0.5, ...}  # frame -> time in hours
+df = load_analysis_csv(path, time_mapping=time_mapping)
+
 # Access cell (fov=0, cell=1) data:
-cell_data = df.loc[(0, 1)]  # Returns DataFrame with time, value columns
+cell_data = df.loc[(0, 1)]  # Returns DataFrame with frame, time, value columns
 ```
 
 #### Fitted Results CSV
@@ -334,7 +353,6 @@ Output from extraction step. Contains per-cell, per-frame features with channel 
 - `fov` - Field of view index
 - `cell` - Cell ID
 - `frame` - Frame index (0-based)
-- `time` - Time in minutes
 - `good` - Quality flag (boolean)
 - `position_x`, `position_y` - Cell centroid
 - `bbox_x0`, `bbox_y0`, `bbox_x1`, `bbox_y1` - Bounding box
@@ -342,10 +360,12 @@ Output from extraction step. Contains per-cell, per-frame features with channel 
 
 **Example:**
 ```csv
-fov,cell,frame,time,good,position_x,position_y,intensity_total_ch_1,area_ch_0
-0,0,0,0.0,True,100.5,200.3,1234.5,450
-0,0,1,5.0,True,101.2,199.8,1356.2,455
+fov,cell,frame,good,position_x,position_y,intensity_total_ch_1,area_ch_0
+0,0,0,True,100.5,200.3,1234.5,450
+0,0,1,True,101.2,199.8,1356.2,455
 ```
+
+**Note:** Processing CSVs only contain `frame`, not `time`. Time is computed at analysis load time using `frame_interval` or `time_mapping`.
 
 ## Workflow Execution Philosophy
 

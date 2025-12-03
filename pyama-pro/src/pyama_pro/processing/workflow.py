@@ -33,11 +33,11 @@ from pyama_core.processing.extraction.features import (
     list_fluorescence_features,
     list_phase_features,
 )
-from pyama_core.processing.workflow import ensure_context, run_complete_workflow
+from pyama_core.processing.workflow import run_complete_workflow
+from pyama_core.io import ProcessingConfig, ensure_config
 from pyama_core.types.processing import (
     ChannelSelection,
     Channels,
-    ProcessingContext,
 )
 from pyama_pro.components.parameter_table import ParameterTable
 from pyama_pro.constants import DEFAULT_DIR
@@ -1018,15 +1018,13 @@ class WorkflowPanel(QWidget):
 
         # Get background_weight from parameter table or use default
         background_weight = self._background_weight
-        
-        context = ProcessingContext(
-            output_dir=self._output_dir,
+
+        config = ProcessingConfig(
             channels=Channels(pc=pc_selection, fl=fl_selections),
             params={"background_weight": background_weight},
-            time_units="",
         )
 
-        logger.debug("ProcessingContext built from user input: %s", context)
+        logger.debug("ProcessingConfig built from user input: %s", config)
         resolved_fov_end = (
             getattr(self._metadata, "n_fovs", 0) - 1
             if self._fov_end == -1 and self._metadata
@@ -1051,7 +1049,8 @@ class WorkflowPanel(QWidget):
 
         worker = ProcessingWorkflowWorker(
             metadata=self._metadata,
-            context=context,
+            config=config,
+            output_dir=self._output_dir,
             fov_start=self._fov_start,
             fov_end=self._fov_end,
             batch_size=self._batch_size,
@@ -1209,7 +1208,8 @@ class ProcessingWorkflowWorker(QObject):
         self,
         *,
         metadata: MicroscopyMetadata,
-        context: ProcessingContext,
+        config: ProcessingConfig,
+        output_dir: Path,
         fov_start: int,
         fov_end: int,
         batch_size: int,
@@ -1219,7 +1219,8 @@ class ProcessingWorkflowWorker(QObject):
 
         Args:
             metadata: Microscopy metadata for the input file
-            context: Processing context with channel and parameter configuration
+            config: Processing config with channel and parameter configuration
+            output_dir: Directory to write outputs
             fov_start: Starting FOV index for processing
             fov_end: Ending FOV index for processing
             batch_size: Number of FOVs to process in each batch
@@ -1227,7 +1228,8 @@ class ProcessingWorkflowWorker(QObject):
         """
         super().__init__()
         self._metadata = metadata
-        self._context = ensure_context(context)
+        self._config = ensure_config(config)
+        self._output_dir = output_dir
         self._fov_start = fov_start
         self._fov_end = fov_end
         self._batch_size = batch_size
@@ -1263,12 +1265,13 @@ class ProcessingWorkflowWorker(QObject):
                 self._fov_end,
                 self._batch_size,
                 self._n_workers,
-                self._context.output_dir,
+                self._output_dir,
             )
 
             success = run_complete_workflow(
                 self._metadata,
-                self._context,
+                self._config,
+                self._output_dir,
                 fov_start=self._fov_start,
                 fov_end=self._fov_end,
                 batch_size=self._batch_size,
@@ -1289,8 +1292,7 @@ class ProcessingWorkflowWorker(QObject):
                 return
 
             if success:
-                output_dir = self._context.output_dir or "output directory"
-                message = f"Results saved to {output_dir}"
+                message = f"Results saved to {self._output_dir}"
                 self.finished.emit(True, message)
             else:  # pragma: no cover - defensive branch
                 self.finished.emit(False, "Workflow reported failure")
@@ -1325,7 +1327,7 @@ class ProcessingWorkflowWorker(QObject):
         to prevent partial results from being left behind.
         """
         try:
-            output_dir = self._context.output_dir
+            output_dir = self._output_dir
             if not output_dir or not output_dir.exists():
                 return
 
@@ -1347,15 +1349,15 @@ class ProcessingWorkflowWorker(QObject):
                             "Failed to remove FOV directory %s: %s", fov_dir, e
                         )
 
-            # Also remove any processing_results.yaml if it exists
-            results_file = output_dir / "processing_results.yaml"
-            if results_file.exists():
+            # Also remove any processing_config.yaml if it exists
+            config_file = output_dir / "processing_config.yaml"
+            if config_file.exists():
                 try:
-                    results_file.unlink()
-                    logger.debug("Removed processing results file: %s", results_file)
+                    config_file.unlink()
+                    logger.debug("Removed processing config file: %s", config_file)
                 except Exception as e:
                     logger.warning(
-                        "Failed to remove results file %s: %s", results_file, e
+                        "Failed to remove config file %s: %s", config_file, e
                     )
             logger.info("Cleanup finished (removed_fov_dirs=%d)", removed_count)
 

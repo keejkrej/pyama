@@ -103,6 +103,7 @@ class AnalysisTab(QWidget):
         self._data_panel.fitting_completed.connect(self._on_fitting_completed)
         self._data_panel.data_loading_started.connect(self._on_data_loading_started)
         self._data_panel.data_loading_finished.connect(self._on_data_loading_finished)
+        self._data_panel.time_mapping_loaded.connect(self._on_time_mapping_loaded)
 
         # Plot saving signals
         self._parameter_panel.plot_saved.connect(self._on_plot_saved)
@@ -207,6 +208,22 @@ class AnalysisTab(QWidget):
                 self._status_manager.show_message(message)
             else:
                 self._status_manager.show_message(f"Failed to load data: {message}")
+
+    @Slot(bool, str)
+    def _on_time_mapping_loaded(self, success: bool, message: str) -> None:
+        """Handle time mapping loaded event.
+
+        Args:
+            success: Whether the time mapping loaded successfully
+            message: Status message from the loading
+        """
+        logger.info(
+            "Time mapping loading finished (success=%s): %s",
+            success,
+            message or "No message",
+        )
+        if self._status_manager:
+            self._status_manager.show_message(message)
 
     def set_status_manager(self, status_manager) -> None:
         """Set the status manager for coordinating background operations.

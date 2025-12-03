@@ -6,8 +6,9 @@ This module defines utilities for handling CSV files consumed by the analysis mo
 CSV Formats
 -----------
 Analysis/Merged CSV (Tidy Format):
-    Input format for analysis with columns: time, fov, cell, value
+    Input format for analysis with columns: frame, fov, cell, value
     One observation per row. Loaded with MultiIndex (fov, cell) for efficient access.
+    The 'time' column is computed from frame using a configurable frame interval.
 
 Fitted Results CSV:
     Output format from fitting with columns: fov, cell, model_type, success, r_squared, {params}
@@ -46,34 +47,34 @@ def write_analysis_csv(
         df_to_write.to_csv(f, index=True, header=True, float_format="%.6f")
 
 
-def load_analysis_csv(csv_path: Path) -> pd.DataFrame:
+def load_analysis_csv(
+    csv_path: Path,
+    frame_interval: float = 1.0,
+    time_mapping: dict[int, float] | None = None,
+) -> pd.DataFrame:
     """
     Load an analysis CSV file in tidy/long format.
 
-    Reads CSV with columns (time, fov, cell, value) and returns DataFrame
-    with MultiIndex (fov, cell) for efficient cell-wise access.
+    Reads CSV with columns (frame, fov, cell, value) and returns DataFrame
+    with MultiIndex (fov, cell) for efficient cell-wise access. A 'time' column
+    is computed from frame using either a time mapping or frame interval.
 
     Args:
         csv_path: Path to the analysis CSV file
+        frame_interval: Time interval per frame in hours (default: 1.0)
+        time_mapping: Optional dict mapping frame -> time (overrides frame_interval)
 
     Returns:
-        DataFrame with MultiIndex (fov, cell) and 'time', 'value' columns
+        DataFrame with MultiIndex (fov, cell) and 'frame', 'time', 'value' columns
     """
     if not csv_path.exists():
         raise FileNotFoundError(f"Analysis CSV file not found: {csv_path}")
-
-    # Read time units from comment header
-    time_units = None
-    with open(csv_path, "r") as f:
-        first_line = f.readline().strip()
-        if first_line.startswith("# Time units:"):
-            time_units = first_line.split(":", 1)[1].strip().lower()
 
     # Load CSV
     df = pd.read_csv(csv_path, comment="#")
 
     # Validate tidy format columns
-    required_cols = {"time", "fov", "cell", "value"}
+    required_cols = {"frame", "fov", "cell", "value"}
     if not required_cols.issubset(df.columns):
         missing = required_cols - set(df.columns)
         raise ValueError(f"CSV missing required columns: {missing}")
@@ -81,28 +82,21 @@ def load_analysis_csv(csv_path: Path) -> pd.DataFrame:
     # Ensure proper types
     df["fov"] = df["fov"].astype(int)
     df["cell"] = df["cell"].astype(int)
-    df["time"] = pd.to_numeric(df["time"], errors="coerce")
+    df["frame"] = df["frame"].astype(int)
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
 
-    # Convert time to hours if needed
-    if time_units:
-        conversion_factors = {
-            "seconds": 1 / 3600,
-            "sec": 1 / 3600,
-            "s": 1 / 3600,
-            "minutes": 1 / 60,
-            "min": 1 / 60,
-            "m": 1 / 60,
-            "hours": 1,
-            "hour": 1,
-            "h": 1,
-            "hr": 1,
-            "hrs": 1,
-        }
-        if time_units in conversion_factors:
-            factor = conversion_factors[time_units]
-            if factor != 1:
-                df["time"] = df["time"] * factor
+    # Compute time from frame
+    if time_mapping is not None:
+        df["time"] = df["frame"].map(time_mapping)
+        # Validate all frames have a mapping
+        missing_frames = df.loc[df["time"].isna(), "frame"].unique()
+        if len(missing_frames) > 0:
+            raise ValueError(
+                f"Time mapping missing entries for frames: {sorted(missing_frames)[:10]}"
+                + (f" (and {len(missing_frames) - 10} more)" if len(missing_frames) > 10 else "")
+            )
+    else:
+        df["time"] = df["frame"] * frame_interval
 
     # Set MultiIndex on (fov, cell) for efficient cell-wise access
     df = df.set_index(["fov", "cell"]).sort_index()

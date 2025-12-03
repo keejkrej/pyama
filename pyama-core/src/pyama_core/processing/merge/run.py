@@ -10,12 +10,8 @@ from typing import Any, Callable, Iterable
 import pandas as pd
 import yaml
 
+from pyama_core.io import naming, load_config
 from pyama_core.io.processing_csv import get_dataframe
-from pyama_core.io.results_yaml import (
-    get_time_units_from_yaml,
-    get_trace_csv_path_from_yaml,
-    load_processing_results_yaml,
-)
 from pyama_core.io.trace_paths import resolve_trace_path
 from pyama_core.types.processing import Channels, Result, FeatureMaps
 
@@ -23,46 +19,32 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# DATA STRUCTURES
-# =============================================================================
-
-
-# =============================================================================
 # CHANNEL CONFIGURATION
 # =============================================================================
 
 
-def get_channel_feature_config(proc_results: dict) -> list[tuple[int, list[str]]]:
-    """Determine the channel/feature selections from processing results."""
-    channels_data = proc_results.get("channels")
-    if channels_data is None:
-        raise ValueError("Processing results missing 'channels' section")
+def get_channel_feature_config_from_channels(channels: Channels) -> list[tuple[int, list[str]]]:
+    """Determine the channel/feature selections from Channels config.
 
-    try:
-        channel_config = Channels.from_serialized(channels_data)
-    except Exception as exc:  # pragma: no cover - defensive
-        raise ValueError(
-            f"Invalid channel configuration in processing results: {exc}"
-        ) from exc
-
+    Returns:
+        List of (channel_id, features) tuples.
+    """
     config: list[tuple[int, list[str]]] = []
 
-    pc_channel = channel_config.get_pc_channel()
+    pc_channel = channels.get_pc_channel()
     if pc_channel is not None:
-        pc_features = channel_config.get_pc_features()
-        # Only include PC channel if it has features explicitly configured in YAML
+        pc_features = channels.get_pc_features()
         if pc_features:
             config.append((pc_channel, sorted(set(pc_features))))
 
-    fl_feature_map = channel_config.get_fl_feature_map()
+    fl_feature_map = channels.get_fl_feature_map()
     for channel in sorted(fl_feature_map):
         features = fl_feature_map[channel]
-        # Only include FL channel if it has features explicitly configured in YAML
         if features:
             config.append((channel, sorted(set(features))))
 
     if not config:
-        raise ValueError("No channels found in processing results")
+        raise ValueError("No channels found in processing config")
 
     return config
 
@@ -150,22 +132,22 @@ def read_samples_yaml(path: Path) -> dict[str, Any]:
 
 def build_feature_maps(rows: list[dict], feature_names: list[str]) -> FeatureMaps:
     """Build feature maps filtered by 'good' rows."""
-    feature_maps: dict[str, dict[tuple[float, int], float]] = {
+    feature_maps: dict[str, dict[tuple[int, int], float]] = {
         feature_name: {} for feature_name in feature_names
     }
-    times_set: set[float] = set()
+    frames_set: set[int] = set()
     cells_set: set[int] = set()
 
     for row in rows:
         if "good" in row and not row["good"]:
             continue
-        time = row.get("time")
+        frame = row.get("frame")
         cell = row.get("cell")
-        if time is None or cell is None:
+        if frame is None or cell is None:
             continue
 
-        key = (float(time), int(cell))
-        times_set.add(float(time))
+        key = (int(frame), int(cell))
+        frames_set.add(int(frame))
         cells_set.add(int(cell))
 
         for feature_name in feature_names:
@@ -176,7 +158,7 @@ def build_feature_maps(rows: list[dict], feature_names: list[str]) -> FeatureMap
 
     return FeatureMaps(
         features=feature_maps,
-        times=sorted(times_set),
+        frames=sorted(frames_set),
         cells=sorted(cells_set),
     )
 
@@ -185,19 +167,19 @@ def extract_channel_dataframe(
     df: pd.DataFrame, channel: int, configured_features: list[str]
 ) -> pd.DataFrame:
     """Return a dataframe containing only configured features for a single channel.
-    
+
     Args:
         df: Unified trace DataFrame with channel-suffixed columns
         channel: Channel ID to extract
         configured_features: List of feature names configured for this channel
-        
+
     Returns:
         DataFrame with base columns and only the configured features for this channel
     """
     suffix = f"_ch_{channel}"
     base_fields = ["fov"] + [field.name for field in dataclass_fields(Result)]
     base_cols = [col for col in base_fields if col in df.columns]
-    
+
     # Only extract features that are configured for this channel
     feature_cols = []
     rename_map = {}
@@ -217,30 +199,29 @@ def extract_channel_dataframe(
     return channel_df
 
 
-def get_all_times(
+def get_all_frames(
     feature_maps_by_fov: dict[int, FeatureMaps], fovs: Iterable[int]
-) -> list[float]:
-    """Collect sorted unique time points across FOVs."""
-    times: set[float] = set()
+) -> list[int]:
+    """Collect sorted unique frame indices across FOVs."""
+    frames: set[int] = set()
     for fov in fovs:
         feature_maps = feature_maps_by_fov.get(fov)
         if feature_maps:
-            times.update(feature_maps.times)
-    return sorted(times)
+            frames.update(feature_maps.frames)
+    return sorted(frames)
 
 
 def write_feature_csv(
     out_path: Path,
-    times: list[float],
+    frames: list[int],
     fovs: Iterable[int],
     feature_name: str,
     feature_maps_by_fov: dict[int, FeatureMaps],
     channel: int,
-    time_units: str | None = None,
 ) -> None:
     """Write a feature CSV in tidy/long format.
 
-    Output format: time, fov, cell, value
+    Output format: frame, fov, cell, value
     Only includes FOVs and cells that have data available.
     """
     fov_list = list(fovs)
@@ -248,23 +229,23 @@ def write_feature_csv(
     # Filter to only include FOVs that have data
     available_fovs = [fov for fov in fov_list if fov in feature_maps_by_fov]
 
-    # Build rows in long format: time, fov, cell, value
+    # Build rows in long format: frame, fov, cell, value
     rows = []
-    for time in times:
+    for frame in frames:
         for fov in available_fovs:
             feature_maps = feature_maps_by_fov.get(fov)
             if not feature_maps:
                 continue
-            
+
             if feature_name not in feature_maps.features:
                 continue
-            
+
             feature_map = feature_maps.features[feature_name]
             for cell in sorted(feature_maps.cells):
-                value = feature_map.get((time, cell))
+                value = feature_map.get((frame, cell))
                 if value is not None:
                     rows.append({
-                        "time": time,
+                        "frame": frame,
                         "fov": fov,
                         "cell": cell,
                         "value": value,
@@ -272,13 +253,7 @@ def write_feature_csv(
 
     df = pd.DataFrame(rows)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if time_units:
-        with out_path.open("w", encoding="utf-8") as handle:
-            handle.write(f"# Time units: {time_units}\n")
-            df.to_csv(handle, index=False, float_format="%.6f")
-    else:
-        df.to_csv(out_path, index=False, float_format="%.6f")
+    df.to_csv(out_path, index=False, float_format="%.6f")
 
 
 # =============================================================================
@@ -288,28 +263,38 @@ def write_feature_csv(
 
 def run_merge(
     sample_yaml: Path,
-    processing_results: Path,
     output_dir: Path,
+    input_dir: Path | None = None,
+    config_path: Path | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> str:
     """Execute merge logic - return success message or raise error.
-    
+
     Args:
         sample_yaml: Path to samples YAML file
-        processing_results: Path to processing_results.yaml
         output_dir: Directory to write merged CSV files
+        input_dir: Directory containing processed FOV folders (default: sample_yaml parent)
+        config_path: Path to processing_config.yaml (default: input_dir/processing_config.yaml)
         progress_callback: Optional callback(current, total, message) for progress updates
     """
-    config = read_samples_yaml(sample_yaml)
-    samples = config["samples"]
+    samples_config = read_samples_yaml(sample_yaml)
+    samples = samples_config["samples"]
 
-    proc_results = load_processing_results_yaml(processing_results)
-    channel_feature_config = get_channel_feature_config(proc_results)
-    time_units = get_time_units_from_yaml(proc_results)
+    # Determine input directory
+    if input_dir is None:
+        input_dir = sample_yaml.parent
 
-    # Use processing results directory as input directory
-    input_dir = processing_results.parent
+    # Load processing config
+    if config_path is None:
+        config_path = input_dir / "processing_config.yaml"
 
+    if not config_path.exists():
+        raise FileNotFoundError(f"Processing config not found: {config_path}")
+
+    proc_config = load_config(config_path)
+    channel_feature_config = get_channel_feature_config_from_channels(proc_config.channels)
+
+    # Collect all FOVs from samples
     all_fovs: set[int] = set()
     for sample in samples:
         fovs = parse_fovs_field(sample.get("fovs", []))
@@ -318,26 +303,29 @@ def run_merge(
     feature_maps_by_fov_channel: dict[tuple[int, int], FeatureMaps] = {}
     traces_cache: dict[Path, pd.DataFrame] = {}
 
-    # Load trace CSVs per FOV (unified schema: one CSV per FOV, not per channel)
+    # Load trace CSVs per FOV using file discovery
     sorted_fovs = sorted(all_fovs)
     total_fovs = len(sorted_fovs)
     loaded_fovs = 0
-    for fov_idx, fov in enumerate(sorted_fovs):
-        # Get the unified trace CSV for this FOV (preferring inspected version)
-        original_path = get_trace_csv_path_from_yaml(proc_results, fov)
-        csv_path = resolve_trace_path(original_path) if original_path else None
-        
-        if csv_path is None:
-            logger.debug(
-                "No trace CSV entry found for FOV %s", fov
-            )
+
+    for fov in sorted_fovs:
+        # Discover trace CSV for this FOV
+        fov_path = naming.fov_dir(input_dir, fov)
+        if not fov_path.exists():
+            logger.debug("FOV directory not found: %s", fov_path)
             continue
 
-        # Resolve relative paths relative to input directory
-        if not csv_path.is_absolute():
-            csv_path = input_dir / csv_path
-        if not csv_path.exists():
-            logger.warning("Trace CSV file does not exist: %s", csv_path)
+        # Find trace CSV file
+        trace_files = list(fov_path.glob("*_traces.csv"))
+        if not trace_files:
+            logger.debug("No trace CSV found for FOV %s", fov)
+            continue
+
+        original_path = trace_files[0]
+        csv_path = resolve_trace_path(original_path)
+
+        if csv_path is None or not csv_path.exists():
+            logger.warning("Trace CSV file does not exist: %s", original_path)
             continue
 
         # Load the unified CSV once per FOV
@@ -388,7 +376,7 @@ def run_merge(
                 )
                 continue
 
-            times = get_all_times(channel_feature_maps, sample_fovs)
+            frames = get_all_frames(channel_feature_maps, sample_fovs)
 
             for feature_name in features:
                 # Only write CSV if the feature actually has data in any FOV
@@ -399,7 +387,7 @@ def run_merge(
                         if feature_maps.features[feature_name]:
                             has_data = True
                             break
-                
+
                 if not has_data:
                     logger.debug(
                         "Skipping feature '%s' for sample '%s', channel %s: no data found",
@@ -411,12 +399,11 @@ def run_merge(
                 output_path = output_dir / output_filename
                 write_feature_csv(
                     output_path,
-                    times,
+                    frames,
                     sample_fovs,
                     feature_name,
                     channel_feature_maps,
                     channel,
-                    time_units,
                 )
                 created_files.append(output_path)
                 logger.info("Created: %s", output_filename)

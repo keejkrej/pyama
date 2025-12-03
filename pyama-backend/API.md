@@ -194,7 +194,7 @@ Get the results of a completed workflow.
 {
   "success": true,
   "output_dir": "/path/to/output",
-  "results_file": "/path/to/output/processing_results.yaml",
+  "config_file": "/path/to/output/processing_config.yaml",
   "traces": [
     "/path/to/output/fov_000/fov_000_traces.csv",
     "/path/to/output/fov_001/fov_001_traces.csv"
@@ -215,7 +215,7 @@ Merge processing results with sample definitions.
 ```json
 {
   "sample_yaml": "/path/to/samples.yaml",
-  "processing_results_yaml": "/path/to/processing_results.yaml",
+  "input_dir": "/path/to/processed_fovs",
   "output_dir": "/path/to/output"
 }
 ```

@@ -1,0 +1,88 @@
+"""
+Segmentation (formerly binarization) service.
+"""
+
+from pathlib import Path
+import numpy as np
+from functools import partial
+import logging
+
+from pyama_core.processing.workflow.services.base import BaseProcessingService
+from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
+from pyama_core.processing.segmentation import segment_cell
+from numpy.lib.format import open_memmap
+
+
+logger = logging.getLogger(__name__)
+
+
+class SegmentationService(BaseProcessingService):
+    def __init__(self) -> None:
+        super().__init__()
+        self.name = "Segmentation"
+
+    def process_fov(
+        self,
+        metadata: MicroscopyMetadata,
+        config: ProcessingConfig,
+        output_dir: Path,
+        fov: int,
+        cancel_event=None,
+    ) -> None:
+        config = ensure_config(config)
+        base_name = metadata.base_name
+
+        # Get PC channel from config
+        pc_channel = config.channels.get_pc_channel()
+        if pc_channel is None:
+            logger.warning("FOV %d: No PC channel configured, skipping segmentation", fov)
+            return
+
+        # Use naming module for paths
+        pc_path = naming.pc_stack(output_dir, base_name, fov, pc_channel)
+        seg_path = naming.seg_mask(output_dir, base_name, fov, pc_channel)
+
+        if not pc_path.exists():
+            raise FileNotFoundError(f"Phase contrast file not found: {pc_path}")
+
+        # If output already exists, skip
+        if seg_path.exists():
+            logger.info("FOV %d: Segmentation already exists, skipping", fov)
+            return
+
+        logger.info("FOV %d: Loading phase contrast data...", fov)
+        phase_contrast_data = np.load(pc_path, mmap_mode="r")
+
+        if phase_contrast_data.ndim != 3:
+            raise ValueError(
+                f"Unexpected dims for phase contrast data: {phase_contrast_data.shape}"
+            )
+
+        logger.info("FOV %d: Applying segmentation...", fov)
+        seg_memmap = None
+        try:
+            seg_memmap = open_memmap(
+                seg_path, mode="w+", dtype=bool, shape=phase_contrast_data.shape
+            )
+            segment_cell(
+                phase_contrast_data,
+                seg_memmap,
+                progress_callback=partial(self.progress_callback, fov),
+                cancel_event=cancel_event,
+            )
+            seg_memmap.flush()
+        except InterruptedError:
+            if seg_memmap is not None:
+                try:
+                    del seg_memmap
+                except Exception:
+                    pass
+            raise
+        finally:
+            if seg_memmap is not None:
+                try:
+                    del seg_memmap
+                except Exception:
+                    pass
+
+        logger.info("FOV %d: Segmentation completed", fov)

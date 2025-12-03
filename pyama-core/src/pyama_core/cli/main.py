@@ -21,10 +21,10 @@ from pyama_core.processing.merge import (
     run_merge as run_core_merge,
 )
 from pyama_core.processing.workflow.run import run_complete_workflow
+from pyama_core.io import ProcessingConfig
 from pyama_core.types.processing import (
     ChannelSelection,
     Channels,
-    ProcessingContext,
 )
 
 output_mode_option = typer.Option(
@@ -485,14 +485,7 @@ def workflow() -> None:
     output_dir = Path(output_dir_input).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Prompt for time units
-    time_units_input = typer.prompt(
-        "Time units for output (e.g., 'hours', 'minutes', 'seconds')", default="hours"
-    ).strip()
-    time_units = time_units_input if time_units_input else "hours"
-
-    context = ProcessingContext(
-        output_dir=output_dir,
+    config = ProcessingConfig(
         channels=Channels(
             pc=ChannelSelection(channel=pc_channel, features=sorted(pc_features)),
             fl=[
@@ -501,11 +494,12 @@ def workflow() -> None:
             ],
         ),
         params={},
-        time_units=time_units,
     )
 
-    typer.secho("\nPrepared context:", bold=True)
-    typer.echo(context)
+    typer.secho("\nPrepared config:", bold=True)
+    typer.echo(f"  PC channel: {pc_channel}, features: {pc_features}")
+    typer.echo(f"  FL channels: {fl_feature_map}")
+    typer.echo(f"  Output: {output_dir}")
 
     default_fov_end = max(metadata.n_fovs - 1, 0)
 
@@ -537,7 +531,8 @@ def workflow() -> None:
     try:
         success = run_complete_workflow(
             metadata=metadata,
-            context=context,
+            config=config,
+            output_dir=output_dir,
             fov_start=fov_start,
             fov_end=fov_end,
             batch_size=batch_size,
@@ -578,10 +573,11 @@ def merge() -> None:
     )
     typer.echo("")
 
-    default_processing = sample_yaml_path.parent / "processing_results.yaml"
-    processing_results_path = _prompt_existing_file(
-        "Enter the path to processing_results.yaml",
-        default=default_processing if default_processing.exists() else None,
+    default_input = sample_yaml_path.parent
+    input_dir = _prompt_directory(
+        "Enter the input directory containing processed FOV folders",
+        default=default_input,
+        must_exist=True,
     )
 
     output_folder_default = sample_yaml_path.parent / "merge_output"
@@ -597,8 +593,8 @@ def merge() -> None:
     try:
         message = run_core_merge(
             sample_yaml=sample_yaml_path,
-            processing_results=processing_results_path,
             output_dir=output_folder,
+            input_dir=input_dir,
         )
     except Exception as exc:  # pragma: no cover - runtime path
         typer.secho(f"Merge failed: {exc}", err=True, fg=typer.colors.RED)

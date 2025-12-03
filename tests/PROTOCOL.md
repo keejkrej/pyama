@@ -57,7 +57,7 @@ This document provides step-by-step testing protocols for validating PyAMA funct
 - [ ] Click "Start Complete Workflow" again and let it complete
 - [ ] Verify progress bar updates and status messages appear during processing
 - [ ] Confirm workflow completes with "Results saved to [output directory]" message
-- [ ] Check output directory for processing_results.yaml and fov_XXX directories with NPY files
+- [ ] Check output directory for processing_config.yaml and fov_XXX directories with NPY files
 
 #### Merge Functionality
 

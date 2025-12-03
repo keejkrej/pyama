@@ -2,7 +2,6 @@
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -203,55 +202,6 @@ class Channels:
         return cls(pc=pc_selection, fl=fl_list)
 
 
-@dataclass(slots=True)
-class ResultsPerFOV:
-    pc: tuple[int, Path] | None = None
-    fl: list[tuple[int, Path]] = field(default_factory=list)
-    seg: tuple[int, Path] | None = None
-    seg_labeled: tuple[int, Path] | None = None
-    fl_background: list[tuple[int, Path]] = field(default_factory=list)
-    traces: Path | None = None
-
-
-@dataclass(slots=True)
-class ProcessingContext:
-    output_dir: Path | None = None
-    channels: Channels | None = None
-    results: dict[int, ResultsPerFOV] | None = None
-    params: dict | None = None
-    time_units: str | None = None
-
-
-def ensure_results_entry() -> ResultsPerFOV:
-    return ResultsPerFOV()
-
-
-def ensure_context(ctx: ProcessingContext | None) -> ProcessingContext:
-    if ctx is None:
-        return ProcessingContext(
-            channels=Channels(),
-            results={},
-            params={},
-        )
-
-    if ctx.channels is None:
-        ctx.channels = Channels()
-    elif isinstance(ctx.channels, Channels):
-        ctx.channels.normalize()
-    elif isinstance(ctx.channels, Mapping):
-        ctx.channels = Channels.from_serialized(ctx.channels)
-    else:
-        raise ValueError("ProcessingContext channels must use the new schema")
-
-    if ctx.results is None:
-        ctx.results = {}
-
-    if ctx.params is None:
-        ctx.params = {}
-
-    return ctx
-
-
 # =============================================================================
 # EXTRACTION TYPES
 # =============================================================================
@@ -265,7 +215,6 @@ class Result:
 
     cell: int
     frame: int
-    time: float
     good: bool
     position_x: float
     position_y: float
@@ -290,7 +239,6 @@ class ExtractionContext:
     mask: np.ndarray
     background: np.ndarray  # Always present; zeros if no background correction available
     background_weight: float = 1.0  # Weight for background subtraction (default: 1.0)
-    erosion_size: int = 0  # Size of erosion structuring element (default: 0, no erosion)
 
 
 # =============================================================================
@@ -342,18 +290,16 @@ class TileSupport:
 
 @dataclass
 class FeatureMaps:
-    """Container for feature values per timepoint and cell."""
+    """Container for feature values per frame and cell."""
 
-    features: dict[str, dict[tuple[float, int], float]]
-    times: list[float]
+    features: dict[str, dict[tuple[int, int], float]]
+    frames: list[int]
     cells: list[int]
 
 
 __all__ = [
     "ChannelSelection",
     "Channels",
-    "ResultsPerFOV",
-    "ProcessingContext",
     "FeatureResult",
     "Result",
     "ResultWithFeatures",
