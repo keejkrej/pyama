@@ -1,5 +1,4 @@
 import { FittingResult, TraceDataPoint } from "@/types/analysis";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -50,8 +49,8 @@ export function QualityPanel({
   })();
 
   return (
-    <Card className="border-neutral-800 bg-neutral-900">
-      <CardContent className="space-y-4 pt-6">
+    <div className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm">
+      <div className="space-y-4">
         {/* Fitted trace canvas */}
         <FittedTracePlot
           results={fittingResults}
@@ -154,7 +153,7 @@ export function QualityPanel({
             Good fits only (R² {">"} 0.9)
           </Label>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -17,7 +17,7 @@ import {
   WorkflowParameters,
   Sample,
 } from "@/types/processing";
-import { Folder, ToggleLeft, ToggleRight } from "lucide-react";
+import { Folder } from "lucide-react";
 
 export default function Home() {
   // Backend configuration
@@ -557,7 +557,7 @@ export default function Home() {
   // =============================================================================
 
   return (
-    <div className="relative min-h-screen bg-neutral-950 text-neutral-50">
+    <div className="relative bg-neutral-950 text-neutral-50">
       <FilePicker
         isOpen={!!activePicker}
         onClose={closePicker}
@@ -601,70 +601,73 @@ export default function Home() {
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-xs text-neutral-300">
                       <span>Microscopy File</span>
-                      <Button
-                        className="h-6 text-[10px]"
-                        size="sm"
-                        disabled={isProcessing}
-                        onClick={() =>
-                          openPicker({
-                            key: "microscopy",
-                            title: "Choose microscopy file",
-                            description: "Select an ND2 / CZI / OME-TIFF file",
-                            filterExtensions: [
-                              ".nd2",
-                              ".czi",
-                              ".ome.tif",
-                              ".ome.tiff",
-                              ".tif",
-                              ".tiff",
-                            ],
-                          })
-                        }
-                      >
-                        Browse
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-neutral-300">Split files</span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={splitMode}
+                            onClick={toggleSplitMode}
+                            disabled={isProcessing}
+                            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 focus:ring-offset-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed ${
+                              splitMode
+                                ? "bg-green-600"
+                                : "bg-red-600"
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                                splitMode ? "translate-x-3.5" : "translate-x-0.5"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                        <Button
+                          className="h-6 text-[10px]"
+                          size="sm"
+                          disabled={isProcessing}
+                          onClick={() =>
+                            openPicker({
+                              key: "microscopy",
+                              title: "Choose microscopy file",
+                              description: "Select an ND2 / CZI / OME-TIFF file",
+                              filterExtensions: [
+                                ".nd2",
+                                ".czi",
+                                ".ome.tif",
+                                ".ome.tiff",
+                                ".tif",
+                                ".tiff",
+                              ],
+                            })
+                          }
+                        >
+                          Browse
+                        </Button>
+                      </div>
                     </div>
                     <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
                       {selectionLabel("microscopy", "unselected")}
                     </div>
                   </div>
                   
-                  <div className="flex items-center justify-between pt-2 border-t border-neutral-800">
-                    <div className="flex-1 min-w-0">
-                      {loadingMetadata && (
-                        <p className="text-xs text-neutral-500">
-                          Loading metadata...
-                        </p>
-                      )}
-                      {metadata && (
-                        <div className="grid grid-cols-2 gap-2 text-[11px] text-neutral-300">
-                          <span>
-                            Channels:{" "}
-                            {metadata.n_channels ?? channelNames.length}
-                          </span>
-                          <span>FOVs: {metadata.n_fovs ?? "?"}</span>
-                          <span>Frames: {metadata.n_frames ?? "?"}</span>
-                          <span>Time: {metadata.time_units || "unknown"}</span>
-                        </div>
-                      )}
+                  {loadingMetadata && (
+                    <p className="text-xs text-neutral-500">
+                      Loading metadata...
+                    </p>
+                  )}
+                  {metadata && (
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-neutral-300">
+                      <span>
+                        Channels:{" "}
+                        {metadata.n_channels ?? channelNames.length}
+                      </span>
+                      <span>FOVs: {metadata.n_fovs ?? "?"}</span>
+                      <span>Frames: {metadata.n_frames ?? "?"}</span>
+                      <span>Time: {metadata.time_units || "unknown"}</span>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={toggleSplitMode}
-                      className="h-7 text-xs"
-                    >
-                      {splitMode ? (
-                        <>
-                          Split files <ToggleRight className="ml-2 h-3 w-3" />
-                        </>
-                      ) : (
-                        <>
-                          Split files <ToggleLeft className="ml-2 h-3 w-3" />
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  )}
                 </div>
 
                 {/* Channel Configuration */}

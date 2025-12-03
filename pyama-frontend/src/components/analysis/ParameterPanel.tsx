@@ -1,5 +1,4 @@
 import { FittingResult } from "@/types/analysis";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,11 +35,11 @@ export function ParameterPanel({
     : fittingResults;
 
   return (
-    <Card className="border-neutral-800 bg-neutral-900">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-semibold text-neutral-50">Parameter Analysis</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm">
+      <div className="pb-3 mb-4">
+        <h3 className="text-lg font-semibold text-neutral-50">Parameter Analysis</h3>
+      </div>
+      <div className="space-y-4">
         {/* Histogram */}
         <div>
           <div className="mb-2 flex items-center justify-between">
@@ -106,7 +105,7 @@ export function ParameterPanel({
             Good fits only (R² {">"} 0.9)
           </Label>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

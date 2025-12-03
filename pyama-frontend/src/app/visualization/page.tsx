@@ -8,7 +8,6 @@ import { useImageStack } from "@/hooks/useImageStack";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
 export default function VisualizationPage() {
@@ -94,7 +93,7 @@ export default function VisualizationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-50">
+    <div className="bg-neutral-950 text-neutral-50">
       <FilePicker
         isOpen={showPicker}
         onClose={() => setShowPicker(false)}
@@ -117,7 +116,7 @@ export default function VisualizationPage() {
               Visualization
             </h1>
           </div>
-          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm">
+          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm ml-auto">
             <p className="font-semibold text-neutral-50">Status</p>
             <p className="text-xs text-neutral-400 truncate" title={statusMessage}>
               {statusMessage}
@@ -126,20 +125,25 @@ export default function VisualizationPage() {
         </div>
 
         {/* 3-Panel Layout */}
-        <div className="grid gap-4 lg:grid-cols-[1fr_2fr_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[1fr_2fr_1fr]">
           {/* Load Panel */}
-          <Card className="border-neutral-800 bg-neutral-900">
-            <CardContent className="space-y-4 pt-6">
+          <div className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm space-y-4">
               {/* Output Directory */}
-              <div>
-                <Label className="mb-1 text-xs text-neutral-400">Output Directory</Label>
-                <div className="flex gap-2">
-                  <div className="flex-1 truncate rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-300">
-                    {outputDir || "Not selected"}
+              <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs text-neutral-300">
+                    <span>Output Directory</span>
+                    <Button
+                      className="h-6 text-[10px]"
+                      size="sm"
+                      onClick={() => setShowPicker(true)}
+                    >
+                      Browse
+                    </Button>
                   </div>
-                  <Button variant="default" size="sm" onClick={() => setShowPicker(true)}>
-                    Browse
-                  </Button>
+                  <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
+                    {outputDir ? outputDir.split("/").pop() : "unselected"}
+                  </div>
                 </div>
               </div>
 
@@ -204,8 +208,7 @@ export default function VisualizationPage() {
               >
                 {loadingProject ? "Loading..." : "Start Visualization"}
               </Button>
-            </CardContent>
-          </Card>
+          </div>
 
           {/* Image Panel */}
           <ImageViewer

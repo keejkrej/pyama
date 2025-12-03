@@ -102,7 +102,7 @@ export default function AnalysisPage() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-50">
+    <div className="bg-neutral-950 text-neutral-50">
       <FilePicker
         isOpen={showPicker}
         onClose={() => setShowPicker(false)}
@@ -129,7 +129,7 @@ export default function AnalysisPage() {
               Analysis
             </h1>
           </div>
-          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm">
+          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm ml-auto">
             <p className="font-semibold text-neutral-50">Status</p>
             <p className="text-xs text-neutral-400 truncate" title={statusMessage}>
               {statusMessage}
@@ -138,7 +138,7 @@ export default function AnalysisPage() {
         </div>
 
         {/* 3-Panel Layout */}
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-3">
           {/* Data Panel */}
           <DataPanel
             csvPath={csvPath}

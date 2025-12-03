@@ -1,6 +1,5 @@
 import { TraceDataPoint, ModelInfo, JobProgress, ModelParamState } from "@/types/analysis";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -44,18 +43,24 @@ export function DataPanel({
   onLoadResults,
 }: DataPanelProps) {
   return (
-    <Card className="border-neutral-800 bg-neutral-900">
-      <CardContent className="space-y-4 pt-6">
+    <div className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm">
+      <div className="space-y-4">
         {/* Load CSV */}
-        <div>
-          <Label className="mb-1 text-xs text-neutral-400">Trace CSV</Label>
-          <div className="flex gap-2">
-            <div className="flex-1 truncate rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-300">
-              {csvPath ? csvPath.split("/").pop() : "Not selected"}
+        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-neutral-300">
+              <span>Trace CSV</span>
+              <Button
+                className="h-6 text-[10px]"
+                size="sm"
+                onClick={onBrowse}
+              >
+                Browse
+              </Button>
             </div>
-            <Button variant="default" size="sm" onClick={onBrowse}>
-              Browse
-            </Button>
+            <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
+              {csvPath ? csvPath.split("/").pop() : "unselected"}
+            </div>
           </div>
         </div>
 
@@ -170,7 +175,7 @@ export function DataPanel({
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

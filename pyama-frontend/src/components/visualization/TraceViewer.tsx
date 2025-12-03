@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { TraceData } from "@/types/visualization";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 interface TraceViewerProps {
@@ -140,16 +139,16 @@ export function TraceViewer({
   }, [traces, tracePage, activeTraceId, currentFrame]);
 
   return (
-    <Card className="border-neutral-800 bg-neutral-900">
-      <CardHeader className="pb-3">
+    <div className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm">
+      <div className="pb-3 mb-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-neutral-50">
+          <h3 className="text-lg font-semibold text-neutral-50">
             Traces
-          </CardTitle>
+          </h3>
           <span className="text-xs text-neutral-400">{traces.length} cells</span>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </div>
+      <div className="space-y-4">
         {/* Trace Canvas */}
         <div className="aspect-[4/3] w-full overflow-hidden rounded-lg border border-neutral-800">
           <canvas
@@ -229,7 +228,7 @@ export function TraceViewer({
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

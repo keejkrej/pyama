@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { OverlayPosition, ChannelMeta } from "@/types/visualization";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 interface ImageViewerProps {
@@ -86,8 +85,8 @@ export function ImageViewer({
   };
 
   return (
-    <Card className="border-neutral-800 bg-neutral-900">
-      <CardContent className="p-4">
+    <div className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm">
+      <div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-neutral-50">Image</h2>
           {channelsMeta.length > 0 && (
@@ -166,7 +165,7 @@ export function ImageViewer({
             <ChevronsRight className="h-4 w-4" />
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
