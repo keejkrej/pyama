@@ -41,6 +41,19 @@ uv run python tests/test_workflow.py
 uv run python tests/test_algo.py
 ```
 
+#### Testing rules (agents must follow)
+
+- Only implement essential tests that demonstrate correctness visually for core algorithms.
+  - Event detection: include noisy step-up and step-down only; each test saves a plot with a vertical event line.
+  - Particle counting: include a single scenario with many Gaussian particles on a noisy background; assert all particles are detected and draw bounding boxes.
+- Plots must always be saved under `tests/_plots/` (Windows-friendly path). Allow override via `PYAMA_PLOT_DIR` env var.
+- Use deterministic RNG (`np.random.seed(...)` or `RandomState`) inside tests to avoid flakiness.
+- Keep assertions robust and minimal (e.g., count matches expected, event index near the step), avoid tight numerical tolerances on noisy data.
+- Do not depend on OS-specific temp directories; never write to `/tmp` in tests.
+- Keep tests top-level functions (no classes/fixtures unless necessary) to reduce boilerplate and speed up runs.
+- Ensure tests can run headless; use Matplotlib without interactive backends and always close figures (`plt.close(fig)`).
+- Add `tests/_plots/` to `.gitignore` so generated images aren’t committed.
+
 #### Frontend Testing Pages
 
 **IMPORTANT**: All test pages in `pyama-frontend/src/app/test/` must display what is being tested with bulleted lists and code tags:

@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Test artifacts
+/tests/_plots/
+*_plots/
+
 # C extensions
 *.so
 
