@@ -20,6 +20,8 @@ dependencies = [
     "tqdm",
     "cellpose",
     "btrack",
+    "pytest",
+    "matplotlib",
 ]
 
 [tool.uv]
