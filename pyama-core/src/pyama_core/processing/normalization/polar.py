@@ -11,16 +11,19 @@ def normalize_cell_polar(
     r_resolution: int = 100,
     theta_resolution: int = 100,
     order: int = 1,
+    nucleus_masks: np.ndarray | None = None,
 ) -> xr.DataArray:
     """
     Normalize cell images to a polar coordinate system where the cell boundary is at r=1.
 
     Args:
         images: Input images with shape (T, C, H, W).
-        masks: Boolean masks with shape (T, H, W).
+        masks: Boolean masks (cell body) with shape (T, H, W).
         r_resolution: Number of radial steps (normalized r from 0 to 1).
         theta_resolution: Number of angular steps.
         order: Interpolation order for map_coordinates (0=nearest, 1=linear, etc.).
+        nucleus_masks: Optional boolean masks (nucleus) with shape (T, H, W).
+            If provided, the center of mass of this mask is used as the origin.
 
     Returns:
         xarray.DataArray with shape (T, C, theta_resolution, r_resolution).
@@ -34,6 +37,8 @@ def normalize_cell_polar(
     T, C, H, W = images.shape
     if masks.shape != (T, H, W):
         raise ValueError("Masks shape must be (T, H, W) matching images (T, C, H, W).")
+    if nucleus_masks is not None and nucleus_masks.shape != (T, H, W):
+        raise ValueError("Nucleus masks must have shape (T, H, W).")
 
     # Output array: (T, C, theta_resolution, r_resolution)
     normalized = np.zeros((T, C, theta_resolution, r_resolution), dtype=images.dtype)
@@ -57,7 +62,14 @@ def normalize_cell_polar(
         if not np.any(mask):
             continue
 
-        cy, cx = center_of_mass(mask)
+        # 1. Find centroid (Origin)
+        # Use nucleus mask if provided, otherwise cell mask
+        origin_mask = mask
+        if nucleus_masks is not None:
+            if np.any(nucleus_masks[t]):
+                origin_mask = nucleus_masks[t]
+
+        cy, cx = center_of_mass(origin_mask)
 
         # Find boundary and R(theta)
         contours = find_contours(mask, 0.5)

@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
+from scipy.ndimage import center_of_mass
 from pyama_core.processing.normalization.polar import (
     normalize_cell_polar,
     integrate_polar,
@@ -22,14 +23,17 @@ def test_normalization():
     # R(theta) = R0 + delta * sin(k * theta)
     y_grid, x_grid = np.ogrid[:H, :W]
     cy, cx = 50, 50
+
+    # Matches the larger shape used in nucleus offset test - REVERTED to original
     base_radius = 20
 
     # Calculate angle and radius for every pixel relative to center
     pixel_angles = np.arctan2(y_grid - cy, x_grid - cx)
     pixel_radii = np.sqrt((y_grid - cy) ** 2 + (x_grid - cx) ** 2)
 
-    # Define boundary function
+    # Define boundary function matching the nucleus test - REVERTED
     def get_boundary_r(angles):
+        # Original formula
         return base_radius + 5 * np.sin(3 * angles) + 3 * np.cos(5 * angles)
 
     boundary_radii = get_boundary_r(pixel_angles)
@@ -193,5 +197,92 @@ def test_normalization():
     print(f"Saved plot to: {out_path}")
 
 
+def test_normalization_nucleus_offset():
+    print("\n--- Testing Nucleus Offset ---")
+    # Scenario: "Blobby" cell centered roughly at (50, 50)
+    # Nucleus at (50, 60), shifted +10 in Y
+    # Pattern: Concentric rings centered at Cell Geometric Center
+
+    H, W = 100, 100
+    images = np.zeros((1, 1, H, W), dtype=np.float32)
+    masks = np.zeros((1, H, W), dtype=bool)
+    nuc_masks = np.zeros((1, H, W), dtype=bool)
+
+    y_grid, x_grid = np.ogrid[:H, :W]
+    cy, cx = 50, 50
+
+    # --- Generate Blobby Cell Mask ---
+    pixel_angles = np.arctan2(y_grid - cy, x_grid - cx)
+    pixel_radii = np.sqrt((y_grid - cy) ** 2 + (x_grid - cx) ** 2)
+
+    # R(theta) = R0 + delta * sin(...)
+    # Increased base_radius to 35 to give room for nucleus offset -- REVERTED
+    base_radius = 20
+    boundary_radii_limit = (
+        base_radius + 5 * np.sin(3 * pixel_angles) + 3 * np.cos(5 * pixel_angles)
+    )
+
+    masks[0] = pixel_radii <= boundary_radii_limit
+
+    # Re-calculate Centroid of the actual mask to be precise for the "Cell Center" label
+    cy_real, cx_real = center_of_mass(masks[0])
+    print(f"Cell Centroid: ({cy_real:.2f}, {cx_real:.2f})")
+
+    # --- Generate Nucleus Mask ---
+    # Shifted down by ~8 pixels (reduced from 10 to ensure it fits comfortably in R=20)
+    ny, nx = int(cy_real) + 8, int(cx_real)
+    radius_nuc = 4
+    nuc_masks[0] = (y_grid - ny) ** 2 + (x_grid - nx) ** 2 <= radius_nuc**2
+
+    # --- Image Pattern: Linear Radial Gradient from Cell Centroid ---
+    # Matches the pattern in the main test.
+    # Value = Distance / Boundary_Distance
+    with np.errstate(divide="ignore", invalid="ignore"):
+        pattern = pixel_radii / boundary_radii_limit
+
+    images[0, 0] = pattern
+    images[0, 0][~masks[0]] = 0
+
+    # Normalize with nucleus mask
+    # Origin will be at nucleus centroid
+    xr_out = normalize_cell_polar(
+        images, masks, nucleus_masks=nuc_masks, theta_resolution=360, r_resolution=100
+    )
+
+    boundary_r = xr_out.boundary_radius.values[0]
+
+    print(f"Boundary Radius Range: [{boundary_r.min():.2f}, {boundary_r.max():.2f}]")
+
+    print("SUCCESS: Nucleus offset test ran with realistic mask and standard pattern.")
+
+    # Plotting
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+
+    # 1. Input Image with Markers
+    axes[0].imshow(images[0, 0], cmap="viridis")
+    axes[0].plot(cx_real, cy_real, "rx", markersize=10, label="Cell Center")
+    axes[0].plot(nx, ny, "wo", markersize=5, label="Nucleus Center")
+    axes[0].set_title(
+        "Input Image (Radial Gradient @ Cell Center)\nWhite Dot = Polar Origin"
+    )
+    axes[0].legend()
+    axes[0].axis("off")
+
+    # 2. Normalized Output
+    # Ideally this would be a linear horizontal gradient if origin was Cell Center.
+    # With Nucleus Center origin, it will look distorted.
+    axes[1].imshow(xr_out[0, 0], cmap="viridis", aspect="auto", extent=[0, 1, 1, 0])
+    axes[1].set_title("Normalized Output\n(Distorted Gradient)")
+    axes[1].set_xlabel("Radius")
+    axes[1].set_ylabel("Angle")
+
+    plt.tight_layout()
+    out_path = str(PLOT_DIR / "normalization_nucleus_test.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved nucleus test plot to: {out_path}")
+
+
 if __name__ == "__main__":
     test_normalization()
+    test_normalization_nucleus_offset()
