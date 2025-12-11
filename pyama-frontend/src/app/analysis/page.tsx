@@ -1,24 +1,23 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { FilePicker } from "@/components/FilePicker";
-import { DataPanel } from "@/components/analysis/DataPanel";
-import { QualityPanel } from "@/components/analysis/QualityPanel";
-import { ParameterPanel } from "@/components/analysis/ParameterPanel";
-import { useAnalysis } from "@/hooks/useAnalysis";
-import { ModelParamState } from "@/types/analysis";
+import { useState, useEffect } from 'react';
+import { FilePicker } from '@/components/FilePicker';
+import { DataPanel } from '@/components/analysis/DataPanel';
+import { QualityPanel } from '@/components/analysis/QualityPanel';
+import { ParameterPanel } from '@/components/analysis/ParameterPanel';
+import { useAnalysis } from '@/hooks/useAnalysis';
+import { StatusPanel } from '@/components/ui/status-panel';
+import { ModelParamState } from '@/types/analysis';
 
 export default function AnalysisPage() {
   // Backend config
   const backendBase =
-    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
-  const apiBase = `${backendBase.replace(/\/$/, "")}/api/v1`;
+    process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const apiBase = `${backendBase.replace(/\/$/, '')}/api/v1`;
 
   // Analysis Hook
   const {
     traceData,
-    cellIds,
-    loadingData,
     loadTraceData,
     availableModels,
     selectedModel,
@@ -38,7 +37,7 @@ export default function AnalysisPage() {
   // Local UI State
   const [csvPath, setCsvPath] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<"csv" | "results">("csv");
+  const [pickerMode, setPickerMode] = useState<'csv' | 'results'>('csv');
   const [manualMode, setManualMode] = useState(false);
 
   // Quality Panel State
@@ -48,9 +47,9 @@ export default function AnalysisPage() {
   const resultsPerPage = 10;
 
   // Parameter Panel State
-  const [selectedHistParam, setSelectedHistParam] = useState<string>("");
-  const [selectedScatterX, setSelectedScatterX] = useState<string>("");
-  const [selectedScatterY, setSelectedScatterY] = useState<string>("");
+  const [selectedHistParam, setSelectedHistParam] = useState<string>('');
+  const [selectedScatterX, setSelectedScatterX] = useState<string>('');
+  const [selectedScatterY, setSelectedScatterY] = useState<string>('');
 
   // Update default parameter selections when params change
   useEffect(() => {
@@ -66,7 +65,7 @@ export default function AnalysisPage() {
 
   const handleFileSelect = (path: string) => {
     setShowPicker(false);
-    if (pickerMode === "csv") {
+    if (pickerMode === 'csv') {
       setCsvPath(path);
       loadTraceData(path);
     } else {
@@ -102,22 +101,22 @@ export default function AnalysisPage() {
   };
 
   return (
-    <div className="bg-neutral-950 text-neutral-50">
+    <div className="bg-background text-foreground">
       <FilePicker
         isOpen={showPicker}
         onClose={() => setShowPicker(false)}
         config={{
-          key: pickerMode === "csv" ? "inputDir" : "mergeOutput", // Reusing keys for simplicity
+          key: pickerMode === 'csv' ? 'inputDir' : 'mergeOutput', // Reusing keys for simplicity
           title:
-            pickerMode === "csv"
-              ? "Select Trace CSV"
-              : "Select Fitted Results CSV",
-          description: "Choose a CSV file",
-          filterExtensions: [".csv"],
+            pickerMode === 'csv'
+              ? 'Select Trace CSV'
+              : 'Select Fitted Results CSV',
+          description: 'Choose a CSV file',
+          filterExtensions: ['.csv'],
           directory: false,
-          mode: "select",
+          mode: 'select',
         }}
-        initialPath={process.env.NEXT_PUBLIC_DEFAULT_BROWSE_PATH || "/home"}
+        initialPath={process.env.NEXT_PUBLIC_DEFAULT_BROWSE_PATH || '/home'}
         onSelect={handleFileSelect}
       />
 
@@ -125,16 +124,11 @@ export default function AnalysisPage() {
         {/* Header */}
         <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
           <div className="space-y-3">
-            <h1 className="text-4xl font-semibold leading-tight text-neutral-50 uppercase tracking-widest">
+            <h1 className="text-4xl font-semibold leading-tight text-foreground uppercase tracking-widest">
               Analysis
             </h1>
           </div>
-          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm ml-auto">
-            <p className="font-semibold text-neutral-50">Status</p>
-            <p className="text-xs text-neutral-400 truncate" title={statusMessage}>
-              {statusMessage}
-            </p>
-          </div>
+          <StatusPanel statusMessage={statusMessage} className="ml-auto" />
         </div>
 
         {/* 3-Panel Layout */}
@@ -143,7 +137,7 @@ export default function AnalysisPage() {
           <DataPanel
             csvPath={csvPath}
             onBrowse={() => {
-              setPickerMode("csv");
+              setPickerMode('csv');
               setShowPicker(true);
             }}
             traceData={traceData}
@@ -159,7 +153,7 @@ export default function AnalysisPage() {
             onStartFitting={handleStartFitting}
             onCancelFitting={cancelFitting}
             onLoadResults={() => {
-              setPickerMode("results");
+              setPickerMode('results');
               setShowPicker(true);
             }}
           />

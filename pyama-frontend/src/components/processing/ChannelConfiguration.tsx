@@ -4,12 +4,12 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ArrowRight, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ArrowRight, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ChannelConfigurationProps {
   channelNames: string[];
@@ -47,14 +47,14 @@ export function ChannelConfiguration({
   isProcessing,
 }: ChannelConfigurationProps) {
   return (
-    <Card className="border-neutral-800 bg-neutral-900">
+    <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-semibold text-neutral-50">
+          <CardTitle className="text-sm font-semibold text-foreground">
             Channels
           </CardTitle>
           {channelNames.length > 0 && (
-            <span className="text-xs text-neutral-400">
+            <span className="text-xs text-muted-foreground">
               {channelNames.length} available
             </span>
           )}
@@ -65,9 +65,9 @@ export function ChannelConfiguration({
               <Badge
                 key={`${name}-${idx}`}
                 variant="default"
-                className="border-neutral-700 text-neutral-300 font-normal text-[10px]"
+                className="border-border text-muted-foreground font-normal text-[10px]"
               >
-                {idx}: {name || "Channel"}
+                {idx}: {name || 'Channel'}
               </Badge>
             ))}
           </div>
@@ -75,14 +75,14 @@ export function ChannelConfiguration({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Phase Contrast */}
-        <div className="space-y-3 rounded-md border border-neutral-800 bg-neutral-950/50 p-3">
+        <div className="space-y-3 rounded-md border border-border bg-muted/50 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-neutral-200">
+            <span className="text-sm font-medium text-foreground">
               Phase Contrast
             </span>
           </div>
           <Select
-            value={phaseChannel?.toString() ?? ""}
+            value={phaseChannel?.toString() ?? ''}
             onValueChange={(val) => setPhaseChannel(val ? Number(val) : null)}
             disabled={isProcessing || channelNames.length === 0}
           >
@@ -92,47 +92,47 @@ export function ChannelConfiguration({
             <SelectContent>
               {channelNames.map((name, idx) => (
                 <SelectItem key={`${name}-${idx}`} value={idx.toString()}>
-                  {idx}: {name || "Channel"}
+                  {idx}: {name || 'Channel'}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <div className="flex flex-wrap gap-2">
-            {availablePhaseFeatures.length > 0 ? (
-              availablePhaseFeatures.map((feature) => {
-                const active = pcFeaturesSelected.includes(feature);
-                return (
-                  <button
-                    type="button"
-                    key={feature}
-                    onClick={() => togglePcFeature(feature)}
-                    disabled={isProcessing}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors disabled:opacity-50",
-                      active
-                        ? "border-neutral-500 bg-neutral-700 text-neutral-50"
-                        : "border-neutral-800 bg-neutral-900 text-neutral-400 hover:border-neutral-700"
-                    )}
-                  >
-                    {feature}
-                  </button>
-                );
-              })
-            ) : null}
+            {availablePhaseFeatures.length > 0
+              ? availablePhaseFeatures.map((feature) => {
+                  const active = pcFeaturesSelected.includes(feature);
+                  return (
+                    <button
+                      type="button"
+                      key={feature}
+                      onClick={() => togglePcFeature(feature)}
+                      disabled={isProcessing}
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
+                        active
+                          ? 'border-border bg-primary text-primary-foreground'
+                          : 'border-border bg-muted text-muted-foreground hover:border-border hover:bg-accent'
+                      )}
+                    >
+                      {feature}
+                    </button>
+                  );
+                })
+              : null}
           </div>
         </div>
 
         {/* Fluorescence */}
-        <div className="space-y-3 rounded-md border border-neutral-800 bg-neutral-950/50 p-3">
+        <div className="space-y-3 rounded-md border border-border bg-muted/50 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-neutral-200">
+            <span className="text-sm font-medium text-foreground">
               Fluorescence
             </span>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <Select
-              value={flChannelSelection?.toString() ?? ""}
+              value={flChannelSelection?.toString() ?? ''}
               onValueChange={(val) =>
                 setFlChannelSelection(val ? Number(val) : null)
               }
@@ -144,14 +144,14 @@ export function ChannelConfiguration({
               <SelectContent>
                 {channelNames.map((name, idx) => (
                   <SelectItem key={`${name}-${idx}`} value={idx.toString()}>
-                    {idx}: {name || "Channel"}
+                    {idx}: {name || 'Channel'}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
             <Select
-              value={flFeatureSelection ?? ""}
+              value={flFeatureSelection ?? ''}
               onValueChange={(val) => setFlFeatureSelection(val || null)}
               disabled={isProcessing || availableFlFeatures.length === 0}
             >
@@ -190,22 +190,25 @@ export function ChannelConfiguration({
                   features.map((feature) => (
                     <div
                       key={`${channel}-${feature}`}
-                      className="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
+                      className="flex items-center justify-between rounded-md border border-border bg-muted px-3 py-2"
                     >
-                      <div className="flex items-center gap-2 text-xs text-neutral-300">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="font-mono">
-                          {channel}: {channelNames[Number(channel)] || "Channel"}
+                          {channel}:{' '}
+                          {channelNames[Number(channel)] || 'Channel'}
                         </span>
-                        <ArrowRight className="h-3 w-3 text-neutral-500" />
-                        <span className="font-semibold text-neutral-200">
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-semibold text-foreground">
                           {feature}
                         </span>
                       </div>
                       <Button
                         size="icon"
                         variant="default"
-                        className="h-6 w-6 hover:text-red-400"
-                        onClick={() => removeFlMapping(Number(channel), feature)}
+                        className="h-6 w-6 hover:text-destructive"
+                        onClick={() =>
+                          removeFlMapping(Number(channel), feature)
+                        }
                         disabled={isProcessing}
                       >
                         <X className="h-3 w-3" />

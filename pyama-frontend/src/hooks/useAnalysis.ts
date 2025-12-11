@@ -1,22 +1,22 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from 'react';
 import {
   ModelInfo,
   TraceDataPoint,
   FittingResult,
   JobProgress,
   ModelParamState,
-} from "@/types/analysis";
+} from '@/types/analysis';
 
 export function useAnalysis(apiBase: string) {
   // Data state
   const [traceData, setTraceData] = useState<TraceDataPoint[]>([]);
   const [cellIds, setCellIds] = useState<string[]>([]);
   const [loadingData, setLoadingData] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("Ready");
+  const [statusMessage, setStatusMessage] = useState('Ready');
 
   // Model state
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const [modelParams, setModelParams] = useState<
     Record<string, ModelParamState>
   >({});
@@ -28,7 +28,7 @@ export function useAnalysis(apiBase: string) {
   );
   const [isFitting, setIsFitting] = useState(false);
   const [fittingResults, setFittingResults] = useState<FittingResult[]>([]);
-  const [resultsFile, setResultsFile] = useState<string | null>(null);
+
   const [parameterNames, setParameterNames] = useState<string[]>([]);
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -43,7 +43,7 @@ export function useAnalysis(apiBase: string) {
         initModelParams(data.models[0]);
       }
     } catch (err) {
-      console.error("Failed to load models:", err);
+      console.error('Failed to load models:', err);
     }
   };
 
@@ -61,25 +61,25 @@ export function useAnalysis(apiBase: string) {
 
   const loadTraceData = async (path: string) => {
     setLoadingData(true);
-    setStatusMessage("Loading trace data...");
+    setStatusMessage('Loading trace data...');
 
     try {
       // First, get info about the file
       const infoResponse = await fetch(`${apiBase}/analysis/load-traces`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ csv_path: path }),
       });
 
       const infoData = await infoResponse.json();
       if (!infoData.success) {
-        throw new Error(infoData.error || "Failed to load traces");
+        throw new Error(infoData.error || 'Failed to load traces');
       }
 
       // Read the actual CSV content
       const contentResponse = await fetch(`${apiBase}/processing/file/read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: path }),
       });
 
@@ -96,7 +96,7 @@ export function useAnalysis(apiBase: string) {
       }
     } catch (err) {
       setStatusMessage(
-        err instanceof Error ? err.message : "Failed to load traces"
+        err instanceof Error ? err.message : 'Failed to load traces'
       );
     } finally {
       setLoadingData(false);
@@ -106,21 +106,21 @@ export function useAnalysis(apiBase: string) {
   const parseTraceCsv = (
     content: string
   ): { data: TraceDataPoint[]; cellIds: string[] } => {
-    const lines = content.trim().split("\n");
+    const lines = content.trim().split('\n');
     if (lines.length < 2) return { data: [], cellIds: [] };
 
-    const header = lines[0].split(",");
-    const fovIdx = header.indexOf("fov");
-    const cellIdx = header.indexOf("cell");
-    const timeIdx = header.indexOf("time");
-    const valueIdx = header.indexOf("value");
-    const frameIdx = header.indexOf("frame");
+    const header = lines[0].split(',');
+    const fovIdx = header.indexOf('fov');
+    const cellIdx = header.indexOf('cell');
+    const timeIdx = header.indexOf('time');
+    const valueIdx = header.indexOf('value');
+    const frameIdx = header.indexOf('frame');
 
     const data: TraceDataPoint[] = [];
     const cellSet = new Set<string>();
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",");
+      const cols = lines[i].split(',');
       const fov = parseInt(cols[fovIdx], 10);
       const cell = parseInt(cols[cellIdx], 10);
       const time = parseFloat(cols[timeIdx]);
@@ -135,12 +135,12 @@ export function useAnalysis(apiBase: string) {
   };
 
   const loadFittedResults = async (path: string) => {
-    setStatusMessage("Loading fitted results...");
+    setStatusMessage('Loading fitted results...');
 
     try {
       const response = await fetch(`${apiBase}/processing/file/read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: path }),
       });
 
@@ -149,22 +149,21 @@ export function useAnalysis(apiBase: string) {
       if (data.success && data.content) {
         const results = parseFittedCsv(data.content);
         setFittingResults(results);
-        setResultsFile(path);
 
         // Extract parameter names
         if (results.length > 0) {
           const excluded = [
-            "fov",
-            "cell",
-            "model_type",
-            "success",
-            "r_squared",
-            "residual_sum_squares",
-            "message",
-            "n_function_calls",
+            'fov',
+            'cell',
+            'model_type',
+            'success',
+            'r_squared',
+            'residual_sum_squares',
+            'message',
+            'n_function_calls',
           ];
           const params = Object.keys(results[0]).filter(
-            (k) => !excluded.includes(k) && typeof results[0][k] === "number"
+            (k) => !excluded.includes(k) && typeof results[0][k] === 'number'
           );
           setParameterNames(params);
         }
@@ -173,29 +172,29 @@ export function useAnalysis(apiBase: string) {
       }
     } catch (err) {
       setStatusMessage(
-        err instanceof Error ? err.message : "Failed to load results"
+        err instanceof Error ? err.message : 'Failed to load results'
       );
     }
   };
 
   const parseFittedCsv = (content: string): FittingResult[] => {
-    const lines = content.trim().split("\n");
+    const lines = content.trim().split('\n');
     if (lines.length < 2) return [];
 
-    const header = lines[0].split(",");
+    const header = lines[0].split(',');
     const results: FittingResult[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",");
+      const cols = lines[i].split(',');
       const row: Record<string, number | string | boolean> = {};
 
       for (let j = 0; j < header.length; j++) {
         const key = header[j];
         const val = cols[j];
 
-        if (key === "success") {
-          row[key] = val.toLowerCase() === "true";
-        } else if (key === "model_type") {
+        if (key === 'success') {
+          row[key] = val.toLowerCase() === 'true';
+        } else if (key === 'model_type') {
           row[key] = val;
         } else {
           const num = parseFloat(val);
@@ -216,12 +215,12 @@ export function useAnalysis(apiBase: string) {
     bounds: Record<string, [number, number]>
   ) => {
     setIsFitting(true);
-    setStatusMessage("Starting fitting...");
+    setStatusMessage('Starting fitting...');
 
     try {
       const response = await fetch(`${apiBase}/analysis/fitting/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           csv_path: csvPath,
           model_type: selectedModel,
@@ -233,7 +232,7 @@ export function useAnalysis(apiBase: string) {
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "Failed to start fitting");
+        throw new Error(data.error || 'Failed to start fitting');
       }
 
       setFittingJobId(data.job_id);
@@ -242,7 +241,7 @@ export function useAnalysis(apiBase: string) {
     } catch (err) {
       setIsFitting(false);
       setStatusMessage(
-        err instanceof Error ? err.message : "Failed to start fitting"
+        err instanceof Error ? err.message : 'Failed to start fitting'
       );
     }
   };
@@ -267,14 +266,14 @@ export function useAnalysis(apiBase: string) {
         }
 
         if (
-          ["completed", "failed", "cancelled", "not_found"].includes(
+          ['completed', 'failed', 'cancelled', 'not_found'].includes(
             data.status
           )
         ) {
           stopPolling();
           setIsFitting(false);
 
-          if (data.status === "completed") {
+          if (data.status === 'completed') {
             const resultsResponse = await fetch(
               `${apiBase}/analysis/fitting/results/${jobId}`
             );
@@ -293,7 +292,7 @@ export function useAnalysis(apiBase: string) {
           }
         }
       } catch (err) {
-        console.error("Polling error:", err);
+        console.error('Polling error:', err);
       }
     }, 1000);
   };
@@ -309,11 +308,11 @@ export function useAnalysis(apiBase: string) {
     if (!fittingJobId) return;
     try {
       await fetch(`${apiBase}/analysis/fitting/cancel/${fittingJobId}`, {
-        method: "POST",
+        method: 'POST',
       });
-      setStatusMessage("Cancelling fitting...");
+      setStatusMessage('Cancelling fitting...');
     } catch (err) {
-      console.error("Failed to cancel:", err);
+      console.error('Failed to cancel:', err);
     }
   };
 
@@ -330,9 +329,9 @@ export function useAnalysis(apiBase: string) {
     availableModels,
     selectedModel,
     setSelectedModel: (model: string) => {
-        setSelectedModel(model);
-        const m = availableModels.find((m) => m.name === model);
-        if (m) initModelParams(m);
+      setSelectedModel(model);
+      const m = availableModels.find((m) => m.name === model);
+      if (m) initModelParams(m);
     },
     modelParams,
     setModelParams,
@@ -344,6 +343,6 @@ export function useAnalysis(apiBase: string) {
     loadFittedResults,
     parameterNames,
     statusMessage,
-    setStatusMessage
+    setStatusMessage,
   };
 }

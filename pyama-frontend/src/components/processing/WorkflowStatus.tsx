@@ -1,10 +1,9 @@
-import { JobState } from "@/types/processing";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Card, CardContent } from "@/components/ui/card";
+import { JobState } from '@/types/processing';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface WorkflowStatusProps {
-  statusMessage: string;
   currentJob: JobState | null;
   isProcessing: boolean;
   onStart: () => void;
@@ -12,14 +11,13 @@ interface WorkflowStatusProps {
 }
 
 export function WorkflowStatus({
-  statusMessage,
   currentJob,
   isProcessing,
   onStart,
   onCancel,
 }: WorkflowStatusProps) {
   return (
-    <Card className="border-neutral-800 bg-neutral-900">
+    <Card>
       <CardContent className="p-4 space-y-4">
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -28,11 +26,11 @@ export function WorkflowStatus({
               onClick={onStart}
               disabled={isProcessing}
             >
-              {isProcessing ? "Processing..." : "Start Complete Workflow"}
+              {isProcessing ? 'Processing...' : 'Start Complete Workflow'}
             </Button>
             <Button
               variant="default"
-              className="border-neutral-700 bg-neutral-800 hover:border-red-500/50 hover:text-red-200 disabled:opacity-50"
+              className="border-border bg-muted hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
               onClick={onCancel}
               disabled={!isProcessing}
             >
@@ -44,18 +42,22 @@ export function WorkflowStatus({
           <div className="space-y-2">
             <Progress
               value={currentJob?.progress?.percentage || 0}
-              className="h-2 bg-neutral-800"
+              className="h-2 bg-muted"
               // indicatorClassName="bg-blue-500" // shadcn Progress handles this via class or utility
             />
             {currentJob?.progress && (
-              <p className="text-xs text-neutral-400 text-center">
-                {currentJob.progress.current}/{currentJob.progress.total} FOVs ({currentJob.progress.percentage.toFixed(
-                  1
-                )}%)
+              <p className="text-xs text-muted-foreground text-center">
+                {currentJob.progress.current}/{currentJob.progress.total} FOVs (
+                {currentJob.progress.percentage.toFixed(1)}%)
               </p>
             )}
             {isProcessing && !currentJob?.progress && (
-              <p className="text-xs text-neutral-400 text-center">
+              <p className="text-xs text-muted-foreground text-center">
+                Processing in progress...
+              </p>
+            )}
+            {isProcessing && !currentJob?.progress && (
+              <p className="text-xs text-muted-foreground text-center">
                 Processing in progress...
               </p>
             )}

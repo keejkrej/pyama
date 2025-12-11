@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { FilePicker } from "@/components/FilePicker";
-import { ChannelConfiguration } from "@/components/processing/ChannelConfiguration";
-import { WorkflowParametersPanel } from "@/components/processing/WorkflowParametersPanel";
-import { SampleManager } from "@/components/processing/SampleManager";
-import { WorkflowStatus } from "@/components/processing/WorkflowStatus";
-import { useWorkflow } from "@/hooks/useWorkflow";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from 'react';
+import { FilePicker } from '@/components/FilePicker';
+import { ChannelConfiguration } from '@/components/processing/ChannelConfiguration';
+import { WorkflowParametersPanel } from '@/components/processing/WorkflowParametersPanel';
+import { SampleManager } from '@/components/processing/SampleManager';
+import { WorkflowStatus } from '@/components/processing/WorkflowStatus';
+import { useWorkflow } from '@/hooks/useWorkflow';
+import { Button } from '@/components/ui/button';
+import { StatusPanel } from '@/components/ui/status-panel';
 import {
   PickerKey,
   PickerConfig,
@@ -16,14 +16,13 @@ import {
   MicroscopyMetadata,
   WorkflowParameters,
   Sample,
-} from "@/types/processing";
-import { Folder } from "lucide-react";
+} from '@/types/processing';
 
 export default function Home() {
   // Backend configuration
   const backendBase =
-    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
-  const apiBase = `${backendBase.replace(/\/$/, "")}/api/v1`;
+    process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const apiBase = `${backendBase.replace(/\/$/, '')}/api/v1`;
 
   // Workflow Hook
   const {
@@ -53,9 +52,9 @@ export default function Home() {
   const [channelNames, setChannelNames] = useState<string[]>([]);
 
   // Features
-  const [availablePhaseFeatures, setAvailablePhaseFeatures] = useState<string[]>(
-    []
-  );
+  const [availablePhaseFeatures, setAvailablePhaseFeatures] = useState<
+    string[]
+  >([]);
   const [availableFlFeatures, setAvailableFlFeatures] = useState<string[]>([]);
 
   // Phase contrast selection
@@ -86,9 +85,9 @@ export default function Home() {
 
   // Samples for merge
   const [samples, setSamples] = useState<Sample[]>([
-    { id: "1", name: "control", fovs: "0-5" },
-    { id: "2", name: "drug_a", fovs: "6-11" },
-    { id: "3", name: "rescue", fovs: "12-17" },
+    { id: '1', name: 'control', fovs: '0-5' },
+    { id: '2', name: 'drug_a', fovs: '6-11' },
+    { id: '3', name: 'rescue', fovs: '12-17' },
   ]);
   const [editingSampleId, setEditingSampleId] = useState<string | null>(null);
 
@@ -101,20 +100,20 @@ export default function Home() {
 
   const formatName = (fullPath: string | null) => {
     if (!fullPath) return null;
-    const normalized = fullPath.replace(/\\/g, "/");
-    const parts = normalized.split("/").filter(Boolean);
+    const normalized = fullPath.replace(/\\/g, '/');
+    const parts = normalized.split('/').filter(Boolean);
     return parts[parts.length - 1] || fullPath;
   };
 
   const getStartPath = (config: PickerConfig) => {
     const prior = selections[config.key];
     if (prior) {
-      const normalized = prior.replace(/\\/g, "/");
+      const normalized = prior.replace(/\\/g, '/');
       if (config.directory) return normalized;
-      const parent = normalized.split("/").slice(0, -1).join("/") || "/";
+      const parent = normalized.split('/').slice(0, -1).join('/') || '/';
       return parent;
     }
-    return process.env.NEXT_PUBLIC_DEFAULT_BROWSE_PATH || "/home";
+    return process.env.NEXT_PUBLIC_DEFAULT_BROWSE_PATH || '/home';
   };
 
   const selectionLabel = (key: PickerKey, fallback: string) =>
@@ -137,16 +136,16 @@ export default function Home() {
     setSelections((prev) => ({ ...prev, [key]: path }));
     setActivePicker(null);
 
-    if (key === "microscopy") {
+    if (key === 'microscopy') {
       setPhaseChannel(null);
       setPcFeaturesSelected([]);
       setFlChannelSelection(null);
       setFlFeatureSelection(null);
       setFlMapping({});
       loadMicroscopyMetadata(path);
-    } else if (key === "loadSamplesYaml") {
+    } else if (key === 'loadSamplesYaml') {
       await loadSamplesFromServer(path);
-    } else if (key === "saveSamplesYaml") {
+    } else if (key === 'saveSamplesYaml') {
       await saveSamplesToServer(path);
     }
   };
@@ -200,14 +199,14 @@ export default function Home() {
     split = splitMode
   ) => {
     setLoadingMetadata(true);
-    setStatusMessage("Loading microscopy metadata...");
+    setStatusMessage('Loading microscopy metadata...');
     setMetadata(null);
     setChannelNames([]);
     try {
       const { phase, fl } = await loadFeatures();
       const response = await fetch(`${apiBase}/processing/load-metadata`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: filePath, split_mode: split }),
       });
       if (!response.ok) {
@@ -215,7 +214,7 @@ export default function Home() {
       }
       const data = await response.json();
       if (!data.success) {
-        throw new Error(data.error || "Failed to load metadata");
+        throw new Error(data.error || 'Failed to load metadata');
       }
       const meta = data.metadata || {};
       const names: string[] = Array.isArray(meta.channel_names)
@@ -235,7 +234,7 @@ export default function Home() {
       setFlFeatureSelection(fl.length ? fl[0] : null);
 
       // Update fov_end based on metadata
-      if (typeof meta.n_fovs === "number") {
+      if (typeof meta.n_fovs === 'number') {
         setParameters((prev) => ({
           ...prev,
           fov_end: meta.n_fovs - 1,
@@ -243,17 +242,17 @@ export default function Home() {
       }
 
       const fovsText =
-        typeof meta.n_fovs === "number"
+        typeof meta.n_fovs === 'number'
           ? `${meta.n_fovs} FOVs`
-          : "FOVs unknown";
+          : 'FOVs unknown';
       setStatusMessage(
         `Loaded metadata for ${formatName(filePath)} (${fovsText})${
-          split ? " [split]" : ""
+          split ? ' [split]' : ''
         }`
       );
     } catch (err) {
       setStatusMessage(
-        err instanceof Error ? err.message : "Failed to load metadata"
+        err instanceof Error ? err.message : 'Failed to load metadata'
       );
     } finally {
       setLoadingMetadata(false);
@@ -316,10 +315,10 @@ export default function Home() {
   ) => {
     // No validation - just try to parse, update if valid, otherwise do nothing
     const numValue =
-      key === "background_weight" ? parseFloat(value) : parseInt(value, 10);
+      key === 'background_weight' ? parseFloat(value) : parseInt(value, 10);
     if (!isNaN(numValue)) {
       setParameters((prev) => ({ ...prev, [key]: numValue }));
-    } else if (value === "") {
+    } else if (value === '') {
       setParameters((prev) => ({ ...prev, [key]: 0 }));
     }
     // If invalid, don't update - allows typing anything
@@ -330,17 +329,17 @@ export default function Home() {
   // =============================================================================
 
   const validateWorkflow = (): string | null => {
-    if (!selections.microscopy) return "Please select a microscopy file";
+    if (!selections.microscopy) return 'Please select a microscopy file';
     if (!selections.processingOutput)
-      return "Please select an output directory";
+      return 'Please select an output directory';
     if (phaseChannel === null && Object.keys(flMapping).length === 0) {
-      return "Please configure at least one channel (phase or fluorescence)";
+      return 'Please configure at least one channel (phase or fluorescence)';
     }
     if (phaseChannel !== null && pcFeaturesSelected.length === 0) {
-      return "Please select at least one phase feature";
+      return 'Please select at least one phase feature';
     }
-    if (parameters.batch_size < 1) return "Batch size must be at least 1";
-    if (parameters.n_workers < 1) return "Number of workers must be at least 1";
+    if (parameters.batch_size < 1) return 'Batch size must be at least 1';
+    if (parameters.n_workers < 1) return 'Number of workers must be at least 1';
     return null;
   };
 
@@ -387,8 +386,8 @@ export default function Home() {
   const addSample = () => {
     const newSample: Sample = {
       id: generateSampleId(),
-      name: "",
-      fovs: "",
+      name: '',
+      fovs: '',
     };
     setSamples((prev) => [...prev, newSample]);
     setEditingSampleId(newSample.id);
@@ -401,7 +400,7 @@ export default function Home() {
     }
   };
 
-  const updateSample = (id: string, field: "name" | "fovs", value: string) => {
+  const updateSample = (id: string, field: 'name' | 'fovs', value: string) => {
     setSamples((prev) =>
       prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
     );
@@ -410,16 +409,16 @@ export default function Home() {
   const saveSamplesToServer = async (filePath: string) => {
     const validSamples = samples.filter((s) => s.name && s.fovs);
     if (validSamples.length === 0) {
-      setStatusMessage("No valid samples to save");
+      setStatusMessage('No valid samples to save');
       return;
     }
 
-    setStatusMessage("Saving samples...");
+    setStatusMessage('Saving samples...');
 
     try {
       const response = await fetch(`${apiBase}/processing/samples/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           file_path: filePath,
           samples: validSamples.map((s) => ({ name: s.name, fovs: s.fovs })),
@@ -429,7 +428,7 @@ export default function Home() {
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "Failed to save samples");
+        throw new Error(data.error || 'Failed to save samples');
       }
 
       setStatusMessage(
@@ -438,25 +437,25 @@ export default function Home() {
       );
     } catch (err) {
       setStatusMessage(
-        err instanceof Error ? err.message : "Failed to save samples"
+        err instanceof Error ? err.message : 'Failed to save samples'
       );
     }
   };
 
   const loadSamplesFromServer = async (filePath: string) => {
-    setStatusMessage("Loading samples...");
+    setStatusMessage('Loading samples...');
 
     try {
       const response = await fetch(`${apiBase}/processing/samples/load`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: filePath }),
       });
 
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "Failed to load samples");
+        throw new Error(data.error || 'Failed to load samples');
       }
 
       if (data.samples && data.samples.length > 0) {
@@ -472,32 +471,32 @@ export default function Home() {
           `Loaded ${loadedSamples.length} samples from ${formatName(filePath)}`
         );
       } else {
-        setStatusMessage("No samples found in YAML file");
+        setStatusMessage('No samples found in YAML file');
       }
     } catch (err) {
       setStatusMessage(
-        err instanceof Error ? err.message : "Failed to load samples"
+        err instanceof Error ? err.message : 'Failed to load samples'
       );
     }
   };
 
   const openSaveYamlPicker = () => {
     openPicker({
-      key: "saveSamplesYaml",
-      title: "Save Samples YAML",
-      description: "Choose a directory to save the samples configuration",
+      key: 'saveSamplesYaml',
+      title: 'Save Samples YAML',
+      description: 'Choose a directory to save the samples configuration',
       directory: true,
-      mode: "save",
-      defaultFileName: "samples.yaml",
+      mode: 'save',
+      defaultFileName: 'samples.yaml',
     });
   };
 
   const openLoadYamlPicker = () => {
     openPicker({
-      key: "loadSamplesYaml",
-      title: "Load Samples YAML",
-      description: "Select a samples YAML file to load",
-      filterExtensions: [".yaml", ".yml"],
+      key: 'loadSamplesYaml',
+      title: 'Load Samples YAML',
+      description: 'Select a samples YAML file to load',
+      filterExtensions: ['.yaml', '.yml'],
     });
   };
 
@@ -506,10 +505,10 @@ export default function Home() {
   // =============================================================================
 
   const validateMerge = (): string | null => {
-    if (!selections.sampleYaml) return "Please select a sample YAML file";
+    if (!selections.sampleYaml) return 'Please select a sample YAML file';
     if (!selections.inputDir)
-      return "Please select an input directory (folder of processed FOVs)";
-    if (!selections.mergeOutput) return "Please select an output directory";
+      return 'Please select an input directory (folder of processed FOVs)';
+    if (!selections.mergeOutput) return 'Please select an output directory';
     return null;
   };
 
@@ -521,12 +520,12 @@ export default function Home() {
     }
 
     setIsMerging(true);
-    setStatusMessage("Running merge...");
+    setStatusMessage('Running merge...');
 
     try {
       const response = await fetch(`${apiBase}/processing/merge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sample_yaml: selections.sampleYaml,
           input_dir: selections.inputDir,
@@ -537,7 +536,7 @@ export default function Home() {
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "Failed to merge results");
+        throw new Error(data.error || 'Failed to merge results');
       }
 
       setStatusMessage(
@@ -545,7 +544,7 @@ export default function Home() {
       );
     } catch (err) {
       setStatusMessage(
-        err instanceof Error ? err.message : "Failed to merge results"
+        err instanceof Error ? err.message : 'Failed to merge results'
       );
     } finally {
       setIsMerging(false);
@@ -557,12 +556,12 @@ export default function Home() {
   // =============================================================================
 
   return (
-    <div className="relative bg-neutral-950 text-neutral-50">
+    <div className="relative bg-background text-foreground">
       <FilePicker
         isOpen={!!activePicker}
         onClose={closePicker}
         config={activePicker}
-        initialPath={activePicker ? getStartPath(activePicker) : "/home"}
+        initialPath={activePicker ? getStartPath(activePicker) : '/home'}
         onSelect={handleSelect}
       />
 
@@ -571,54 +570,49 @@ export default function Home() {
         {/* Header */}
         <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
           <div className="space-y-3">
-            <h1 className="text-4xl font-semibold leading-tight text-neutral-50 uppercase tracking-widest">
+            <h1 className="text-4xl font-semibold leading-tight text-foreground uppercase tracking-widest">
               Processing
             </h1>
           </div>
-          <div className="flex-1 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-neutral-200 shadow-sm ml-auto">
-            <p className="font-semibold text-neutral-50">Status</p>
-            <p className="text-xs text-neutral-400 truncate" title={statusMessage}>
-              {statusMessage}
-            </p>
-          </div>
+          <StatusPanel statusMessage={statusMessage} className="ml-auto" />
         </div>
 
         {/* Main Grid */}
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
           {/* Workflow Section */}
-          <section className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm space-y-6">
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-6">
             <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
               {/* Input Section */}
-              <div className="space-y-5 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+              <div className="space-y-5 rounded-xl border border-border bg-card p-5">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-neutral-50">
-                    Input
-                  </p>
+                  <p className="text-sm font-semibold text-foreground">Input</p>
                 </div>
 
                 {/* Microscopy File Selection */}
-                <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 space-y-3">
+                <div className="rounded-lg border border-border bg-card p-4 space-y-3">
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-neutral-300">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>Microscopy File</span>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-neutral-300">Split files</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            Split files
+                          </span>
                           <button
                             type="button"
                             role="switch"
                             aria-checked={splitMode}
                             onClick={toggleSplitMode}
                             disabled={isProcessing}
-                            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 focus:ring-offset-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed ${
-                              splitMode
-                                ? "bg-green-600"
-                                : "bg-red-600"
+                            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed ${
+                              splitMode ? 'bg-primary' : 'bg-destructive'
                             }`}
                           >
                             <span
-                              className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                                splitMode ? "translate-x-3.5" : "translate-x-0.5"
+                              className={`inline-block h-3 w-3 transform rounded-full bg-primary-foreground transition-transform ${
+                                splitMode
+                                  ? 'translate-x-3.5'
+                                  : 'translate-x-0.5'
                               }`}
                             />
                           </button>
@@ -629,16 +623,17 @@ export default function Home() {
                           disabled={isProcessing}
                           onClick={() =>
                             openPicker({
-                              key: "microscopy",
-                              title: "Choose microscopy file",
-                              description: "Select an ND2 / CZI / OME-TIFF file",
+                              key: 'microscopy',
+                              title: 'Choose microscopy file',
+                              description:
+                                'Select an ND2 / CZI / OME-TIFF file',
                               filterExtensions: [
-                                ".nd2",
-                                ".czi",
-                                ".ome.tif",
-                                ".ome.tiff",
-                                ".tif",
-                                ".tiff",
+                                '.nd2',
+                                '.czi',
+                                '.ome.tif',
+                                '.ome.tiff',
+                                '.tif',
+                                '.tiff',
                               ],
                             })
                           }
@@ -647,25 +642,24 @@ export default function Home() {
                         </Button>
                       </div>
                     </div>
-                    <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
-                      {selectionLabel("microscopy", "unselected")}
+                    <div className="rounded-md border border-border bg-muted px-3 py-2 text-muted-foreground truncate text-xs">
+                      {selectionLabel('microscopy', 'unselected')}
                     </div>
                   </div>
-                  
+
                   {loadingMetadata && (
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-muted-foreground">
                       Loading metadata...
                     </p>
                   )}
                   {metadata && (
-                    <div className="grid grid-cols-2 gap-2 text-[11px] text-neutral-300">
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
                       <span>
-                        Channels:{" "}
-                        {metadata.n_channels ?? channelNames.length}
+                        Channels: {metadata.n_channels ?? channelNames.length}
                       </span>
-                      <span>FOVs: {metadata.n_fovs ?? "?"}</span>
-                      <span>Frames: {metadata.n_frames ?? "?"}</span>
-                      <span>Time: {metadata.time_units || "unknown"}</span>
+                      <span>FOVs: {metadata.n_fovs ?? '?'}</span>
+                      <span>Frames: {metadata.n_frames ?? '?'}</span>
+                      <span>Time: {metadata.time_units || 'unknown'}</span>
                     </div>
                   )}
                 </div>
@@ -692,19 +686,19 @@ export default function Home() {
 
               {/* Output Section */}
               <div className="space-y-6">
-                <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 space-y-4">
+                <div className="rounded-xl border border-border bg-card p-4 space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
-                      <p className="text-sm font-semibold text-neutral-50">
+                      <p className="text-sm font-semibold text-foreground">
                         Output
                       </p>
                     </div>
                   </div>
 
                   {/* Output Directory */}
-                  <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+                  <div className="rounded-lg border border-border bg-card p-4">
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs text-neutral-300">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>Save Directory</span>
                         <Button
                           className="h-6 text-[10px]"
@@ -712,9 +706,10 @@ export default function Home() {
                           disabled={isProcessing}
                           onClick={() =>
                             openPicker({
-                              key: "processingOutput",
-                              title: "Choose output directory",
-                              description: "Select the processing output folder",
+                              key: 'processingOutput',
+                              title: 'Choose output directory',
+                              description:
+                                'Select the processing output folder',
                               directory: true,
                             })
                           }
@@ -722,8 +717,8 @@ export default function Home() {
                           Browse
                         </Button>
                       </div>
-                      <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
-                        {selectionLabel("processingOutput", "unselected")}
+                      <div className="rounded-md border border-border bg-muted px-3 py-2 text-muted-foreground truncate text-xs">
+                        {selectionLabel('processingOutput', 'unselected')}
                       </div>
                     </div>
                   </div>
@@ -737,7 +732,6 @@ export default function Home() {
                   />
 
                   <WorkflowStatus
-                    statusMessage={statusMessage}
                     currentJob={currentJob}
                     isProcessing={isProcessing}
                     onStart={handleStartWorkflow}
@@ -749,7 +743,7 @@ export default function Home() {
           </section>
 
           {/* Merge Section */}
-          <section className="rounded-2xl border border-neutral-900 bg-neutral-900 p-6 shadow-sm space-y-6">
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-6">
             <div className="space-y-4">
               <SampleManager
                 samples={samples}
@@ -761,16 +755,16 @@ export default function Home() {
               />
 
               {/* Merge Samples */}
-              <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 space-y-3">
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-neutral-50">
+                  <p className="text-sm font-semibold text-foreground">
                     Merge Samples
                   </p>
                 </div>
 
-                <div className="space-y-3 text-sm text-neutral-200">
+                <div className="space-y-3 text-sm text-muted-foreground">
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-neutral-300">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>Sample YAML</span>
                       <Button
                         className="h-6 text-[10px]"
@@ -778,24 +772,24 @@ export default function Home() {
                         disabled={isMerging}
                         onClick={() =>
                           openPicker({
-                            key: "sampleYaml",
-                            title: "Choose sample.yaml",
+                            key: 'sampleYaml',
+                            title: 'Choose sample.yaml',
                             description:
-                              "Select a samples YAML that defines FOV assignments",
-                            filterExtensions: [".yaml", ".yml"],
+                              'Select a samples YAML that defines FOV assignments',
+                            filterExtensions: ['.yaml', '.yml'],
                           })
                         }
                       >
                         Browse
                       </Button>
                     </div>
-                    <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
-                      {selections.sampleYaml || "unselected"}
+                    <div className="rounded-md border border-border bg-muted px-3 py-2 text-muted-foreground truncate text-xs">
+                      {selections.sampleYaml || 'unselected'}
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-neutral-300">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>Processed FOVs Folder</span>
                       <Button
                         className="h-6 text-[10px]"
@@ -803,10 +797,10 @@ export default function Home() {
                         disabled={isMerging}
                         onClick={() =>
                           openPicker({
-                            key: "inputDir",
-                            title: "Choose folder of processed FOVs",
+                            key: 'inputDir',
+                            title: 'Choose folder of processed FOVs',
                             description:
-                              "Select the folder containing fov_000, fov_001, etc.",
+                              'Select the folder containing fov_000, fov_001, etc.',
                             directory: true,
                           })
                         }
@@ -814,13 +808,13 @@ export default function Home() {
                         Browse
                       </Button>
                     </div>
-                    <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
-                      {selections.inputDir || "unselected"}
+                    <div className="rounded-md border border-border bg-muted px-3 py-2 text-muted-foreground truncate text-xs">
+                      {selections.inputDir || 'unselected'}
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-neutral-300">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>Output Folder</span>
                       <Button
                         className="h-6 text-[10px]"
@@ -828,10 +822,10 @@ export default function Home() {
                         disabled={isMerging}
                         onClick={() =>
                           openPicker({
-                            key: "mergeOutput",
-                            title: "Choose merge output folder",
+                            key: 'mergeOutput',
+                            title: 'Choose merge output folder',
                             description:
-                              "Select where merged CSVs should be written",
+                              'Select where merged CSVs should be written',
                             directory: true,
                           })
                         }
@@ -839,8 +833,8 @@ export default function Home() {
                         Browse
                       </Button>
                     </div>
-                    <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-300 truncate text-xs">
-                      {selections.mergeOutput || "unselected"}
+                    <div className="rounded-md border border-border bg-muted px-3 py-2 text-muted-foreground truncate text-xs">
+                      {selections.mergeOutput || 'unselected'}
                     </div>
                   </div>
 
@@ -849,7 +843,7 @@ export default function Home() {
                     onClick={runMerge}
                     disabled={isMerging}
                   >
-                    {isMerging ? "Merging..." : "Run Merge"}
+                    {isMerging ? 'Merging...' : 'Run Merge'}
                   </Button>
                 </div>
               </div>
