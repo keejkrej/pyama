@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
-from pyama_core.io import MicroscopyMetadata, load_microscopy_file
+from pyama_core.io import MicroscopyMetadata, load_microscopy_file, ProcessingConfig
 from pyama_core.processing.merge import run_merge
 from pyama_core.processing.extraction.features import (
     list_phase_features,
@@ -19,8 +19,6 @@ from pyama_core.processing.workflow import run_complete_workflow
 from pyama_core.types.processing import (
     ChannelSelection,
     Channels,
-    ProcessingContext,
-    ensure_context,
 )
 
 from pyama_backend.jobs.types import JobStatus
@@ -428,17 +426,14 @@ async def start_workflow(request: StartWorkflowRequest) -> StartWorkflowResponse
                     ],
                 )
 
-                context = ensure_context(
-                    ProcessingContext(
-                        output_dir=output_dir,
-                        channels=channels,
-                        params={
-                            "fov_start": request.parameters.fov_start,
-                            "fov_end": request.parameters.fov_end,
-                            "batch_size": request.parameters.batch_size,
-                            "n_workers": request.parameters.n_workers,
-                        },
-                    )
+                config = ProcessingConfig(
+                    channels=channels,
+                    params={
+                        "fov_start": request.parameters.fov_start,
+                        "fov_end": request.parameters.fov_end,
+                        "batch_size": request.parameters.batch_size,
+                        "n_workers": request.parameters.n_workers,
+                    },
                 )
 
                 if request.parameters.fov_end >= request.parameters.fov_start:
@@ -457,7 +452,8 @@ async def start_workflow(request: StartWorkflowRequest) -> StartWorkflowResponse
 
                 success = run_complete_workflow(
                     metadata=metadata,
-                    context=context,
+                    config=config,
+                    output_dir=output_dir,
                     fov_start=request.parameters.fov_start,
                     fov_end=request.parameters.fov_end,
                     batch_size=request.parameters.batch_size,

@@ -1,0 +1,288 @@
+@page "/processing"
+@using CommunityToolkit.Maui.Storage
+@inject IProcessingService ProcessingService
+@inject IFolderPicker FolderPicker
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Processing Workflow</MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true">Input File</MudText>
+                
+                <MudTextField @bind-Value="_filePath" 
+                              Label="Microscopy File Path" 
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                              OnAdornmentClick="BrowseFile"
+                              HelperText="Select ND2 or CZI file" />
+                
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           Class="mt-3"
+                           OnClick="LoadMetadata"
+                           Disabled="@(string.IsNullOrEmpty(_filePath) || _isLoading)">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Load Metadata
+                </MudButton>
+
+                @if (_metadata != null)
+                {
+                    <MudDivider Class="my-4" />
+                    <MudText Typo="Typo.subtitle1">File Info</MudText>
+                    <MudSimpleTable Dense="true" Class="mt-2">
+                        <tbody>
+                            <tr><td>Name</td><td>@_metadata.BaseName</td></tr>
+                            <tr><td>FOVs</td><td>@_metadata.NFovs</td></tr>
+                            <tr><td>Frames</td><td>@_metadata.NFrames</td></tr>
+                            <tr><td>Channels</td><td>@_metadata.NChannels</td></tr>
+                            <tr><td>Size</td><td>@_metadata.Width x @_metadata.Height</td></tr>
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true">Channel Configuration</MudText>
+                
+                @if (_metadata != null)
+                {
+                    <MudSelect T="int?" @bind-Value="_selectedPhaseChannel" 
+                               Label="Phase Contrast Channel"
+                               Variant="Variant.Outlined"
+                               Clearable="true">
+                        @for (int i = 0; i < _metadata.NChannels; i++)
+                        {
+                            var idx = i;
+                            <MudSelectItem Value="@((int?)idx)">@_metadata.ChannelNames[idx]</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudSelect T="int?" @bind-Value="_selectedFlChannel" 
+                               Label="Fluorescence Channel"
+                               Variant="Variant.Outlined"
+                               Class="mt-3"
+                               Clearable="true">
+                        @for (int i = 0; i < _metadata.NChannels; i++)
+                        {
+                            var idx = i;
+                            <MudSelectItem Value="@((int?)idx)">@_metadata.ChannelNames[idx]</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info">Load a microscopy file first</MudAlert>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true">FOV Selection</MudText>
+                
+                <MudNumericField @bind-Value="_fovStart" 
+                                 Label="Start FOV" 
+                                 Variant="Variant.Outlined"
+                                 Min="0" 
+                                 Max="@((_metadata?.NFovs ?? 1) - 1)" />
+                
+                <MudNumericField @bind-Value="_fovEnd" 
+                                 Label="End FOV" 
+                                 Variant="Variant.Outlined"
+                                 Class="mt-3"
+                                 Min="0" 
+                                 Max="@((_metadata?.NFovs ?? 1) - 1)" />
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true">Output Configuration</MudText>
+                
+                <MudTextField @bind-Value="_outputDir" 
+                              Label="Output Directory" 
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                              OnAdornmentClick="BrowseOutputDir" />
+
+                <MudNumericField @bind-Value="_batchSize" 
+                                 Label="Batch Size" 
+                                 Variant="Variant.Outlined"
+                                 Class="mt-3"
+                                 Min="1" Max="10" />
+
+                <MudNumericField @bind-Value="_workers" 
+                                 Label="Workers" 
+                                 Variant="Variant.Outlined"
+                                 Class="mt-3"
+                                 Min="1" Max="8" />
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true">Workflow Execution</MudText>
+                
+                @if (_isProcessing)
+                {
+                    <MudProgressLinear Value="@_progress.Percentage" Color="Color.Primary" Class="my-3" />
+                    <MudText>@_progress.Message</MudText>
+                    <MudText Typo="Typo.caption">FOV @_progress.CurrentFov / @_progress.TotalFovs</MudText>
+                }
+                
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           Class="mt-3"
+                           OnClick="RunWorkflow"
+                           Disabled="@(!CanRunWorkflow || _isProcessing)">
+                    @if (_isProcessing)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <span>Processing...</span>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Class="mr-2" />
+                        <span>Run Workflow</span>
+                    }
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private string _filePath = string.Empty;
+    private string _outputDir = string.Empty;
+    private MicroscopyMetadata? _metadata;
+    private int? _selectedPhaseChannel;
+    private int? _selectedFlChannel;
+    private int _fovStart;
+    private int _fovEnd;
+    private int _batchSize = 2;
+    private int _workers = 2;
+    private bool _isLoading;
+    private bool _isProcessing;
+    private JobProgress _progress = new();
+
+    private bool CanRunWorkflow => 
+        _metadata != null && 
+        !string.IsNullOrEmpty(_outputDir) &&
+        (_selectedPhaseChannel.HasValue || _selectedFlChannel.HasValue);
+
+    private async Task BrowseFile()
+    {
+        var customFileType = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+        {
+            { DevicePlatform.WinUI, new[] { ".nd2", ".czi", ".tif", ".tiff" } }
+        });
+
+        var result = await FilePicker.Default.PickAsync(new PickOptions
+        {
+            PickerTitle = "Select Microscopy File",
+            FileTypes = customFileType
+        });
+
+        if (result != null)
+        {
+            _filePath = result.FullPath;
+        }
+    }
+
+    private async Task BrowseOutputDir()
+    {
+        var result = await FolderPicker.PickAsync(default);
+        if (result.IsSuccessful)
+        {
+            _outputDir = result.Folder.Path;
+        }
+    }
+
+    private async Task LoadMetadata()
+    {
+        if (string.IsNullOrEmpty(_filePath)) return;
+
+        _isLoading = true;
+        try
+        {
+            _metadata = await ProcessingService.LoadMetadataAsync(_filePath);
+            if (_metadata != null)
+            {
+                _fovEnd = _metadata.NFovs - 1;
+                Snackbar.Add($"Loaded: {_metadata.BaseName}", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task RunWorkflow()
+    {
+        if (!CanRunWorkflow) return;
+
+        _isProcessing = true;
+        _progress = new JobProgress { TotalFovs = _fovEnd - _fovStart + 1 };
+
+        try
+        {
+            var config = new WorkflowConfig
+            {
+                MicroscopyPath = _filePath,
+                FovStart = _fovStart,
+                FovEnd = _fovEnd,
+                BatchSize = _batchSize,
+                Workers = _workers,
+                Config = new ProcessingConfig
+                {
+                    OutputDir = _outputDir,
+                    Channels = new Channels
+                    {
+                        PhaseContrast = _selectedPhaseChannel.HasValue 
+                            ? new ChannelSelection { Channel = _selectedPhaseChannel.Value, Features = ["area", "aspect_ratio"] }
+                            : null,
+                        Fluorescence = _selectedFlChannel.HasValue 
+                            ? [new ChannelSelection { Channel = _selectedFlChannel.Value, Features = ["intensity_total"] }]
+                            : []
+                    }
+                }
+            };
+
+            var progress = new Progress<JobProgress>(p =>
+            {
+                _progress = p;
+                InvokeAsync(StateHasChanged);
+            });
+
+            var success = await ProcessingService.RunWorkflowAsync(config, progress);
+            
+            if (success)
+                Snackbar.Add("Workflow completed successfully!", Severity.Success);
+            else
+                Snackbar.Add("Workflow completed with errors", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Workflow failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+}

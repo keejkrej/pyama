@@ -10,10 +10,11 @@ MODELS = {
 
 
 def get_model(model_name: str):
-    if model_name not in MODELS:
+    model_name_lower = model_name.lower()
+    if model_name_lower not in MODELS:
         available = ", ".join(MODELS.keys())
         raise ValueError(f"Unknown model: {model_name}. Available models: {available}")
-    return MODELS[model_name]
+    return MODELS[model_name_lower]
 
 
 def get_types(model_name: str):
