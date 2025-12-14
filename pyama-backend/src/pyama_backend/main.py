@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pyama_backend.api import analysis, processing
 from pyama_backend.api import visualization
-from pyama_backend.state import job_manager
 from pyama_core.plugin.loader import load_plugins
 
 logger = logging.getLogger(__name__)

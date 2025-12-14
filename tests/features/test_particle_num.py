@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 
 import numpy as np
-import pytest
 from matplotlib import pyplot as plt
 from scipy.ndimage import label
 from skimage.filters import threshold_otsu

@@ -20,12 +20,10 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
-    QWidget,
     QWizard,
     QWizardPage,
 )
 
-from pyama_air.utils.threading import BackgroundWorker
 
 logger = logging.getLogger(__name__)
 
@@ -517,7 +515,7 @@ class ResultsPage(QWizardPage):
             successful = df["success"].sum() if "success" in df.columns else 0
             avg_r2 = df["r_squared"].mean() if "r_squared" in df.columns else 0.0
 
-            summary = f"Fitting Results Summary:\n\n"
+            summary = "Fitting Results Summary:\n\n"
             summary += f"Total Cells: {total_cells}\n"
             summary += f"Successful Fits: {successful} ({100*successful/total_cells:.1f}%)\n"
             summary += f"Average R²: {avg_r2:.3f}\n"

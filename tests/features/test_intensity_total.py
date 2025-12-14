@@ -1,7 +1,6 @@
 """Tests for intensity_total feature extraction."""
 
 import numpy as np
-import pytest
 
 from pyama_core.processing.extraction.features.fluorescence.intensity_total import extract_intensity_total
 from pyama_core.types.processing import ExtractionContext

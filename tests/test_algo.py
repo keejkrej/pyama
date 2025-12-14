@@ -54,7 +54,7 @@ def load_nd2_file(nd2_path):
     try:
         img, metadata = load_microscopy_file(nd2_path)
         
-        print(f"✓ Loaded successfully")
+        print("✓ Loaded successfully")
         print(f"   Channels: {metadata.n_channels}")
         print(f"   Channel names: {metadata.channel_names}")
         print(f"   Timepoints: {metadata.n_frames}")
@@ -283,7 +283,7 @@ def run_feature_extraction(fluorescence, tracked, output_dir):
     time_min = traces_df.index.get_level_values("time").min()
     time_max = traces_df.index.get_level_values("time").max()
     
-    print(f"\nExtraction summary:")
+    print("\nExtraction summary:")
     print(f"   Total data points: {len(traces_df)}")
     print(f"   Unique cells: {n_cells}")
     print(f"   Time range: {time_min:.1f} - {time_max:.1f} hours")
@@ -355,9 +355,9 @@ def run_model_fitting(traces_df, output_dir):
     model = get_model("maturation")
     result = fit_model(model, time, intensity, model.DEFAULT_FIXED, model.DEFAULT_FIT)
     
-    print(f"\n✓ Fitting completed:")
+    print("\n✓ Fitting completed:")
     print(f"   R² = {result.r_squared:.3f}")
-    print(f"   Parameters:")
+    print("   Parameters:")
     for param_name, param in result.fitted_params.items():
         print(f"     {param_name} = {param.value:.3g}")
     
