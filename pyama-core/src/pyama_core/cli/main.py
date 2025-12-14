@@ -26,6 +26,12 @@ from pyama_core.types.processing import (
     ChannelSelection,
     Channels,
 )
+from pyama_core.benchmark import (
+    extract_trajectories,
+    compute_trajectory_stats,
+    compare_conditions,
+    generate_report,
+)
 
 output_mode_option = typer.Option(
     "multi",
@@ -601,6 +607,150 @@ def merge() -> None:
         raise typer.Exit(code=1) from exc
 
     typer.secho(message, fg=typer.colors.GREEN, bold=True)
+
+
+@app.command()
+def benchmark(
+    patterned: Path = typer.Option(
+        ...,
+        "--patterned",
+        "-p",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to patterned condition TIFF file (T, H, W).",
+    ),
+    unpatterned: Path = typer.Option(
+        ...,
+        "--unpatterned",
+        "-u",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to unpatterned condition TIFF file (T, H, W).",
+    ),
+    output: Path = typer.Option(
+        ...,
+        "--output",
+        "-o",
+        file_okay=False,
+        dir_okay=True,
+        help="Output directory for benchmark results.",
+    ),
+    min_duration: int = typer.Option(
+        5,
+        "--min-duration",
+        help="Minimum trajectory duration in frames.",
+    ),
+) -> None:
+    """Compare patterned vs unpatterned cell trajectories.
+
+    Runs cellpose segmentation and btrack tracking on both TIFF files,
+    then computes trajectory statistics and generates comparison reports.
+    """
+    import numpy as np
+    from skimage import io as skio
+
+    from pyama_core.processing.segmentation import segment_cell_cellpose
+    from pyama_core.processing.tracking import track_cell_btrack
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    )
+
+    def progress_callback(current: int, total: int, message: str) -> None:
+        if current % 10 == 0:
+            typer.echo(f"  {message}: {current}/{total}")
+
+    def process_condition(
+        tiff_path: Path, condition_name: str, fov: int = 0
+    ) -> list:
+        """Process a single condition through segmentation and tracking."""
+        typer.secho(f"\nProcessing {condition_name}: {tiff_path}", bold=True)
+
+        # Load TIFF
+        typer.echo("  Loading TIFF...")
+        image = skio.imread(tiff_path)
+        if image.ndim != 3:
+            typer.secho(
+                f"Expected 3D TIFF (T, H, W), got shape {image.shape}",
+                err=True,
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+        typer.echo(f"  Shape: {image.shape} (T={image.shape[0]}, H={image.shape[1]}, W={image.shape[2]})")
+
+        # Segmentation
+        typer.echo("  Running CellPose segmentation...")
+        segmentation = np.empty(image.shape, dtype=bool)
+        segment_cell_cellpose(
+            image.astype(np.float32),
+            segmentation,
+            progress_callback=progress_callback,
+        )
+
+        # Tracking
+        typer.echo("  Running btrack tracking...")
+        tracked = np.zeros(image.shape, dtype=np.uint16)
+        track_cell_btrack(
+            segmentation,
+            tracked,
+            progress_callback=progress_callback,
+        )
+
+        # Extract trajectories
+        typer.echo("  Extracting trajectories...")
+        trajectories = extract_trajectories(tracked, fov=fov, min_duration=min_duration)
+        typer.echo(f"  Found {len(trajectories)} trajectories (min_duration={min_duration})")
+
+        # Compute stats
+        stats_list = []
+        for cell_id, frames in trajectories.items():
+            stats = compute_trajectory_stats(cell_id, frames, fov=fov)
+            stats_list.append(stats)
+
+        return stats_list
+
+    # Process both conditions
+    patterned_stats = process_condition(patterned.expanduser().resolve(), "patterned", fov=0)
+    unpatterned_stats = process_condition(unpatterned.expanduser().resolve(), "unpatterned", fov=1)
+
+    if not patterned_stats:
+        typer.secho("No trajectories found in patterned condition!", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    if not unpatterned_stats:
+        typer.secho("No trajectories found in unpatterned condition!", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    # Compare conditions
+    typer.secho("\nComparing conditions...", bold=True)
+    result = compare_conditions(patterned_stats, unpatterned_stats)
+
+    # Generate report
+    output_dir = output.expanduser().resolve()
+    typer.echo(f"Generating report to {output_dir}...")
+    generate_report(result, output_dir)
+
+    # Print summary
+    typer.secho("\nResults:", bold=True)
+    typer.echo(f"  Patterned cells: {len(patterned_stats)}")
+    typer.echo(f"  Unpatterned cells: {len(unpatterned_stats)}")
+    typer.echo("")
+
+    for metric, test_result in result.metrics_comparison.items():
+        significance = "*" if test_result.p_value < 0.05 else ""
+        typer.echo(
+            f"  {metric}: p={test_result.p_value:.4f}{significance} "
+            f"(patterned={test_result.patterned_median:.2f}, "
+            f"unpatterned={test_result.unpatterned_median:.2f})"
+        )
+
+    typer.secho(f"\nOutput saved to: {output_dir}", fg=typer.colors.GREEN, bold=True)
 
 
 if __name__ == "__main__":
