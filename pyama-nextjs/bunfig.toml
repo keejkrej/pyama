@@ -1,0 +1,3 @@
+[install]
+# Enable node_modules compatibility
+node_modules_compat = true
