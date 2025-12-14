@@ -18,8 +18,7 @@ uv sync --all-extras
 
 # Install packages in development mode
 uv pip install -e pyama-core/
-uv pip install -e pyama-pro/
-uv pip install -e pyama-air/
+uv pip install -e pyama-qt/
 ```
 
 ## Install with pip
@@ -35,21 +34,16 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -e pyama-core/
-pip install -e pyama-pro/
-pip install -e pyama-air/
+pip install -e pyama-qt/
 ```
 
 ## Verify Installation
 
 ```bash
 # Launch the Qt GUI
-uv run pyama-pro
+uv run pyama-qt
 # or
-python -m pyama_pro.main
-
-# Use the CLI helpers
-pyama-air gui
-pyama-air cli
+python -m pyama_qt.main
 ```
 
 ## Development Dependencies

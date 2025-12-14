@@ -8,7 +8,7 @@ PyAMA uses two separate plugin systems:
 
 1. **Feature Plugins** - Add custom feature extraction algorithms
 2. **Model Plugins** - Add custom analysis fitting models
-3. **GUI Installation** - Install plugins through the PyAMA-Pro interface
+3. **GUI Installation** - Install plugins through the PyAMA-Qt interface
 
 ## Plugin Directory Structure
 
@@ -279,7 +279,7 @@ MODEL_METADATA = {
 
 ### Method 1: GUI Installation (Recommended)
 
-1. Launch PyAMA-Pro: `uv run pyama-pro`
+1. Launch PyAMA-Qt: `uv run pyama-qt`
 2. Click **File → Install Plugin...**
 3. Select a `.py` plugin file
 4. Plugin is:
@@ -304,7 +304,7 @@ cp examples/plugins/features/fluorescence/*.py ~/.pyama/plugins/features/fluores
 # Copy fitting models
 cp examples/plugins/fitting/*.py ~/.pyama/plugins/fitting/
 
-# Restart PyAMA-Pro to load new plugins
+# Restart PyAMA-Qt to load new plugins
 ```
 
 ### Method 3: Batch Installation Script
@@ -326,7 +326,7 @@ cp -r "$EXAMPLE_DIR/features/"* "$PLUGIN_DIR/features/"
 cp -r "$EXAMPLE_DIR/fitting/"* "$PLUGIN_DIR/fitting/"
 
 echo "Plugins installed to: $PLUGIN_DIR"
-echo "Restart PyAMA-Pro to use new plugins"
+echo "Restart PyAMA-Qt to use new plugins"
 ```
 
 ## Using Plugins
@@ -511,7 +511,7 @@ assert "my_feature_ch_0" in df.columns
 **"Plugin Not Appearing":**
 - Check file location matches expected structure
 - Verify Python syntax is correct
-- Restart PyAMA-Pro
+- Restart PyAMA-Qt
 - Check console for error messages
 
 **"Import Error":**
@@ -533,12 +533,12 @@ assert "my_feature_ch_0" in df.columns
 
 1. **Enable Debug Mode**:
    ```bash
-   uv run pyama-pro --debug
+   uv run pyama-qt --debug
    ```
 
 2. **Check Plugin Loading**:
    ```python
-   # In PyAMA-Pro Python console
+   # In PyAMA-Qt Python console
    from pyama_core.processing.extraction.features import list_features
    print(list_features())
    ```

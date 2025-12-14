@@ -21,10 +21,7 @@ PyAMA is a modular Python application for microscopy image analysis. It consists
    :caption: Packages
    :maxdepth: 1
    packages/pyama-core
-   packages/pyama-pro
-   packages/pyama-air
-   packages/pyama-backend
-   packages/pyama-frontend
+   packages/pyama-qt
    packages/pyama-acdc
    packages/pyama-blazor
 

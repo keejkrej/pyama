@@ -8,11 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PyAMA is a modular Python application for microscopy image analysis consisting of three main packages in a UV workspace:
+PyAMA is a modular Python application for microscopy image analysis consisting of the following packages in a UV workspace:
 
 - **pyama-core**: Core processing library with analysis, processing workflows, and I/O utilities
-- **pyama-pro**: Professional GUI with tabs for Processing, Analysis, and Visualization
-- **pyama-air**: Interactive CLI helpers and GUI for configuring PyAMA workflows and merges
+- **pyama-qt**: Qt-based GUI with tabs for Processing, Analysis, and Visualization
+- **pyama-acdc**: Cell-ACDC integration plugin
 
 ## Development Commands
 
@@ -24,8 +24,7 @@ uv sync --all-extras
 
 # Install in development mode
 uv pip install -e pyama-core/
-uv pip install -e pyama-pro/
-uv pip install -e pyama-air/
+uv pip install -e pyama-qt/
 ```
 
 ### Testing
@@ -54,36 +53,10 @@ uv run python tests/test_algo.py
 - Ensure tests can run headless; use Matplotlib without interactive backends and always close figures (`plt.close(fig)`).
 - Add `tests/_plots/` to `.gitignore` so generated images aren’t committed.
 
-#### Frontend Testing Pages
-
-**IMPORTANT**: All test pages in `pyama-frontend/src/app/test/` must display what is being tested with bulleted lists and code tags:
-
-```tsx
-<div className="p-3 bg-muted rounded-lg border">
-  <div className="text-xs font-medium text-muted-foreground mb-2">
-    Testing Endpoints:
-  </div>
-  <div className="space-y-1 text-sm">
-    <div>
-      •{" "}
-      <code className="bg-background px-2 py-1 rounded border">
-        POST /api/v1/processing/merge
-      </code>
-    </div>
-    <div>
-      •{" "}
-      <code className="bg-background px-2 py-1 rounded border">
-        GET /api/v1/processing/features
-      </code>
-    </div>
-  </div>
-</div>
-```
-
 ### Code Quality
 
 ```bash
-# Lint code with ruff (from pyama-pro dev dependencies)
+# Lint code with ruff (from pyama-qt dev dependencies)
 uv run ruff check
 
 # Format code
@@ -97,10 +70,10 @@ uv run ty check
 
 ```bash
 # Launch main GUI application
-uv run pyama-pro
+uv run pyama-qt
 
 # Alternative: run directly
-uv run python pyama-pro/src/pyama_pro/main.py
+uv run python pyama-qt/src/pyama_qt/main.py
 ```
 
 ## Architecture
@@ -138,17 +111,17 @@ The Qt GUI uses a simplified tab-based architecture without strict MVC separatio
 
 **Main Components:**
 
-- **ProcessingTab** (`pyama_pro.processing.main_tab`): Data processing workflows and parameter tuning
-- **AnalysisTab** (`pyama_pro.analysis.main_tab`): Analysis models and fitting (maturation, maturation-blocked, trivial models)
-- **VisualizationTab** (`pyama_pro.visualization.main_tab`): Data visualization and plotting
+- **ProcessingTab** (`pyama_qt.processing.main_tab`): Data processing workflows and parameter tuning
+- **AnalysisTab** (`pyama_qt.analysis.main_tab`): Analysis models and fitting (maturation, maturation-blocked, trivial models)
+- **VisualizationTab** (`pyama_qt.visualization.main_tab`): Data visualization and plotting
 
 **Component Classes:**
 
-- **ParameterTable** (`pyama_pro.components.parameter_table`): Table-based parameter editing widget (renamed from ParameterPanel)
-- **ParameterPanel** (`pyama_pro.analysis.parameter`): Parameter visualization and analysis widget
-- **QualityPanel** (`pyama_pro.analysis.quality`): Fitting quality inspection with FOV-based trace pagination and quality statistics
+- **ParameterTable** (`pyama_qt.components.parameter_table`): Table-based parameter editing widget (renamed from ParameterPanel)
+- **ParameterPanel** (`pyama_qt.analysis.parameter`): Parameter visualization and analysis widget
+- **QualityPanel** (`pyama_qt.analysis.quality`): Fitting quality inspection with FOV-based trace pagination and quality statistics
 
-**Background Workers:** Long-running tasks (fitting, ND2 loading) use QObject workers in separate threads via `pyama_pro.utils.threading`
+**Background Workers:** Long-running tasks (fitting, ND2 loading) use QObject workers in separate threads via `pyama_qt.utils.threading`
 
 ### Qt Signal/Slot Guidelines
 
@@ -279,7 +252,7 @@ def _on_ui_widget_changed(self) -> None:
 
 #### Reference Documentation
 
-For detailed UI architecture information, refer to the component documentation in `pyama_pro/components/` and tab implementations in `pyama_pro/processing/`, `pyama_pro/analysis/`, and `pyama_pro/visualization/`.
+For detailed UI architecture information, refer to the component documentation in `pyama_qt/components/` and tab implementations in `pyama_qt/processing/`, `pyama_qt/analysis/`, and `pyama_qt/visualization/`.
 
 ### Key Data Types
 
@@ -400,4 +373,4 @@ fov,cell,frame,good,position_x,position_y,intensity_total_ch_1,area_ch_0
 - Test workflow available in `tests/test_workflow.py` for CLI testing
 - Typing style: prefer built-in generics (dict, list, tuple) and union types using '|' over typing.Dict, typing.List, typing.Tuple, typing.Union
 - **Import organization**: All import statements must be at the top of the file - no scattered imports within functions
-- **Logging in pyama-pro**: `logger.info` messages must communicate user-facing progress with actionable context (paths, counts, selected options), while `logger.debug` should capture developer diagnostics (IDs, parameter values, ranges) rather than generic text.
+- **Logging in pyama-qt**: `logger.info` messages must communicate user-facing progress with actionable context (paths, counts, selected options), while `logger.debug` should capture developer diagnostics (IDs, parameter values, ranges) rather than generic text.

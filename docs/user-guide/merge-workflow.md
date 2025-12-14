@@ -273,20 +273,6 @@ experiment_2024_01/
 2. Delete incorrect merged files
 3. Run merge with updated YAML
 
-## Command Line Alternative
-
-For batch processing or automation:
-
-```bash
-# Using pyama-air CLI
-pyama-air cli merge
-```
-
-Prompts for:
-- Sample definitions (same format as GUI)
-- Input directory path
-- Output directory path
-
 ## Next Steps
 
 - Load merged CSVs in Analysis tab for fitting
