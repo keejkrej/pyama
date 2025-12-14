@@ -1,6 +1,0 @@
-{
-  "hooks": {
-    "pre-commit": "bun lint && bun prettier --write .",
-    "pre-push": "bun run build"
-  }
-}

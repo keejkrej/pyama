@@ -1,7 +1,6 @@
 """Tests for area feature extraction."""
 
 import numpy as np
-import pytest
 
 from pyama_core.processing.extraction.features.phase_contrast.area import extract_area
 from pyama_core.types.processing import ExtractionContext

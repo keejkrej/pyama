@@ -24,7 +24,7 @@ cd pyama
 uv sync --all-extras
 
 # Launch the GUI
-uv run pyama-pro
+uv run pyama-qt
 ```
 
 ## 📦 Packages
@@ -32,10 +32,7 @@ uv run pyama-pro
 PyAMA consists of the following packages:
 
 - **pyama-core**: Core processing library with analysis workflows
-- **pyama-pro**: Qt-based GUI for comprehensive analysis
-- **pyama-air**: CLI and GUI wizards for quick workflow configuration
-- **pyama-backend**: FastAPI REST API server
-- **pyama-frontend**: Next.js web application interface
+- **pyama-qt**: Qt-based GUI for comprehensive analysis
 - **pyama-acdc**: Cell-ACDC integration plugin
 - **pyama-blazor**: .NET MAUI Blazor Hybrid desktop app (in development)
 
@@ -53,7 +50,6 @@ PyAMA consists of the following packages:
 - Python 3.11 or later
 - UV package manager (recommended) or pip
 - Qt6 for GUI applications
-- Node.js 18+ for web frontend
 
 ## 📖 Learn More
 

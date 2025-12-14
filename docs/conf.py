@@ -1,7 +1,5 @@
 """Sphinx configuration for PyAMA documentation."""
 
-import os
-import sys
 
 # -- Project information -----------------------------------------------------
 project = 'PyAMA'

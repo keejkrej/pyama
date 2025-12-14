@@ -134,31 +134,31 @@ def test_merge_functionality():
             print(f"   ✓ Phase contrast output: {pc_output.name}")
             pc_df = pd.read_csv(pc_output, comment="#")
             print(f"     Columns: {list(pc_df.columns)}")
-            print(f"     Expected: ['time', 'fov', 'cell', 'value']")
+            print("     Expected: ['time', 'fov', 'cell', 'value']")
             print(f"     Data:\n{pc_df.to_string()}")
 
             expected_columns = ["time", "fov", "cell", "value"]
             if list(pc_df.columns) == expected_columns:
                 print("     ✓ Column format correct (tidy format)")
             else:
-                print(f"     ❌ Column format incorrect")
+                print("     ❌ Column format incorrect")
         else:
-            print(f"   ❌ Phase contrast output missing!")
+            print("   ❌ Phase contrast output missing!")
 
         if fl_output.exists():
             print(f"\n   ✓ Fluorescence output: {fl_output.name}")
             fl_df = pd.read_csv(fl_output, comment="#")
             print(f"     Columns: {list(fl_df.columns)}")
-            print(f"     Expected: ['time', 'fov', 'cell', 'value']")
+            print("     Expected: ['time', 'fov', 'cell', 'value']")
             print(f"     Data:\n{fl_df.to_string()}")
 
             expected_columns = ["time", "fov", "cell", "value"]
             if list(fl_df.columns) == expected_columns:
                 print("     ✓ Column format correct (tidy format)")
             else:
-                print(f"     ❌ Column format incorrect")
+                print("     ❌ Column format incorrect")
         else:
-            print(f"\n   ❌ Fluorescence output missing!")
+            print("\n   ❌ Fluorescence output missing!")
 
         print("\n✓ Merge functionality tests completed\n")
 

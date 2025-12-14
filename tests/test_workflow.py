@@ -77,7 +77,7 @@ def create_processing_context(microscopy_path, output_dir, metadata):
         params={"background_weight": 0.0},
     )
     
-    print(f"\n✓ Context created:")
+    print("\n✓ Context created:")
     print(f"   Phase contrast: channel {pc_selection.channel}, "
           f"features {pc_selection.features}")
     print(f"   Fluorescence channels: {[fl.channel for fl in fl_selections]}")
@@ -108,12 +108,12 @@ def run_workflow(context, metadata, fov_start=0, fov_end=None, batch_size=2, n_w
     if fov_end is None:
         fov_end = min(1, metadata.n_fovs - 1)
     
-    print(f"Configuration:")
+    print("Configuration:")
     print(f"   FOV range: {fov_start} to {fov_end}")
     print(f"   Batch size: {batch_size}")
     print(f"   Workers: {n_workers}")
-    print(f"\nStarting workflow execution...")
-    print(f"   (This may take several minutes depending on data size)")
+    print("\nStarting workflow execution...")
+    print("   (This may take several minutes depending on data size)")
     
     try:
         success = run_complete_workflow(
@@ -288,7 +288,7 @@ def main():
     
     try:
         img, metadata = load_microscopy_file(args.nd2_path)
-        print(f"✓ Loaded successfully")
+        print("✓ Loaded successfully")
         print(f"   Channels: {metadata.n_channels}")
         print(f"   Channel names: {metadata.channel_names}")
         print(f"   Timepoints: {metadata.n_frames}")

@@ -2,11 +2,11 @@
 
 This guide gets you started with PyAMA for basic microscopy image analysis.
 
-## 1. Launch PyAMA-Pro
+## 1. Launch PyAMA-Qt
 
 ```bash
 # From the repository root
-uv run pyama-pro
+uv run pyama-qt
 ```
 
 The Qt GUI will open with three main tabs: **Processing**, **Visualization**, and **Analysis**.

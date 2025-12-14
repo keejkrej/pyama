@@ -27,13 +27,12 @@ This guide covers contributing to PyAMA, including coding guidelines, developmen
 3. **Install in Development Mode**
    ```bash
    uv pip install -e pyama-core/
-   uv pip install -e pyama-pro/
-   uv pip install -e pyama-air/
+   uv pip install -e pyama-qt/
    ```
 
 4. **Verify Installation**
    ```bash
-   uv run pyama-pro --version
+   uv run pyama-qt --version
    uv run pytest tests/
    ```
 
@@ -434,33 +433,12 @@ pre-commit install
 - Extensive type hints
 - Performance-critical sections use numpy
 
-### pyama-pro
+### pyama-qt
 
 - Follow Qt signal/slot patterns
 - Handle threading correctly
 - Provide user feedback for all operations
 - Graceful error handling and recovery
-
-### pyama-air
-
-- Simple CLI/GUI interfaces
-- Focus on usability
-- Clear error messages
-- Progress indicators
-
-### pyama-backend
-
-- RESTful API design
-- Comprehensive error codes
-- Type safety with Pydantic
-- Async operations for long tasks
-
-### pyama-frontend
-
-- TypeScript for type safety
-- Responsive design
-- Error boundaries
-- Loading states
 
 ## Performance Considerations
 
