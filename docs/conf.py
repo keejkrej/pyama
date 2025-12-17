@@ -2,7 +2,7 @@
 
 # -- Project information -----------------------------------------------------
 project = "PyAMA"
-copyright = "2024, PyAMA Development Team"
+copyright = "2024-2025, PyAMA Development Team"
 author = "PyAMA Development Team"
 release = ""
 version = ""

@@ -1,5 +1,5 @@
 export async function GET() {
-  try:
+  try {
     const ollamaUrl = 'http://localhost:11434/api/tags';
     const response = await fetch(ollamaUrl);
     const data = await response.json();
@@ -14,7 +14,7 @@ export async function GET() {
       status: 'error',
       message: error?.message || 'Failed to connect to Ollama',
       error: error?.toString(),
-      error: error?.name || typeof error
+      errorType: error?.name || typeof error
     });
   }
 }
