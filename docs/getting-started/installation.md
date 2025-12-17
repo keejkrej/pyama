@@ -10,7 +10,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/pyama.git
+git clone https://github.com/SoftmatterLMU-RaedlerGroup/pyama.git
 cd pyama
 
 # Install all dependencies including dev tools
@@ -25,7 +25,7 @@ uv pip install -e pyama-qt/
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/pyama.git
+git clone https://github.com/SoftmatterLMU-RaedlerGroup/pyama.git
 cd pyama
 
 # Create and activate virtual environment
@@ -75,8 +75,4 @@ PyAMA uses PySide6. On some systems, you may need to install Qt system packages:
 - **macOS**: Usually works with Homebrew Python
 - **Windows**: Usually works out of the box
 
-### ND2 File Support
-ND2 file reading requires the `nd2` package, which is included in the dependencies. If you encounter issues, ensure you have the latest version:
-```bash
-uv pip install --upgrade nd2
-```
+

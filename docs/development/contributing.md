@@ -15,7 +15,7 @@ This guide covers contributing to PyAMA, including coding guidelines, developmen
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/your-org/pyama.git
+   git clone https://github.com/SoftmatterLMU-RaedlerGroup/pyama.git
    cd pyama
    ```
 
@@ -532,7 +532,7 @@ uv publish
 ### Resources
 
 - **Documentation**: Full reference at https://pyama.readthedocs.io
-- **Issues**: Report bugs at https://github.com/your-org/pyama/issues
+- **Issues**: Report bugs at https://github.com/SoftmatterLMU-RaedlerGroup/pyama/issues
 - **Discussions**: Feature requests and questions
 - **Discord**: Real-time chat (if available)
 
