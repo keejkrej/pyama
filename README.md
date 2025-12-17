@@ -17,7 +17,7 @@ The documentation includes:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/pyama.git
+git clone https://github.com/SoftmatterLMU-RaedlerGroup/pyama.git
 cd pyama
 
 # Install all dependencies
