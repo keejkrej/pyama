@@ -75,8 +75,4 @@ PyAMA uses PySide6. On some systems, you may need to install Qt system packages:
 - **macOS**: Usually works with Homebrew Python
 - **Windows**: Usually works out of the box
 
-### ND2 File Support
-ND2 file reading requires the `nd2` package, which is included in the dependencies. If you encounter issues, ensure you have the latest version:
-```bash
-uv pip install --upgrade nd2
-```
+
