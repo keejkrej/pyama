@@ -100,6 +100,7 @@ class StatusBar(QStatusBar):
         """Clear status and show ready state."""
         self._status_label.setText("Ready")
 
+
 # =============================================================================
 # MAIN WINDOW CLASS
 # =============================================================================
@@ -140,7 +141,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     def _setup_window(self) -> None:
         """Configure basic window properties."""
-        self.setWindowTitle("PyAMA-Pro")
+        self.setWindowTitle("PyAMA-Qt")
         self.resize(1600, 800)
 
     # ------------------------------------------------------------------------
@@ -353,9 +354,7 @@ class MainWindow(QMainWindow):
             try:
                 extractor = getattr(module, f"extract_{plugin_name}")
                 register_plugin_feature(plugin_name, extractor, feature_type)
-                logger.info(
-                    f"Reloaded plugin feature: {plugin_name} ({feature_type})"
-                )
+                logger.info(f"Reloaded plugin feature: {plugin_name} ({feature_type})")
             except Exception as e:
                 logger.warning(f"Failed to reload plugin {plugin_name}: {e}")
 

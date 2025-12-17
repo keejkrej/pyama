@@ -1,6 +1,6 @@
 # PyAMA-Core
 
-PyAMA-Core is the core processing library that provides the underlying algorithms, data models, and utilities for microscopy image analysis. It's designed to be imported and used by higher-level applications like PyAMA-Pro and PyAMA-Air.
+PyAMA-Core is the core processing library that provides the underlying algorithms, data models, and utilities for microscopy image analysis. It's designed to be imported and used by higher-level applications like PyAMA-Qt and PyAMA-Air.
 
 ## Installation
 
@@ -332,5 +332,5 @@ PyAMA-Core is designed to be:
 
 For applications built on top of PyAMA-Core:
 
-- **PyAMA-Pro**: Full-featured Qt GUI with comprehensive visualization and analysis tools
+- **PyAMA-Qt**: Full-featured Qt GUI with comprehensive visualization and analysis tools
 - **PyAMA-Air**: Guided workflow wizards (both CLI and GUI) for quick configuration and execution

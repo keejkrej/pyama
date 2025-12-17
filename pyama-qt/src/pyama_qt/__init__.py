@@ -1,5 +1,5 @@
 """
-PyAMA-Pro: Professional PySide6-based image processing tool for microscopy data
+PyAMA-Qt: Professional PySide6-based image processing tool for microscopy data
 
 Complete suite for microscopy analysis:
 - Processing: ND2 → Extract → Binarize → Correct → Track → CSV

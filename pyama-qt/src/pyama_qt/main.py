@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Application entry-point wiring together the PyAMA-Pro consolidated widgets."""
+"""Application entry-point wiring together the PyAMA-Qt consolidated widgets."""
 
 # =============================================================================
 # IMPORTS
@@ -34,7 +34,7 @@ def main() -> None:
     # COMMAND LINE ARGUMENTS
     # ------------------------------------------------------------------------
     parser = argparse.ArgumentParser(
-        description="PyAMA-Pro microscopy analysis application"
+        description="PyAMA-Qt microscopy analysis application"
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
@@ -60,7 +60,7 @@ def main() -> None:
 
     logger = logging.getLogger(__name__)
     logger.info(
-        "Starting PyAMA-Pro (level=%s, debug=%s)",
+        "Starting PyAMA-Qt (level=%s, debug=%s)",
         logging.getLevelName(log_level),
         args.debug,
     )
@@ -174,7 +174,7 @@ def main() -> None:
     # QT APPLICATION SETUP
     # ------------------------------------------------------------------------
     app = QApplication(sys.argv)
-    app.setApplicationName("PyAMA-Pro")
+    app.setApplicationName("PyAMA-Qt")
     app.setQuitOnLastWindowClosed(True)
 
     # ------------------------------------------------------------------------

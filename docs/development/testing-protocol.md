@@ -144,7 +144,7 @@ From `AGENTS.md` protocol rules:
    Path("test_output").mkdir(exist_ok=True)
    ```
 
-## PyAMA-Pro GUI Testing Protocol
+## PyAMA-Qt GUI Testing Protocol
 
 The complete GUI testing protocol lives in `tests/PROTOCOL.md`. It includes:
 
