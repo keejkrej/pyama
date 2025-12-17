@@ -522,7 +522,7 @@ Each package can be published independently:
 cd pyama-core
 uv publish
 
-cd pyama-pro
+cd pyama-qt
 uv publish
 # etc.
 ```

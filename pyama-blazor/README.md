@@ -1,6 +1,6 @@
 # PyAMA-Blazor
 
-A .NET MAUI Blazor Hybrid desktop application for microscopy image analysis, designed as a replacement for PyAMA-Pro (Qt/Python).
+A .NET MAUI Blazor Hybrid desktop application for microscopy image analysis, designed as a replacement for PyAMA-Qt (Qt/Python).
 
 ## Architecture
 

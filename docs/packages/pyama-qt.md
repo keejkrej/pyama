@@ -21,7 +21,7 @@ uv run python pyama-qt/src/pyama_qt/main.py
 
 ## Architecture
 
-PyAMA-Pro uses a simplified tab-based architecture without strict MVC separation:
+PyAMA-Qt uses a simplified tab-based architecture without strict MVC separation:
 
 ### Main Components
 
@@ -70,7 +70,7 @@ ND2/CZI Files → Processing → Traces (CSV) → Visualization → QC → Analy
 
 ### 1. Process Your Data
 
-1. Launch PyAMA-Pro
+1. Launch PyAMA-Qt
 2. Click **Browse** to select your ND2 file
 3. Configure phase contrast and fluorescence channels
 4. Select features to extract
@@ -147,7 +147,7 @@ Long-running tasks use QObject workers in separate threads:
 
 ### Signal/Slot Architecture
 
-PyAMA-Pro uses Qt's signal-slot mechanism:
+PyAMA-Qt uses Qt's signal-slot mechanism:
 - Semantic signals for cross-tab communication
 - `operation_started()` / `operation_finished(success, message)` pattern
 - Worker threads emit data signals converted to UI updates

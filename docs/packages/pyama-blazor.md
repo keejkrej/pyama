@@ -1,6 +1,6 @@
 # PyAMA-Blazor
 
-PyAMA-Blazor is a .NET MAUI Blazor Hybrid desktop application that provides a modern cross-platform UI for microscopy image analysis. It serves as a next-generation replacement for PyAMA-Pro (Qt/Python), leveraging Python.NET to directly interop with pyama-core for business logic.
+PyAMA-Blazor is a .NET MAUI Blazor Hybrid desktop application that provides a modern cross-platform UI for microscopy image analysis. It serves as a next-generation replacement for PyAMA-Qt (Qt/Python), leveraging Python.NET to directly interop with pyama-core for business logic.
 
 ## Technology Stack
 

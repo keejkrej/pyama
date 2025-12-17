@@ -1,0 +1,17 @@
+[project]
+name = "pyama-fastapi"
+version = "0.1.0"
+description = "FastAPI backend for PyAMA chat interface"
+authors = [{ name = "PyAMA Team" }]
+requires-python = ">=3.11"
+dependencies = [
+    "pyama-core>=0.1.0",
+    "fastapi",
+    "uvicorn",
+]
+
+[project.scripts]
+pyama-fastapi = "pyama_fastapi.main:run"
+
+[tool.uv]
+package = true

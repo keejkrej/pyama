@@ -210,7 +210,7 @@ def _on_worker_finished(self, success: bool, data: object) -> None:
 
 ### One-Way UI→Model Binding Architecture
 
-**IMPORTANT**: PyAMA-Pro uses strict one-way binding from UI to model only. This prevents circular dependencies and makes data flow predictable.
+**IMPORTANT**: PyAMA-Qt uses strict one-way binding from UI to model only. This prevents circular dependencies and makes data flow predictable.
 
 #### Requirements
 

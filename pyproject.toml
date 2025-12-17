@@ -3,6 +3,7 @@ members = [
     "pyama-core",
     "pyama-qt",
     "pyama-acdc",
+    "pyama-fastapi",
 ]
 
 [tool.uv.sources]

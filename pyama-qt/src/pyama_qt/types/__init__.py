@@ -1,4 +1,4 @@
-"""Type definitions for pyama-pro."""
+"""Type definitions for pyama-qt."""
 
 from pyama_qt.types.analysis import FittingRequest
 from pyama_qt.types.visualization import FeatureData, PositionData
