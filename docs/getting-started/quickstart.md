@@ -23,7 +23,10 @@ The Qt GUI will open with three main tabs: **Processing**, **Visualization**, an
 
 1. **Phase Contrast**: 
    - Select the phase contrast channel from the dropdown
-   - Multi-select features (Ctrl+Click) like `area`, `aspect_ratio`
+   - Multi-select features from the list using:
+     - **Ctrl+Click** (or Cmd+Click on Mac) to select individual items
+     - **Shift+Click** to select a range of items
+     - Common features: `area`, `aspect_ratio`
 
 2. **Fluorescence** (if applicable):
    - Select a fluorescence channel
@@ -43,7 +46,7 @@ Click **Start Complete Workflow**. Progress will be shown in the status bar.
 
 1. Switch to the **Visualization** tab
 2. Click **Load Folder** and select your processing output directory
-3. Select FOV number and channels (e.g., `pc_xxx`, `seg_labeled_xxx`, `fl_background_xxx`)
+3. Select FOV number and channels (e.g., `pc_ch_0`, `seg_labeled_ch_0`, `fl_background_ch_0`)
 4. Click **Start Visualization**
 5. Navigate frames using the navigation buttons
 6. Inspect traces by clicking trace IDs in the list
@@ -67,10 +70,10 @@ If you processed multiple FOVs:
 1. Switch to the **Analysis** tab
 2. Click **Load CSV** and select your merged traces file
 3. Select a model (e.g., `maturation`)
-4. Adjust parameters if needed
+4. Adjust parameters if needed (e.g., maturation rate, degradation rate, translation rate)
 5. Click **Start Fitting**
 6. Review results in the quality and parameter panels
-7. Save plots using **Save All Plots**
+7. Save plots using **Save Scatter Plot**
 
 ## Common Workflows
 
