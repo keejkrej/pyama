@@ -5,6 +5,7 @@ __pycache__/
 
 # Test artifacts
 /tests/_plots/
+/tests/_fake_samples/
 *_plots/
 
 # C extensions

@@ -97,13 +97,21 @@ class DataPanel(QWidget):
     # ------------------------------------------------------------------------
     # INITIALIZATION
     # ------------------------------------------------------------------------
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        show_load_buttons: bool = True,
+        **kwargs,
+    ) -> None:
         """Initialize the data panel.
 
         Args:
             *args: Positional arguments passed to parent QWidget
+            show_load_buttons: Whether to show CSV load buttons (default: True).
+                Set to False when panel is used in AnalysisWindow with pre-loaded data.
             **kwargs: Keyword arguments passed to parent QWidget
         """
+        self._show_load_buttons = show_load_buttons
         super().__init__(*args, **kwargs)
         self._initialize_state()
         self._build_ui()
@@ -173,36 +181,45 @@ class DataPanel(QWidget):
         group = QGroupBox("Data Visualization")
         group_layout = QVBoxLayout(group)
 
-        # Frame interval input
-        interval_layout = QHBoxLayout()
-        interval_layout.addWidget(QLabel("Frame interval:"))
-        interval_layout.addStretch()
-        self._frame_interval_edit = QLineEdit()
-        self._frame_interval_edit.setText(f"{self._frame_interval:.4f}")
-        self._frame_interval_edit.setFixedWidth(80)
-        self._frame_interval_edit.setToolTip("Time interval between frames (e.g., 0.1667 for 10 min)")
-        interval_layout.addWidget(self._frame_interval_edit)
-        interval_layout.addWidget(QLabel("hours"))
-        group_layout.addLayout(interval_layout)
+        # Frame interval and time mapping controls (only when showing load buttons)
+        if self._show_load_buttons:
+            # Frame interval input
+            interval_layout = QHBoxLayout()
+            interval_layout.addWidget(QLabel("Frame interval:"))
+            interval_layout.addStretch()
+            self._frame_interval_edit = QLineEdit()
+            self._frame_interval_edit.setText(f"{self._frame_interval:.4f}")
+            self._frame_interval_edit.setFixedWidth(80)
+            self._frame_interval_edit.setToolTip(
+                "Time interval between frames (e.g., 0.1667 for 10 min)"
+            )
+            interval_layout.addWidget(self._frame_interval_edit)
+            interval_layout.addWidget(QLabel("hours"))
+            group_layout.addLayout(interval_layout)
 
-        # Time mapping file (for non-equidistant frames)
-        mapping_layout = QHBoxLayout()
-        self._time_mapping_label = QLabel("Time mapping: (none)")
-        mapping_layout.addWidget(self._time_mapping_label)
-        mapping_layout.addStretch()
-        self._load_mapping_button = QPushButton("Load...")
-        self._load_mapping_button.setFixedWidth(60)
-        self._load_mapping_button.setToolTip("Load CSV with frame,time columns for non-equidistant time points")
-        mapping_layout.addWidget(self._load_mapping_button)
-        self._clear_mapping_button = QPushButton("Clear")
-        self._clear_mapping_button.setFixedWidth(50)
-        self._clear_mapping_button.setEnabled(False)
-        mapping_layout.addWidget(self._clear_mapping_button)
-        group_layout.addLayout(mapping_layout)
+            # Time mapping file (for non-equidistant frames)
+            mapping_layout = QHBoxLayout()
+            self._time_mapping_label = QLabel("Time mapping: (none)")
+            mapping_layout.addWidget(self._time_mapping_label)
+            mapping_layout.addStretch()
+            self._load_mapping_button = QPushButton("Load...")
+            self._load_mapping_button.setFixedWidth(60)
+            self._load_mapping_button.setToolTip(
+                "Load CSV with frame,time columns for non-equidistant time points"
+            )
+            mapping_layout.addWidget(self._load_mapping_button)
+            self._clear_mapping_button = QPushButton("Clear")
+            self._clear_mapping_button.setFixedWidth(50)
+            self._clear_mapping_button.setEnabled(False)
+            mapping_layout.addWidget(self._clear_mapping_button)
+            group_layout.addLayout(mapping_layout)
 
-        # Load CSV button
+        # Load CSV button (hidden when using external data loading)
         self._load_button = QPushButton("Load CSV")
-        group_layout.addWidget(self._load_button)
+        if self._show_load_buttons:
+            group_layout.addWidget(self._load_button)
+        else:
+            self._load_button.hide()
 
         # Matplotlib canvas for plotting
         self._canvas = MplCanvas(self)
@@ -237,9 +254,12 @@ class DataPanel(QWidget):
         self._param_panel = ParameterTable()
         layout.addWidget(self._param_panel)
 
-        # Load fitted results button
+        # Load fitted results button (hidden when using external data loading)
         self._load_fitted_results_button = QPushButton("Load Fitted Results")
-        layout.addWidget(self._load_fitted_results_button)
+        if self._show_load_buttons:
+            layout.addWidget(self._load_fitted_results_button)
+        else:
+            self._load_fitted_results_button.hide()
 
         # Start fitting button
         self._start_button = QPushButton("Start Fitting")
@@ -266,8 +286,9 @@ class DataPanel(QWidget):
         self._load_fitted_results_button.clicked.connect(
             self._on_load_fitted_results_clicked
         )
-        self._load_mapping_button.clicked.connect(self._on_load_mapping_clicked)
-        self._clear_mapping_button.clicked.connect(self._on_clear_mapping_clicked)
+        if self._show_load_buttons:
+            self._load_mapping_button.clicked.connect(self._on_load_mapping_clicked)
+            self._clear_mapping_button.clicked.connect(self._on_clear_mapping_clicked)
         self._start_button.clicked.connect(self._on_start_clicked)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
 
@@ -281,6 +302,62 @@ class DataPanel(QWidget):
         self._selected_cell = None
         self.clear_plot()
         self.raw_data_changed.emit(pd.DataFrame())
+
+    def set_data(self, path: Path, df: pd.DataFrame) -> None:
+        """Set data externally (for use with AnalysisWindow).
+
+        This method allows pre-loaded data to be passed in without
+        using the file dialog. Used when opening from ComparisonTab.
+
+        Args:
+            path: Path to the CSV file (for reference/display)
+            df: Pre-loaded DataFrame with MultiIndex (fov, cell)
+        """
+        self._raw_data = df
+        self._raw_csv_path = path
+
+        try:
+            cell_count = len(df.index.unique())
+        except Exception:
+            cell_count = 0
+
+        logger.info(
+            "Data set externally: %s (%d rows, %d cells)",
+            path.name,
+            len(df),
+            cell_count,
+        )
+
+        self._prepare_all_plot()
+        self.raw_data_changed.emit(df)
+        self.data_loading_finished.emit(True, f"Loaded {path.name}")
+
+    def set_fitted_results(self, df: pd.DataFrame) -> None:
+        """Set fitted results externally (for auto-loading).
+
+        This method allows pre-loaded fitted results to be passed in
+        without using the file dialog. Used for auto-loading fitted
+        results when opening from ComparisonTab.
+
+        Args:
+            df: DataFrame containing fitted results
+        """
+        if df is None or df.empty:
+            return
+
+        # Extract model type from CSV and update dropdown
+        if "model_type" in df.columns:
+            model_type = df["model_type"].iloc[0]
+            if pd.notna(model_type) and model_type in self._available_model_names():
+                logger.info("Setting model dropdown to %s (from fitted results)", model_type)
+                self._model_combo.blockSignals(True)
+                self._model_combo.setCurrentText(model_type)
+                self._model_combo.blockSignals(False)
+                self._model_type = model_type
+                self._update_parameter_defaults()
+
+        self.fitted_results_loaded.emit(df)
+        logger.info("Fitted results set externally (%d rows)", len(df))
 
     # ------------------------------------------------------------------------
     # DATA LOADING

@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 
-from pyama_qt.analysis.main_tab import AnalysisTab
+from pyama_qt.analysis.comparison_tab import ComparisonTab
 from pyama_qt.processing.main_tab import ProcessingTab
 from pyama_qt.visualization.main_tab import VisualizationTab
 
@@ -184,13 +184,9 @@ class MainWindow(QMainWindow):
         self.processing_tab.processing_started.connect(self._on_processing_started)
         self.processing_tab.processing_finished.connect(self._on_processing_finished)
 
-        # Connect analysis signals to disable other tabs
-        self.analysis_tab.processing_started.connect(self._on_processing_started)
-        self.analysis_tab.processing_finished.connect(self._on_processing_finished)
-
         # Connect status manager to tabs for simple message display
         self.processing_tab.set_status_manager(self.status_manager)
-        self.analysis_tab.set_status_manager(self.status_manager)
+        self.comparison_tab.set_status_manager(self.status_manager)
         self.visualization_tab.set_status_manager(self.status_manager)
 
         # Connect tab change signal for debugging
@@ -209,7 +205,7 @@ class MainWindow(QMainWindow):
 
         # Instantiate the new, consolidated tab widgets
         self.processing_tab = ProcessingTab(self)
-        self.analysis_tab = AnalysisTab(self)
+        self.comparison_tab = ComparisonTab(self)
         self.visualization_tab = VisualizationTab(self)
 
     @Slot()
@@ -376,6 +372,6 @@ class MainWindow(QMainWindow):
         """Add tabs to window and complete setup."""
         self.tabs.addTab(self.processing_tab, "Processing")
         self.tabs.addTab(self.visualization_tab, "Visualization")
-        self.tabs.addTab(self.analysis_tab, "Analysis")
+        self.tabs.addTab(self.comparison_tab, "Comparison")
 
         self.setCentralWidget(self.tabs)
