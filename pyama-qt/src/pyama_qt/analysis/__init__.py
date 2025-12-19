@@ -10,7 +10,7 @@ performing model fitting, and analyzing parameter distributions.
 # =============================================================================
 
 from pyama_qt.analysis.analysis_window import AnalysisWindow
-from pyama_qt.analysis.comparison_tab import ComparisonTab
+from pyama_qt.analysis.comparison import ComparisonPanel
 from pyama_qt.analysis.data import DataPanel
 from pyama_qt.analysis.main_tab import AnalysisTab
 from pyama_qt.analysis.parameter import ParameterPanel
@@ -19,7 +19,7 @@ from pyama_qt.analysis.quality import QualityPanel
 __all__ = [
     "AnalysisTab",
     "AnalysisWindow",
-    "ComparisonTab",
+    "ComparisonPanel",
     "DataPanel",
     "ParameterPanel",
     "QualityPanel",

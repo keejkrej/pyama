@@ -1,11 +1,9 @@
-"""Comparison tab for loading and comparing multiple sample CSV files.
+"""Comparison panel for loading and comparing multiple sample CSV files.
 
-This module provides the ComparisonTab widget which displays a grid of
-sample thumbnails. Users can load a folder containing CSV files and
-double-click samples to open them in individual analysis windows.
+This module provides the ComparisonPanel widget which contains the controls
+and samples functionality that was previously in AnalysisTab.
 """
 
-import io
 import logging
 from pathlib import Path
 
@@ -21,7 +19,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -29,13 +26,11 @@ from PySide6.QtWidgets import (
 )
 
 from pyama_core.io.analysis_csv import load_analysis_csv
-from pyama_qt.analysis.analysis_window import AnalysisWindow
 from pyama_qt.constants import DEFAULT_DIR
 from pyama_qt.utils import WorkerHandle, start_worker
 
 logger = logging.getLogger(__name__)
 
-MAX_OPEN_WINDOWS = 1
 THUMBNAIL_WIDTH = 200
 THUMBNAIL_HEIGHT = 150
 GRID_COLUMNS = 4
@@ -105,7 +100,11 @@ class SampleCard(QFrame):
 
 
 class ThumbnailWorker(QObject):
-    """Background worker for generating sample thumbnails."""
+    """Background worker for generating sample thumbnails with consistent axes.
+
+    This worker generates thumbnails for all samples using the same x and y 
+    axis limits to make visual comparison easier.
+    """
 
     finished = Signal(bool, object)  # (success, dict[Path, bytes] | str)
 
@@ -126,6 +125,37 @@ class ThumbnailWorker(QObject):
 
             thumbnails: dict[Path, bytes] = {}
 
+            # First pass: find global min/max for consistent axes
+            global_time_min = float('inf')
+            global_time_max = float('-inf')
+            global_value_min = float('inf')
+            global_value_max = float('-inf')
+
+            for csv_path, df in self._samples:
+                try:
+                    time_values = df["time"].values
+                    trace_values = df["value"].values
+                    
+                    if len(time_values) > 0:
+                        global_time_min = min(global_time_min, np.min(time_values))
+                        global_time_max = max(global_time_max, np.max(time_values))
+                    
+                    if len(trace_values) > 0:
+                        global_value_min = min(global_value_min, np.min(trace_values))
+                        global_value_max = max(global_value_max, np.max(trace_values))
+                        
+                except Exception as e:
+                    logger.warning("Failed to scan %s for global limits: %s", csv_path, e)
+
+            # Add small padding to the limits
+            time_padding = (global_time_max - global_time_min) * 0.02 if global_time_max > global_time_min else 1.0
+            value_padding = (global_value_max - global_value_min) * 0.02 if global_value_max > global_value_min else 1.0
+            global_time_min -= time_padding
+            global_time_max += time_padding
+            global_value_min -= value_padding
+            global_value_max += value_padding
+
+            # Second pass: generate thumbnails with consistent limits
             for csv_path, df in self._samples:
                 try:
                     fig, ax = plt.subplots(figsize=(2, 1.5), dpi=100)
@@ -168,6 +198,11 @@ class ThumbnailWorker(QObject):
                         )
                         ax.plot(time_values, mean_values, color="red", linewidth=1.5)
 
+                    # Set consistent limits for all thumbnails
+                    if global_time_max > global_time_min and global_value_max > global_value_min:
+                        ax.set_xlim(global_time_min, global_time_max)
+                        ax.set_ylim(global_value_min, global_value_max)
+
                     ax.set_xticks([])
                     ax.set_yticks([])
                     ax.spines["top"].set_visible(False)
@@ -176,6 +211,7 @@ class ThumbnailWorker(QObject):
                     ax.spines["left"].set_visible(False)
 
                     # Save to bytes
+                    import io
                     buf = io.BytesIO()
                     fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0.02)
                     buf.seek(0)
@@ -193,19 +229,21 @@ class ThumbnailWorker(QObject):
             self.finished.emit(False, str(e))
 
 
-class ComparisonTab(QWidget):
-    """Tab for comparing multiple sample CSV files.
+class ComparisonPanel(QWidget):
+    """Panel for comparing multiple sample CSV files.
 
-    This tab displays a grid of sample thumbnails loaded from a folder.
-    Users can double-click a sample to open it in a standalone analysis window.
+    This panel displays a grid of sample thumbnails loaded from a folder.
+    Users can double-click a sample to emit a signal to open it in an analysis window.
     """
+
+    # Signal emitted when user wants to open AnalysisWindow
+    window_request = Signal(Path, object, object, float, object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._status_manager = None
         self._samples: dict[Path, pd.DataFrame] = {}
         self._sample_cards: dict[Path, SampleCard] = {}
-        self._open_windows: dict[Path, AnalysisWindow] = {}
         self._frame_interval: float = 1 / 6
         self._time_mapping: dict[int, float] | None = None
         self._thumbnail_worker: WorkerHandle | None = None
@@ -279,8 +317,6 @@ class ComparisonTab(QWidget):
 
         layout.addLayout(settings_row)
 
-        
-
         return group
 
     def _connect_signals(self) -> None:
@@ -305,12 +341,7 @@ class ComparisonTab(QWidget):
             self._load_folder(Path(folder_path))
 
     def _clear_all_samples(self) -> None:
-        """Clear all samples and close open windows."""
-        # Close all open windows
-        for window in list(self._open_windows.values()):
-            window.close()
-        self._open_windows.clear()
-
+        """Clear all samples."""
         # Clear samples and cards
         self._samples.clear()
         self._sample_cards.clear()
@@ -325,18 +356,8 @@ class ComparisonTab(QWidget):
 
     def _load_folder(self, folder_path: Path) -> None:
         """Load all CSV files from a folder."""
-        # Check if there are open windows and prompt user
-        if self._open_windows:
-            reply = QMessageBox.question(
-                self,
-                "Clear Existing Samples",
-                "Loading new samples will close all open analysis windows. Continue?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-            self._clear_all_samples()
+        # Clear existing samples
+        self._clear_all_samples()
 
         # Get frame interval
         try:
@@ -481,22 +502,6 @@ class ComparisonTab(QWidget):
     @Slot(Path)
     def _on_sample_double_clicked(self, csv_path: Path) -> None:
         """Handle double-click on a sample card."""
-        # Check if already open
-        if csv_path in self._open_windows:
-            # Bring existing window to front
-            self._open_windows[csv_path].raise_()
-            self._open_windows[csv_path].activateWindow()
-            return
-
-        # Check window limit
-        if len(self._open_windows) >= MAX_OPEN_WINDOWS:
-            QMessageBox.information(
-                self,
-                "Window Limit Reached",
-                "Please close the existing analysis window before opening another.",
-            )
-            return
-
         # Get data
         df = self._samples.get(csv_path)
         if df is None:
@@ -506,25 +511,13 @@ class ComparisonTab(QWidget):
         # Find fitted results if they exist
         fitted_path = self._find_fitted_csv(csv_path)
 
-        # Create and show analysis window
-        window = AnalysisWindow(
-            csv_path, 
-            df, 
+        # Emit signal to request window opening
+        self.window_request.emit(
+            csv_path,
+            df,
             fitted_path,
-            frame_interval=self._frame_interval,
-            time_mapping=self._time_mapping,
-            parent=None
-        )
-        window.window_closed.connect(self._on_window_closed)
-        self._open_windows[csv_path] = window
-        window.show()
-
-        logger.info(
-            "Opened analysis window for %s (fitted=%s, interval=%.4f, mapping=%s)",
-            csv_path.name,
-            fitted_path.name if fitted_path else None,
             self._frame_interval,
-            self._time_mapping is not None,
+            self._time_mapping
         )
 
     def _find_fitted_csv(self, csv_path: Path) -> Path | None:
@@ -534,10 +527,3 @@ class ComparisonTab(QWidget):
         for fitted_file in parent.glob(f"{stem}_fitted_*.csv"):
             return fitted_file
         return None
-
-    @Slot(object)
-    def _on_window_closed(self, csv_path: Path) -> None:
-        """Handle analysis window close event."""
-        if csv_path in self._open_windows:
-            del self._open_windows[csv_path]
-            logger.info("Removed window reference for %s", csv_path.name)

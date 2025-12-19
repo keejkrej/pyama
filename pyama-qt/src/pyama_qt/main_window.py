@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 
-from pyama_qt.analysis.comparison_tab import ComparisonTab
+from pyama_qt.analysis.main_tab import AnalysisTab
 from pyama_qt.processing.main_tab import ProcessingTab
 from pyama_qt.visualization.main_tab import VisualizationTab
 
@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
     def _setup_window(self) -> None:
         """Configure basic window properties."""
         self.setWindowTitle("PyAMA-Qt")
-        self.resize(1600, 800)
+        self.resize(1200, 800)
 
     # ------------------------------------------------------------------------
     # MENU BAR SETUP
@@ -186,7 +186,7 @@ class MainWindow(QMainWindow):
 
         # Connect status manager to tabs for simple message display
         self.processing_tab.set_status_manager(self.status_manager)
-        self.comparison_tab.set_status_manager(self.status_manager)
+        self.analysis_tab.set_status_manager(self.status_manager)
         self.visualization_tab.set_status_manager(self.status_manager)
 
         # Connect tab change signal for debugging
@@ -205,7 +205,7 @@ class MainWindow(QMainWindow):
 
         # Instantiate the new, consolidated tab widgets
         self.processing_tab = ProcessingTab(self)
-        self.comparison_tab = ComparisonTab(self)
+        self.analysis_tab = AnalysisTab(self)
         self.visualization_tab = VisualizationTab(self)
 
     @Slot()
@@ -372,6 +372,6 @@ class MainWindow(QMainWindow):
         """Add tabs to window and complete setup."""
         self.tabs.addTab(self.processing_tab, "Processing")
         self.tabs.addTab(self.visualization_tab, "Visualization")
-        self.tabs.addTab(self.comparison_tab, "Comparison")
+        self.tabs.addTab(self.analysis_tab, "Analysis")
 
         self.setCentralWidget(self.tabs)

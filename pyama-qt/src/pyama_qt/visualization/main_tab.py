@@ -6,9 +6,10 @@
 
 import logging
 
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QHBoxLayout, QWidget
 
-from pyama_qt.visualization.image import ImagePanel
+from pyama_qt.visualization.image import ImageViewerWindow
 from pyama_qt.visualization.load import LoadPanel
 from pyama_qt.visualization.trace import TracePanel
 
@@ -40,6 +41,7 @@ class VisualizationTab(QWidget):
         """
         super().__init__(parent)
         self._status_manager = None
+        self._image_window: ImageViewerWindow | None = None
         self._build_ui()
         self._connect_signals()
 
@@ -60,25 +62,23 @@ class VisualizationTab(QWidget):
     def _build_ui(self) -> None:
         """Create and arrange the UI panels.
 
-        Creates a horizontal layout with three panels:
-        1. Load panel (1/4 width) for project loading and FOV selection
-        2. Image panel (1/2 width) for displaying microscopy images
-        3. Trace panel (1/4 width) for displaying trace data
+        Creates a horizontal layout with two panels:
+        1. Load panel (1/3 width) for project loading and FOV selection
+        2. Trace panel (2/3 width) for displaying trace data
+
+        The image viewer is displayed in a separate popup window.
         """
         layout = QHBoxLayout(self)
 
         # Create panels
         self._load_panel = LoadPanel(self)
-        self._image_panel = ImagePanel(self)
         self._trace_panel = TracePanel(self)
 
         # Arrange panels with appropriate spacing
         layout.addWidget(self._load_panel, 1)
-        layout.addWidget(self._image_panel, 2)
-        layout.addWidget(self._trace_panel, 1)
+        layout.addWidget(self._trace_panel, 2)
 
-        # Note: A central status bar can be added to the main window if needed
-        # and connected via signals from the panels.
+        # Note: Image panel is in a separate popup window (ImageViewerWindow)
 
     # ------------------------------------------------------------------------
     # PANEL CONNECTIONS
@@ -87,37 +87,81 @@ class VisualizationTab(QWidget):
         """Connect all signals between panels.
 
         Establishes the communication pathways between panels:
-        - Load panel -> Image panel: project data and FOV selection
-        - Image panel -> Trace panel: FOV data and cell selection
-        - Trace panel -> Image panel: active trace and position updates
+        - Load panel -> opens ImageViewerWindow popup
+        - ImageViewerWindow -> Trace panel: FOV data and cell selection
+        - Trace panel -> ImageViewerWindow: active trace and position updates
 
         Also connects status signals for centralized status reporting.
         """
-        # Project Panel -> Image Panel
+        # Load Panel -> Visualization Tab (manages popup window)
         self._load_panel.cleanup_requested.connect(self._on_cleanup_requested)
         self._load_panel.visualization_requested.connect(
-            self._image_panel.on_visualization_requested
+            self._on_visualization_requested
         )
-        self._image_panel.loading_state_changed.connect(self._load_panel.set_loading)
-
-        # Image Panel -> Trace Panel
-        self._image_panel.fov_data_loaded.connect(self._trace_panel.on_fov_data_loaded)
-
-        # Trace Panel -> Image Panel
-        self._trace_panel.active_trace_changed.connect(
-            self._image_panel.on_active_trace_changed
-        )
-        self._image_panel.cell_selected.connect(self._trace_panel.on_cell_selected)
-        self._image_panel.trace_quality_toggled.connect(
-            self._trace_panel.on_trace_quality_toggled
-        )
-        self._trace_panel.positions_updated.connect(
-            self._image_panel.on_trace_positions_updated
-        )
-        self._image_panel.frame_changed.connect(self._trace_panel.on_frame_changed)
 
         # Status signals
         self._connect_status_signals()
+
+    def _connect_image_window_signals(self) -> None:
+        """Connect signals between ImageViewerWindow and TracePanel.
+
+        Called when the image window is created to establish signal routing.
+        """
+        if self._image_window is None:
+            return
+
+        # ImageViewerWindow -> LoadPanel (loading state)
+        self._image_window.loading_state_changed.connect(self._load_panel.set_loading)
+
+        # ImageViewerWindow -> TracePanel
+        self._image_window.fov_data_loaded.connect(self._trace_panel.on_fov_data_loaded)
+        self._image_window.cell_selected.connect(self._trace_panel.on_cell_selected)
+        self._image_window.trace_quality_toggled.connect(
+            self._trace_panel.on_trace_quality_toggled
+        )
+        self._image_window.frame_changed.connect(self._trace_panel.on_frame_changed)
+
+        # TracePanel -> ImageViewerWindow
+        self._trace_panel.active_trace_changed.connect(
+            self._image_window.on_active_trace_changed
+        )
+        self._trace_panel.positions_updated.connect(
+            self._image_window.on_trace_positions_updated
+        )
+
+        # Window lifecycle
+        self._image_window.window_closed.connect(self._on_image_window_closed)
+
+    @Slot(dict, int, list)
+    def _on_visualization_requested(
+        self, project_data: dict, fov_id: int, selected_channels: list[str]
+    ) -> None:
+        """Handle visualization request by opening/reusing popup window.
+
+        Args:
+            project_data: Dictionary containing project information
+            fov_id: ID of the FOV to visualize
+            selected_channels: List of channel names to load
+        """
+        # Create window if not exists or was closed
+        if self._image_window is None:
+            self._image_window = ImageViewerWindow(self)
+            self._connect_image_window_signals()
+
+        # Show and raise the window
+        self._image_window.show()
+        self._image_window.raise_()
+        self._image_window.activateWindow()
+
+        # Request visualization
+        self._image_window.on_visualization_requested(
+            project_data, fov_id, selected_channels
+        )
+
+    @Slot()
+    def _on_image_window_closed(self) -> None:
+        """Handle image window closed event."""
+        self._image_window = None
 
     def _connect_status_signals(self) -> None:
         """Connect visualization-related status signals.
@@ -151,8 +195,9 @@ class VisualizationTab(QWidget):
             "UI Event: Cleanup requested - clearing all panels and cached overlays"
         )
 
-        # Clear image panel (plots, cache, overlays)
-        self._image_panel.clear_all()
+        # Clear image window if it exists (plots, cache, overlays)
+        if self._image_window is not None:
+            self._image_window._image_panel.clear_all()
 
         # Clear trace panel (traces, plots, data)
         self._trace_panel.clear()
@@ -229,6 +274,4 @@ class VisualizationTab(QWidget):
         self._load_panel.error_message.connect(
             lambda msg: main_window_status_bar.showMessage(f"Error: {msg}", 5000)
         )
-        self._image_panel.error_message.connect(
-            lambda msg: main_window_status_bar.showMessage(f"Error: {msg}", 5000)
-        )
+        # Note: ImageViewerWindow has its own status bar, so no connection needed here

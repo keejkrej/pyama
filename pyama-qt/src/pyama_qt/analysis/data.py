@@ -307,7 +307,7 @@ class DataPanel(QWidget):
         """Set data externally (for use with AnalysisWindow).
 
         This method allows pre-loaded data to be passed in without
-        using the file dialog. Used when opening from ComparisonTab.
+        using the file dialog. Used when opening from AnalysisTab.
 
         Args:
             path: Path to the CSV file (for reference/display)
@@ -337,7 +337,7 @@ class DataPanel(QWidget):
 
         This method allows pre-loaded fitted results to be passed in
         without using the file dialog. Used for auto-loading fitted
-        results when opening from ComparisonTab.
+        results when opening from AnalysisTab.
 
         Args:
             df: DataFrame containing fitted results

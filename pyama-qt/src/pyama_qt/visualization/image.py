@@ -14,7 +14,9 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QMainWindow,
     QPushButton,
+    QStatusBar,
     QVBoxLayout,
     QWidget,
 )
@@ -27,6 +29,134 @@ from pyama_core.visualization import VisualizationCache
 from pyama_qt.components.mpl_canvas import MplCanvas
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# IMAGE VIEWER WINDOW
+# =============================================================================
+
+
+class ImageViewerWindow(QMainWindow):
+    """Standalone window for microscopy image visualization.
+
+    This window provides an independent viewer for microscopy images,
+    opened from the visualization tab when the user clicks "Start Visualization".
+    It embeds the ImagePanel and provides its own status bar.
+    """
+
+    # ------------------------------------------------------------------------
+    # SIGNALS
+    # ------------------------------------------------------------------------
+    window_closed = Signal()  # Emitted when window is closed
+    fov_data_loaded = Signal(dict, dict)  # Forwarded from ImagePanel
+    cell_selected = Signal(str)  # Forwarded from ImagePanel
+    trace_quality_toggled = Signal(str)  # Forwarded from ImagePanel
+    frame_changed = Signal(int)  # Forwarded from ImagePanel
+    loading_state_changed = Signal(bool)  # Forwarded from ImagePanel
+
+    # ------------------------------------------------------------------------
+    # INITIALIZATION
+    # ------------------------------------------------------------------------
+    def __init__(self, parent: QWidget | None = None) -> None:
+        """Initialize the image viewer window.
+
+        Args:
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self._build_ui()
+        self._connect_signals()
+
+    def _build_ui(self) -> None:
+        """Build the window UI."""
+        self.setWindowTitle("Image Viewer")
+        self.resize(800, 700)
+
+        # Embed ImagePanel as central widget
+        self._image_panel = ImagePanel(self)
+        self.setCentralWidget(self._image_panel)
+
+        # Create status bar
+        self._status_bar = QStatusBar(self)
+        self._status_label = QLabel("Ready")
+        self._status_bar.addWidget(self._status_label)
+        self.setStatusBar(self._status_bar)
+
+    def _connect_signals(self) -> None:
+        """Connect ImagePanel signals to window signals for forwarding."""
+        self._image_panel.fov_data_loaded.connect(self.fov_data_loaded)
+        self._image_panel.cell_selected.connect(self.cell_selected)
+        self._image_panel.trace_quality_toggled.connect(self.trace_quality_toggled)
+        self._image_panel.frame_changed.connect(self.frame_changed)
+        self._image_panel.loading_state_changed.connect(self._on_loading_state_changed)
+        self._image_panel.error_message.connect(self._on_error_message)
+
+    # ------------------------------------------------------------------------
+    # PUBLIC API
+    # ------------------------------------------------------------------------
+    def on_visualization_requested(
+        self, project_data: dict, fov_id: int, selected_channels: list[str]
+    ) -> None:
+        """Handle visualization request by delegating to ImagePanel.
+
+        Args:
+            project_data: Dictionary containing project information
+            fov_id: ID of the FOV to visualize
+            selected_channels: List of channel names to load
+        """
+        self._image_panel.on_visualization_requested(
+            project_data, fov_id, selected_channels
+        )
+
+    def on_active_trace_changed(self, trace_id: str | None) -> None:
+        """Handle active trace changes from trace panel.
+
+        Args:
+            trace_id: ID of the newly active trace, or None if no trace is active
+        """
+        self._image_panel.on_active_trace_changed(trace_id)
+
+    def on_trace_positions_updated(self, overlays: dict) -> None:
+        """Handle trace position overlay updates from trace panel.
+
+        Args:
+            overlays: Dict mapping overlay IDs to overlay properties
+        """
+        self._image_panel.on_trace_positions_updated(overlays)
+
+    # ------------------------------------------------------------------------
+    # STATUS HANDLING
+    # ------------------------------------------------------------------------
+    @Slot(bool)
+    def _on_loading_state_changed(self, is_loading: bool) -> None:
+        """Handle loading state changes from ImagePanel.
+
+        Args:
+            is_loading: Whether loading is in progress
+        """
+        self.loading_state_changed.emit(is_loading)
+        if is_loading:
+            self._status_label.setText("Loading...")
+        else:
+            self._status_label.setText("Ready")
+
+    @Slot(str)
+    def _on_error_message(self, message: str) -> None:
+        """Handle error messages from ImagePanel.
+
+        Args:
+            message: Error message to display
+        """
+        self._status_label.setText(f"Error: {message}")
+
+    # ------------------------------------------------------------------------
+    # WINDOW EVENTS
+    # ------------------------------------------------------------------------
+    def closeEvent(self, event) -> None:
+        """Handle window close event."""
+        logger.info("Image viewer window closed")
+        self.window_closed.emit()
+        super().closeEvent(event)
 
 
 # =============================================================================

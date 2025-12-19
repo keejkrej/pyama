@@ -63,7 +63,7 @@ class AnalysisWindow(QMainWindow):
 
     This window provides the same functionality as the AnalysisTab but
     as an independent window with its own status bar. It is opened from
-    the ComparisonTab when the user double-clicks a sample card.
+    the AnalysisTab when the user double-clicks a sample card.
 
     The window receives pre-loaded data and optionally pre-loaded fitted
     results, eliminating the need for load buttons.

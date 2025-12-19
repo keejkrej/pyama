@@ -139,9 +139,9 @@ class LoadPanel(QWidget):
         self._channels_list.setVisible(False)
         selection_layout.addWidget(self._channels_list)
 
-        # Visualization button
+        # Visualization button (always visible, disabled until data loaded)
         self._visualize_button = QPushButton("Start Visualization")
-        self._visualize_button.setVisible(False)
+        self._visualize_button.setEnabled(False)
         selection_layout.addWidget(self._visualize_button)
 
         # Progress bar
@@ -380,7 +380,7 @@ class LoadPanel(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, channel)
             self._channels_list.addItem(item)
         self._channels_list.setVisible(bool(channels))
-        self._visualize_button.setVisible(bool(channels))
+        self._visualize_button.setEnabled(bool(channels))
 
         # Update FOV range
         fov_keys = list(project_data.get("fov_data", {}).keys())
