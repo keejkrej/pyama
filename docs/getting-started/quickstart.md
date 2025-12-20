@@ -23,7 +23,7 @@ The Qt GUI will open with three main tabs: **Processing**, **Visualization**, an
 
 1. **Phase Contrast**: 
    - Select the phase contrast channel from the dropdown
-   - Click on features to select/desect them (multiple selection enabled)
+   - Click on features to select/deselect them (multiple selection enabled)
    - Common features: `area`, `aspect_ratio`
 
 2. **Fluorescence** (if applicable):
