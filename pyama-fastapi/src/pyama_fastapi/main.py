@@ -7,21 +7,25 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from .database import TaskDatabase
 from .models import TaskInfo, TaskResponse, TaskSubmit
 from .task_manager import TaskManager
 
 logger = logging.getLogger(__name__)
 
-# Global task manager instance
-task_manager = TaskManager()
+# Global instances
+db = TaskDatabase("tasks.db")
+task_manager = TaskManager(db)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
     logger.info("Starting pyama-fastapi server")
+    await db.initialize()
     yield
     logger.info("Shutting down pyama-fastapi server")
+    await db.close()
 
 
 app = FastAPI(
@@ -57,7 +61,10 @@ async def submit_task(task_submit: TaskSubmit) -> TaskResponse:
     """
     try:
         task_id, message = await task_manager.submit_task(
-            task_submit.task_type, task_submit.parameters
+            task_submit.task_type,
+            task_submit.parameters,
+            task_submit.input_file_path,
+            task_submit.output_file_path,
         )
         task_info = await task_manager.get_task_info(task_id)
         return TaskResponse(
@@ -98,7 +105,7 @@ async def cancel_task(task_id: str) -> TaskResponse:
 @app.get("/tasks", response_model=list[TaskInfo])
 async def list_tasks() -> list[TaskInfo]:
     """List all tasks in history."""
-    return list(task_manager.task_history.values())
+    return await task_manager.list_all_tasks()
 
 
 def run() -> None:

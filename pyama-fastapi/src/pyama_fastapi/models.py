@@ -23,6 +23,7 @@ class TaskType(str, Enum):
     DUMMY_SHORT = "dummy_short"  # Completes in ~5 seconds
     DUMMY_LONG = "dummy_long"  # Completes in ~30 seconds
     DUMMY_VERY_LONG = "dummy_very_long"  # Completes in ~2 minutes
+    TOKENIZE = "tokenize"  # Tokenize text file (~1 minute)
     # Future task types can be added here
     # ANALYSIS = "analysis"
     # TRAINING = "training"
@@ -33,6 +34,8 @@ class TaskSubmit(BaseModel):
 
     task_type: TaskType
     parameters: dict[str, Any] = Field(default_factory=dict)
+    input_file_path: Optional[str] = None
+    output_file_path: Optional[str] = None
 
 
 class TaskInfo(BaseModel):
@@ -48,6 +51,9 @@ class TaskInfo(BaseModel):
     completed_at: Optional[datetime] = None
     result: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    input_file_path: Optional[str] = None
+    output_file_path: Optional[str] = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class TaskResponse(BaseModel):
