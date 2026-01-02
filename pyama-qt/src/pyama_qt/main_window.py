@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
     def _setup_window(self) -> None:
         """Configure basic window properties."""
         self.setWindowTitle("PyAMA-Qt")
-        self.resize(1600, 800)
+        self.resize(1200, 800)
 
     # ------------------------------------------------------------------------
     # MENU BAR SETUP
@@ -183,10 +183,6 @@ class MainWindow(QMainWindow):
         # Connect processing signals to disable other tabs
         self.processing_tab.processing_started.connect(self._on_processing_started)
         self.processing_tab.processing_finished.connect(self._on_processing_finished)
-
-        # Connect analysis signals to disable other tabs
-        self.analysis_tab.processing_started.connect(self._on_processing_started)
-        self.analysis_tab.processing_finished.connect(self._on_processing_finished)
 
         # Connect status manager to tabs for simple message display
         self.processing_tab.set_status_manager(self.status_manager)

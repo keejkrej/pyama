@@ -5,9 +5,16 @@ description = "FastAPI backend for PyAMA chat interface"
 authors = [{ name = "PyAMA Team" }]
 requires-python = ">=3.11"
 dependencies = [
-    "pyama-core>=0.1.0",
     "fastapi",
-    "uvicorn",
+    "uvicorn[standard]",
+    "pydantic>=2.0",
+    "aiosqlite>=0.20.0",
+    "tiktoken>=0.5.0",
+]
+
+[project.optional-dependencies]
+full = [
+    "pyama-core>=0.1.0",
 ]
 
 [project.scripts]

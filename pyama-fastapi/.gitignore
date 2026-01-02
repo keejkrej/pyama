@@ -1,0 +1,16 @@
+# Database files
+*.db
+*.db-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Test outputs
+tests/test_output.json
