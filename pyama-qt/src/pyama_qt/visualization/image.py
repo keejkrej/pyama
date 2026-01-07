@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from pyama_core.io.trace_paths import resolve_trace_path
+from pyama_core.io.config import parse_channels_data
 from pyama_core.types.processing import Channels
 from pyama_qt.utils import WorkerHandle, start_worker
 from pyama_qt.types.visualization import PositionData
@@ -179,7 +180,7 @@ class ImagePanel(QWidget):
     # ------------------------------------------------------------------------
     fov_data_loaded = Signal(
         dict, dict
-    )  # Emitted when FOV data is loaded (image_map, payload with traces_path and seg_labeled)
+    )  # Emitted when FOV data is loaded (image_map, payload with traces_path and seg_tracked/labeled)
     error_message = Signal(str)  # Emitted when an error occurs
     loading_state_changed = Signal(bool)  # Emitted when loading state changes
     cell_selected = Signal(str)  # Emitted when a cell is selected (left-click)
@@ -423,18 +424,21 @@ class ImagePanel(QWidget):
             data: Dictionary with fov_id, image_map, and payload if successful, None otherwise
         """
         self.loading_state_changed.emit(False)
-        
+
         if success and data:
             fov_id = data["fov_id"]
             image_map = data["image_map"]
             payload = data["payload"]
-            
-            logger.info("FOV %d data loaded with %d image types", fov_id, len(image_map))
+
+            logger.info(
+                "FOV %d data loaded with %d image types", fov_id, len(image_map)
+            )
 
             # Update image cache
             self._image_cache = image_map
             self._max_frame_index = max(
-                (arr.shape[0] - 1 for arr in image_map.values() if arr.ndim == 3), default=0
+                (arr.shape[0] - 1 for arr in image_map.values() if arr.ndim == 3),
+                default=0,
             )
             # Update frame label to reflect new max_frame_index
             self._update_frame_label()
@@ -574,7 +578,9 @@ class VisualizationLoaderWorker(QObject):
     # ------------------------------------------------------------------------
     # SIGNALS
     # ------------------------------------------------------------------------
-    finished = Signal(bool, object)  # Emitted when worker completes (success, data_dict or None)
+    finished = Signal(
+        bool, object
+    )  # Emitted when worker completes (success, data_dict or None)
 
     # ------------------------------------------------------------------------
     # INITIALIZATION
@@ -620,9 +626,7 @@ class VisualizationLoaderWorker(QObject):
                 self.finished.emit(False, None)
                 return
 
-            logger.debug(
-                "FOV %03d data keys: %s", self._fov_id, list(fov_data.keys())
-            )
+            logger.debug("FOV %03d data keys: %s", self._fov_id, list(fov_data.keys()))
             logger.debug("Selected channels: %s", self._selected_channels)
 
             # Load selected channels
@@ -655,6 +659,18 @@ class VisualizationLoaderWorker(QObject):
             logger.debug(f"Loaded {len(image_map)} channels successfully")
 
             # Extract segmentation data from loaded channels if available
+            seg_tracked_data = None
+            for channel_name, image_data in image_map.items():
+                if channel_name.startswith("seg_tracked_ch_"):
+                    # Use first frame of segmentation data
+                    seg_tracked_data = (
+                        image_data[0] if image_data.ndim == 3 else image_data
+                    )
+                    logger.debug(
+                        f"Found tracked segmentation data in channel: {channel_name}"
+                    )
+                    break
+
             seg_labeled_data = None
             for channel_name, image_data in image_map.items():
                 if channel_name.startswith("seg_labeled_ch_"):
@@ -662,11 +678,15 @@ class VisualizationLoaderWorker(QObject):
                     seg_labeled_data = (
                         image_data[0] if image_data.ndim == 3 else image_data
                     )
-                    logger.debug(f"Found segmentation data in channel: {channel_name}")
+                    logger.debug(
+                        f"Found labeled segmentation data in channel: {channel_name}"
+                    )
                     break
 
-            if seg_labeled_data is not None:
-                logger.debug("Segmentation data extracted from loaded channels")
+            if seg_tracked_data is not None:
+                logger.debug("Tracked segmentation data extracted from loaded channels")
+            elif seg_labeled_data is not None:
+                logger.debug("Labeled segmentation data extracted from loaded channels")
             else:
                 logger.debug("No segmentation data found in selected channels")
 
@@ -680,6 +700,7 @@ class VisualizationLoaderWorker(QObject):
             # Create payload and emit signal
             payload = {
                 "traces": traces_paths,
+                "seg_tracked": seg_tracked_data,
                 "seg_labeled": seg_labeled_data,
                 "time_units": time_units,
             }
@@ -726,7 +747,7 @@ class VisualizationLoaderWorker(QObject):
                 if not isinstance(channels_info, dict):
                     channels_info = {}
                 try:
-                    channels_model = Channels.from_serialized(channels_info)
+                    channels_model = parse_channels_data(channels_info)
                 except ValueError as exc:  # pragma: no cover - defensive path
                     logger.warning("Invalid channels metadata: %s", exc)
                     channels_model = Channels()

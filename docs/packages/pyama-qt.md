@@ -113,8 +113,8 @@ ND2/CZI Files → Processing → Traces (CSV) → Visualization → QC → Analy
 
 **Data Types Available:**
 - Raw phase contrast (`pc_ch_X`)
-- Segmentation masks (`seg_ch_X`)
-- Labeled tracking (`seg_labeled_ch_X`)
+- Labeled segmentation (`seg_labeled_ch_X`)
+- Labeled tracking (`seg_tracked_ch_X`)
 - Fluorescence background (`fl_background_ch_X`)
 
 **Quality Control Features:**

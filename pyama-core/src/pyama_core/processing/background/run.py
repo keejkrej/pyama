@@ -28,7 +28,7 @@ def _mask_image(
     Creates a dilated copy of the boolean ``mask`` with a square structuring element
     of size ``dilation_size x dilation_size`` to expand foreground, then copies pixels
     from ``image`` where the (dilated) mask is False and sets masked pixels to ``NaN``.
-    
+
     The original mask is not modified - dilation is applied to a copy.
 
     Args:
@@ -138,7 +138,7 @@ def estimate_background(
 
     Args:
         image: 3D float-like array ``(T, H, W)`` of fluorescence data.
-        mask: 3D boolean array ``(T, H, W)``; True marks foreground regions.
+        mask: 3D boolean or labeled array ``(T, H, W)``; True/Non-zero marks foreground.
         out: Preallocated ``float32`` array ``(T, H, W)`` for background interpolation output.
         progress_callback: Optional callable ``(t, total, msg)`` for progress reporting.
         cancel_event: Optional threading.Event for cancellation support.
@@ -156,7 +156,13 @@ def estimate_background(
         raise ValueError("image, mask, and out must have identical shapes")
 
     image = image.astype(np.float32, copy=False)
-    mask = mask.astype(bool, copy=False)
+
+    # Handle labeled masks by checking for non-zero values
+    if mask.dtype != bool:
+        mask = mask > 0
+    else:
+        mask = mask.astype(bool, copy=False)
+
     out = out.astype(np.float32, copy=False)
 
     for t in range(image.shape[0]):

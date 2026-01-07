@@ -7,78 +7,26 @@ from typing import Iterable
 
 import typer
 import yaml
-from bioio import BioImage
-from bioio_ome_tiff.writers import OmeTiffWriter
-from tqdm.auto import tqdm
 
-from pyama_core.io import load_microscopy_file
+from pyama_core.io import ProcessingConfig, load_microscopy_file
 from pyama_core.processing.extraction.features import (
     list_fluorescence_features,
     list_phase_features,
 )
 from pyama_core.processing.merge import (
     parse_fov_range,
+)
+from pyama_core.processing.merge import (
     run_merge as run_core_merge,
 )
 from pyama_core.processing.workflow.run import run_complete_workflow
-from pyama_core.io import ProcessingConfig
 from pyama_core.types.processing import (
-    ChannelSelection,
     Channels,
+    ChannelSelection,
 )
-from pyama_core.benchmark import (
-    extract_trajectories,
-    compute_trajectory_stats,
-    compare_conditions,
-    generate_report,
-)
-
-output_mode_option = typer.Option(
-    "multi",
-    "--mode",
-    "-m",
-    case_sensitive=False,
-    help="Output mode: 'multi' (one OME-TIFF with all scenes) or 'split' (one OME-TIFF per scene).",
-)
-
 
 app = typer.Typer(help="pyama-core utilities")
 logger = logging.getLogger(__name__)
-
-
-def _collect_scenes(
-    image: BioImage,
-) -> tuple[list[object], list[str | None], list[str | None], list[list[str] | None]]:
-    """Collect per-scene data, dimension orders, names, and channel names."""
-    data_list: list[object] = []
-    dim_orders: list[str | None] = []
-    image_names: list[str | None] = []
-    channel_names: list[list[str] | None] = []
-
-    scenes = list(image.scenes)
-    for idx, scene in enumerate(
-        tqdm(scenes, desc="Reading scenes", unit="scene", leave=False)
-    ):
-        image.set_scene(scene)
-        data_list.append(image.data)
-        dim_orders.append(image.dims.order)
-        # Some readers return string scene names; fallback to index label
-        image_names.append(str(scene) if isinstance(scene, str) else f"Scene-{idx}")
-        # Try to extract channel names from coordinates
-        names: list[str] | None = None
-        try:
-            da = image.xarray_dask_data
-            ch_coord = da.coords.get("C") if hasattr(da, "coords") else None
-            if ch_coord is not None:
-                try:
-                    names = [str(v) for v in ch_coord.values.tolist()]
-                except Exception:
-                    names = [str(v) for v in list(ch_coord.values)]
-        except Exception:
-            names = None
-        channel_names.append(names)
-
-    return data_list, dim_orders, image_names, channel_names
 
 
 @app.callback()
@@ -90,108 +38,6 @@ def main() -> None:
         # Suppress verbose debug messages from fsspec (used by bioio)
         logging.getLogger("fsspec.local").setLevel(logging.WARNING)
     return None
-
-
-@app.command()
-def convert(
-    input_path: Path = typer.Argument(
-        ...,
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        help="Input microscopy file (e.g., .nd2, .czi).",
-    ),
-    output_dir: Path | None = typer.Option(
-        None,
-        "-o",
-        "--output-dir",
-        file_okay=False,
-        dir_okay=True,
-        writable=True,
-        help="Directory to write the OME-TIFF. Defaults to the input file's directory.",
-    ),
-    mode: str = output_mode_option,
-) -> None:
-    """Convert a microscopy file (ND2, CZI, etc.) to a multi-scene OME-TIFF."""
-    resolved_input = input_path.expanduser().resolve()
-    target_dir = (
-        output_dir.expanduser().resolve()
-        if output_dir is not None
-        else resolved_input.parent
-    )
-    resolved_output = target_dir / f"{resolved_input.stem}.ome.tiff"
-
-    mode_normalized = mode.lower()
-    if mode_normalized not in {"multi", "split"}:
-        typer.echo("Invalid mode. Use 'multi' or 'split'.", err=True)
-        raise typer.Exit(code=1)
-
-    if mode_normalized == "multi":
-        typer.echo(f"Converting {resolved_input} -> {resolved_output}")
-        logger.info(
-            "Converting microscopy file: %s -> %s", resolved_input, resolved_output
-        )
-    else:
-        typer.echo(f"Converting {resolved_input} -> {target_dir} (one file per scene)")
-        logger.info(
-            "Converting microscopy file to split scenes: %s -> %s",
-            resolved_input,
-            target_dir,
-        )
-    try:
-        image = BioImage(resolved_input)
-    except Exception as exc:  # pragma: no cover - user-facing CLI path
-        typer.echo(f"Failed to open microscopy file: {exc}", err=True)
-        raise typer.Exit(code=1)
-
-    target_dir.mkdir(parents=True, exist_ok=True)
-    scene_data, dim_orders, image_names, channel_names = _collect_scenes(image)
-    if not scene_data:
-        typer.echo("No scenes found in the input file.", err=True)
-        raise typer.Exit(code=1)
-
-    typer.echo(f"Found {len(scene_data)} scene(s); writing OME-TIFF...")
-    if mode_normalized == "multi":
-        logger.info(
-            "Saving OME-TIFF with %s scene(s) to %s", len(scene_data), resolved_output
-        )
-        try:
-            OmeTiffWriter.save(
-                scene_data,
-                resolved_output,
-                dim_order=dim_orders,
-                image_name=image_names,
-                channel_names=channel_names,
-            )
-        except Exception as exc:  # pragma: no cover - user-facing CLI path
-            typer.echo(f"Failed to write OME-TIFF: {exc}", err=True)
-            raise typer.Exit(code=1)
-
-        logger.info("OME-TIFF saved to %s", resolved_output)
-        typer.echo(f"Saved {len(scene_data)} scene(s) to {resolved_output}")
-    else:
-        saved_files: list[Path] = []
-        for idx, (data, dim_order, name, ch_names) in enumerate(
-            zip(scene_data, dim_orders, image_names, channel_names, strict=False)
-        ):
-            scene_output = target_dir / f"{resolved_input.stem}_scene{idx}.ome.tiff"
-            logger.info("Saving scene %s to %s", name, scene_output)
-            try:
-                OmeTiffWriter.save(
-                    data,
-                    scene_output,
-                    dim_order=dim_order,
-                    image_name=name,
-                    channel_names=ch_names,
-                )
-            except Exception as exc:  # pragma: no cover - user-facing CLI path
-                typer.echo(f"Failed to write scene {idx}: {exc}", err=True)
-                raise typer.Exit(code=1)
-            saved_files.append(scene_output)
-
-        logger.info("Saved %s scene files to %s", len(saved_files), target_dir)
-        typer.echo(f"Saved {len(saved_files)} file(s) to {target_dir}")
 
 
 # =============================================================================
@@ -607,150 +453,6 @@ def merge() -> None:
         raise typer.Exit(code=1) from exc
 
     typer.secho(message, fg=typer.colors.GREEN, bold=True)
-
-
-@app.command()
-def benchmark(
-    patterned: Path = typer.Option(
-        ...,
-        "--patterned",
-        "-p",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to patterned condition TIFF file (T, H, W).",
-    ),
-    unpatterned: Path = typer.Option(
-        ...,
-        "--unpatterned",
-        "-u",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to unpatterned condition TIFF file (T, H, W).",
-    ),
-    output: Path = typer.Option(
-        ...,
-        "--output",
-        "-o",
-        file_okay=False,
-        dir_okay=True,
-        help="Output directory for benchmark results.",
-    ),
-    min_duration: int = typer.Option(
-        5,
-        "--min-duration",
-        help="Minimum trajectory duration in frames.",
-    ),
-) -> None:
-    """Compare patterned vs unpatterned cell trajectories.
-
-    Runs cellpose segmentation and btrack tracking on both TIFF files,
-    then computes trajectory statistics and generates comparison reports.
-    """
-    import numpy as np
-    from skimage import io as skio
-
-    from pyama_core.processing.segmentation import segment_cell_cellpose
-    from pyama_core.processing.tracking import track_cell_btrack
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    )
-
-    def progress_callback(current: int, total: int, message: str) -> None:
-        if current % 10 == 0:
-            typer.echo(f"  {message}: {current}/{total}")
-
-    def process_condition(
-        tiff_path: Path, condition_name: str, fov: int = 0
-    ) -> list:
-        """Process a single condition through segmentation and tracking."""
-        typer.secho(f"\nProcessing {condition_name}: {tiff_path}", bold=True)
-
-        # Load TIFF
-        typer.echo("  Loading TIFF...")
-        image = skio.imread(tiff_path)
-        if image.ndim != 3:
-            typer.secho(
-                f"Expected 3D TIFF (T, H, W), got shape {image.shape}",
-                err=True,
-                fg=typer.colors.RED,
-            )
-            raise typer.Exit(code=1)
-
-        typer.echo(f"  Shape: {image.shape} (T={image.shape[0]}, H={image.shape[1]}, W={image.shape[2]})")
-
-        # Segmentation
-        typer.echo("  Running CellPose segmentation...")
-        segmentation = np.empty(image.shape, dtype=bool)
-        segment_cell_cellpose(
-            image.astype(np.float32),
-            segmentation,
-            progress_callback=progress_callback,
-        )
-
-        # Tracking
-        typer.echo("  Running btrack tracking...")
-        tracked = np.zeros(image.shape, dtype=np.uint16)
-        track_cell_btrack(
-            segmentation,
-            tracked,
-            progress_callback=progress_callback,
-        )
-
-        # Extract trajectories
-        typer.echo("  Extracting trajectories...")
-        trajectories = extract_trajectories(tracked, fov=fov, min_duration=min_duration)
-        typer.echo(f"  Found {len(trajectories)} trajectories (min_duration={min_duration})")
-
-        # Compute stats
-        stats_list = []
-        for cell_id, frames in trajectories.items():
-            stats = compute_trajectory_stats(cell_id, frames, fov=fov)
-            stats_list.append(stats)
-
-        return stats_list
-
-    # Process both conditions
-    patterned_stats = process_condition(patterned.expanduser().resolve(), "patterned", fov=0)
-    unpatterned_stats = process_condition(unpatterned.expanduser().resolve(), "unpatterned", fov=1)
-
-    if not patterned_stats:
-        typer.secho("No trajectories found in patterned condition!", err=True, fg=typer.colors.RED)
-        raise typer.Exit(code=1)
-
-    if not unpatterned_stats:
-        typer.secho("No trajectories found in unpatterned condition!", err=True, fg=typer.colors.RED)
-        raise typer.Exit(code=1)
-
-    # Compare conditions
-    typer.secho("\nComparing conditions...", bold=True)
-    result = compare_conditions(patterned_stats, unpatterned_stats)
-
-    # Generate report
-    output_dir = output.expanduser().resolve()
-    typer.echo(f"Generating report to {output_dir}...")
-    generate_report(result, output_dir)
-
-    # Print summary
-    typer.secho("\nResults:", bold=True)
-    typer.echo(f"  Patterned cells: {len(patterned_stats)}")
-    typer.echo(f"  Unpatterned cells: {len(unpatterned_stats)}")
-    typer.echo("")
-
-    for metric, test_result in result.metrics_comparison.items():
-        significance = "*" if test_result.p_value < 0.05 else ""
-        typer.echo(
-            f"  {metric}: p={test_result.p_value:.4f}{significance} "
-            f"(patterned={test_result.patterned_median:.2f}, "
-            f"unpatterned={test_result.unpatterned_median:.2f})"
-        )
-
-    typer.secho(f"\nOutput saved to: {output_dir}", fg=typer.colors.GREEN, bold=True)
 
 
 if __name__ == "__main__":

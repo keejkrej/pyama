@@ -1,5 +1,13 @@
 """
 Segmentation (formerly binarization) service.
+
+**Channel-Conditional Behavior:**
+- **Skipped** if no PC channel configured
+- Requires phase contrast channel for cell detection
+- Saves labeled segmentation masks: seg_labeled_ch_{N}.npy
+- Essential prerequisite for tracking (needs seg_labeled input)
+- Available algorithms: LOG-STD (default), CellPose
+- Logs warning "No PC channel configured, skipping segmentation" when no PC
 """
 
 from pathlib import Path
@@ -9,7 +17,7 @@ import logging
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
 from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
-from pyama_core.processing.segmentation import segment_cell
+from pyama_core.processing.segmentation import get_segmenter
 from numpy.lib.format import open_memmap
 
 
@@ -17,9 +25,10 @@ logger = logging.getLogger(__name__)
 
 
 class SegmentationService(BaseProcessingService):
-    def __init__(self) -> None:
+    def __init__(self, method: str = "logstd") -> None:
         super().__init__()
         self.name = "Segmentation"
+        self.method = method
 
     def process_fov(
         self,
@@ -35,18 +44,20 @@ class SegmentationService(BaseProcessingService):
         # Get PC channel from config
         pc_channel = config.channels.get_pc_channel()
         if pc_channel is None:
-            logger.warning("FOV %d: No PC channel configured, skipping segmentation", fov)
+            logger.warning(
+                "FOV %d: No PC channel configured, skipping segmentation", fov
+            )
             return
 
         # Use naming module for paths
         pc_path = naming.pc_stack(output_dir, base_name, fov, pc_channel)
-        seg_path = naming.seg_mask(output_dir, base_name, fov, pc_channel)
+        seg_labeled_path = naming.seg_labeled(output_dir, base_name, fov, pc_channel)
 
         if not pc_path.exists():
             raise FileNotFoundError(f"Phase contrast file not found: {pc_path}")
 
         # If output already exists, skip
-        if seg_path.exists():
+        if seg_labeled_path.exists():
             logger.info("FOV %d: Segmentation already exists, skipping", fov)
             return
 
@@ -59,30 +70,22 @@ class SegmentationService(BaseProcessingService):
             )
 
         logger.info("FOV %d: Applying segmentation...", fov)
-        seg_memmap = None
+        seg_labeled_memmap = open_memmap(
+            seg_labeled_path,
+            mode="w+",
+            dtype=np.uint16,
+            shape=phase_contrast_data.shape,
+        )
         try:
-            seg_memmap = open_memmap(
-                seg_path, mode="w+", dtype=bool, shape=phase_contrast_data.shape
-            )
+            segment_cell = get_segmenter(self.method)
             segment_cell(
                 phase_contrast_data,
-                seg_memmap,
+                seg_labeled_memmap,
                 progress_callback=partial(self.progress_callback, fov),
                 cancel_event=cancel_event,
             )
-            seg_memmap.flush()
-        except InterruptedError:
-            if seg_memmap is not None:
-                try:
-                    del seg_memmap
-                except Exception:
-                    pass
-            raise
+            seg_labeled_memmap.flush()
         finally:
-            if seg_memmap is not None:
-                try:
-                    del seg_memmap
-                except Exception:
-                    pass
+            del seg_labeled_memmap
 
         logger.info("FOV %d: Segmentation completed", fov)

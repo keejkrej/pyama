@@ -21,6 +21,7 @@ try:
     from btrack.io import segmentation_to_objects
     from btrack.utils import update_segmentation
     from btrack import constants
+
     BTRACK_AVAILABLE = True
 except ImportError:
     BTRACK_AVAILABLE = False
@@ -33,8 +34,6 @@ except ImportError:
 def track_cell(
     image: np.ndarray,
     out: np.ndarray,
-    min_size: int | None = None,
-    max_size: int | None = None,
     progress_callback: Callable | None = None,
     cancel_event=None,
     motion_model=None,
@@ -52,12 +51,8 @@ def track_cell(
     across frames. Writes results into ``out`` in-place.
 
     Args:
-        image: 3D boolean array ``(T, H, W)`` with segmented foreground.
+        image: 3D labeled array ``(T, H, W)`` (uint16) with cell segments.
         out: Preallocated integer array ``(T, H, W)`` to receive labeled IDs.
-        min_size: Minimum region size to track in pixels (inclusive).
-            Regions smaller than this are filtered out before tracking.
-        max_size: Maximum region size to track in pixels (inclusive).
-            Regions larger than this are filtered out before tracking.
         progress_callback: Optional callable ``(t, total, msg)`` for progress.
         cancel_event: Optional threading.Event for cancellation support.
         motion_model: Optional btrack MotionModel. If None, uses default.
@@ -88,51 +83,14 @@ def track_cell(
     if out.shape != image.shape:
         raise ValueError("image and out must have the same shape (T, H, W)")
 
-    image = image.astype(bool, copy=False)
+    image = image.astype(np.uint16, copy=False)
     out = out.astype(np.uint16, copy=False)
 
     n_frames, height, width = image.shape
 
-    # Convert segmentation to labeled format for btrack
+    # Use input labeled segmentation directly
     # btrack expects labeled segmentation (each object has unique ID)
-    from skimage.measure import label
-
-    labeled_segmentation = np.zeros_like(image, dtype=np.uint16)
-    for t in range(n_frames):
-        # Check for cancellation
-        if cancel_event and cancel_event.is_set():
-            logger.info("Tracking cancelled at frame %d", t)
-            return
-
-        # Label connected components in this frame
-        frame_labeled = label(image[t], connectivity=1)
-
-        # Filter by size if specified
-        if min_size is not None or max_size is not None:
-            from skimage.measure import regionprops
-
-            props = regionprops(frame_labeled)
-            filtered_frame = np.zeros_like(frame_labeled)
-            current_label = 1
-
-            for prop in props:
-                area = prop.area
-                if min_size is not None and area < min_size:
-                    continue
-                if max_size is not None and area > max_size:
-                    continue
-
-                # Keep this region, relabel it
-                mask = frame_labeled == prop.label
-                filtered_frame[mask] = current_label
-                current_label += 1
-
-            labeled_segmentation[t] = filtered_frame
-        else:
-            labeled_segmentation[t] = frame_labeled
-
-        if progress_callback is not None:
-            progress_callback(t, n_frames, "Labeling")
+    labeled_segmentation = image
 
     # Set up imaging volume if not provided
     if volume is None:

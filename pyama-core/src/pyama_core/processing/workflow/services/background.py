@@ -3,6 +3,11 @@ Background estimation processing service.
 
 This service estimates background fluorescence using tiled interpolation.
 The estimated background is saved for later correction processing.
+
+**Channel-Conditional Behavior:**
+- **Skipped automatically** if no fluorescence channels are configured
+- Requires both PC and FL channels: PC for segmentation masks, FL for background estimation
+- Logs "No fluorescence channels, skipping background estimation" when no FL configured
 """
 
 from pathlib import Path
@@ -52,12 +57,12 @@ class BackgroundEstimationService(BaseProcessingService):
             return
 
         # Load segmentation once
-        seg_path = naming.seg_mask(output_dir, base_name, fov, pc_channel)
-        if not seg_path.exists():
-            raise FileNotFoundError(f"Segmentation data not found: {seg_path}")
+        seg_labeled_path = naming.seg_labeled(output_dir, base_name, fov, pc_channel)
+        if not seg_labeled_path.exists():
+            raise FileNotFoundError(f"Segmentation data not found: {seg_labeled_path}")
 
         logger.info("FOV %d: Loading segmentation data...", fov)
-        segmentation_data = open_memmap(seg_path, mode="r")
+        seg_labeled_data = open_memmap(seg_labeled_path, mode="r")
 
         for ch in fl_channels:
             fl_path = naming.fl_stack(output_dir, base_name, fov, ch)
@@ -89,9 +94,9 @@ class BackgroundEstimationService(BaseProcessingService):
                 )
             n_frames, height, width = fluor_data.shape
 
-            if segmentation_data.shape != (n_frames, height, width):
+            if seg_labeled_data.shape != (n_frames, height, width):
                 raise ValueError(
-                    f"Shape mismatch: segmentation {segmentation_data.shape} vs "
+                    f"Shape mismatch: segmentation {seg_labeled_data.shape} vs "
                     f"fluorescence {fluor_data.shape}"
                 )
 
@@ -108,7 +113,7 @@ class BackgroundEstimationService(BaseProcessingService):
             try:
                 estimate_background(
                     fluor_data.astype(np.float32),
-                    segmentation_data,
+                    seg_labeled_data,
                     background_memmap,
                     progress_callback=partial(self.progress_callback, fov),
                     cancel_event=cancel_event,

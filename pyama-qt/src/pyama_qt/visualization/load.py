@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyama_core.io import naming, load_config, config_path
+from pyama_core.io import naming, load_config, config_path, serialize_channels_data
 from pyama_qt.constants import DEFAULT_DIR
 
 logger = logging.getLogger(__name__)
@@ -204,9 +204,7 @@ class LoadPanel(QWidget):
         Opens a directory dialog to select a data folder and initiates
         project loading from the selected path.
         """
-        logger.debug(
-            "UI Click: Load project folder button (start_dir=%s)", DEFAULT_DIR
-        )
+        logger.debug("UI Click: Load project folder button (start_dir=%s)", DEFAULT_DIR)
         directory = QFileDialog.getExistingDirectory(
             self,
             "Select Data Folder",
@@ -286,7 +284,7 @@ class LoadPanel(QWidget):
             if cfg_path.exists():
                 try:
                     config = load_config(cfg_path)
-                    channels_config = config.channels.to_raw()
+                    channels_config = serialize_channels_data(config.channels)
                 except Exception as e:
                     logger.warning("Failed to load config: %s", e)
 
@@ -306,6 +304,8 @@ class LoadPanel(QWidget):
                         # Extract channel number for multiple FL channels
                         ch_idx = name.split("_fl_ch_")[-1]
                         fov_files[f"fl_ch_{ch_idx}"] = npy_file
+                    elif "_seg_tracked_ch_" in name:
+                        fov_files["seg_tracked"] = npy_file
                     elif "_seg_labeled_ch_" in name:
                         fov_files["seg_labeled"] = npy_file
                     elif "_seg_ch_" in name:
@@ -371,9 +371,7 @@ class LoadPanel(QWidget):
 
         # Update channel list
         channels = self._extract_available_channels(project_data)
-        logger.debug(
-            "Extracted available channels (%d): %s", len(channels), channels
-        )
+        logger.debug("Extracted available channels (%d): %s", len(channels), channels)
         self._channels_list.clear()
         for channel in sorted(channels):
             item = QListWidgetItem(channel)

@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 # Import Result class for field definitions
-from pyama_core.types.processing import Result
+from pyama_core.types.processing import get_processing_base_fields
 
 
 def get_dataframe(csv_path: Path) -> pd.DataFrame:
@@ -78,7 +78,7 @@ def extract_cell_feature_dataframe(df: pd.DataFrame, cell_id: int) -> pd.DataFra
         raise ValueError(f"Cell ID {cell_id} not found in DataFrame")
 
     # Get available features (exclude basic columns and metadata)
-    basic_cols = [f.name for f in Result.__dataclass_fields__.values()]
+    basic_cols = get_processing_base_fields()
     # Also exclude 'fov' which is metadata, not a feature
     metadata_cols = ["fov", "exist"]  # Add other metadata columns as needed
     exclude_cols = set(basic_cols) | set(metadata_cols)

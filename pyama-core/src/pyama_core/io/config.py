@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from pyama_core.types.processing import Channels
+from pyama_core.types.processing import Channels, ChannelSelection
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +29,79 @@ class ProcessingConfig:
         params: Processing parameters dict.
     """
 
-    channels: Channels = field(default_factory=Channels)
+    channels: Channels | None = None
     params: dict[str, Any] = field(default_factory=dict)
 
     def get_param(self, key: str, default: Any = None) -> Any:
         """Get a parameter value with default."""
         return self.params.get(key, default)
+
+
+def _parse_channel_selection(data: dict[str, Any]) -> ChannelSelection:
+    """Parse a channel selection from a dictionary."""
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected dict for channel selection, got {type(data)}")
+
+    channel = data.get("channel")
+    if not isinstance(channel, int):
+        raise ValueError(f"Invalid channel ID: {channel}")
+
+    features = data.get("features", [])
+    if not isinstance(features, list):
+        raise ValueError(f"features must be a list, got {type(features)}")
+
+    return ChannelSelection(channel=channel, features=features)
+
+
+def _serialize_channel_selection(selection: ChannelSelection) -> dict[str, Any]:
+    """Serialize a channel selection to a dictionary."""
+    return {
+        "channel": selection.channel,
+        "features": list(selection.features),
+    }
+
+
+def parse_channels_data(data: dict[str, Any]) -> Channels:
+    """Parse channels configuration from a dictionary.
+
+    Args:
+        data: Dictionary containing 'pc' and 'fl' channel configuration.
+
+    Returns:
+        Channels object.
+
+    Raises:
+        ValueError: If the configuration is invalid.
+    """
+    # Parse PC
+    pc_data = data.get("pc")
+    if pc_data is None:
+        raise ValueError("channels.pc is required")
+    pc = _parse_channel_selection(pc_data)
+
+    # Parse FL
+    fl_data = data.get("fl", [])
+    if not isinstance(fl_data, list):
+        raise ValueError("channels.fl must be a list")
+
+    fl = [_parse_channel_selection(item) for item in fl_data]
+
+    return Channels(pc=pc, fl=fl)
+
+
+def serialize_channels_data(channels: Channels) -> dict[str, Any]:
+    """Serialize channels configuration to a dictionary.
+
+    Args:
+        channels: Channels object to serialize.
+
+    Returns:
+        Dictionary containing 'pc' and 'fl' channel configuration.
+    """
+    return {
+        "pc": _serialize_channel_selection(channels.pc),
+        "fl": [_serialize_channel_selection(sel) for sel in channels.fl],
+    }
 
 
 def load_config(path: Path) -> ProcessingConfig:
@@ -61,10 +128,11 @@ def load_config(path: Path) -> ProcessingConfig:
 
     # Parse channels
     channels_data = data.get("channels")
-    if channels_data is None:
-        channels = Channels()
-    else:
-        channels = Channels.from_serialized(channels_data)
+    channels = None
+    if channels_data is not None:
+        if not isinstance(channels_data, dict):
+            raise ValueError("channels must be a dictionary")
+        channels = parse_channels_data(channels_data)
 
     # Parse params
     params = data.get("params", {})
@@ -81,10 +149,12 @@ def save_config(config: ProcessingConfig, path: Path) -> None:
         config: ProcessingConfig to save.
         path: Path to write YAML file.
     """
-    data = {
-        "channels": config.channels.to_raw(),
+    data: dict[str, Any] = {
         "params": config.params,
     }
+
+    if config.channels:
+        data["channels"] = serialize_channels_data(config.channels)
 
     with open(path, "w") as f:
         yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
@@ -103,12 +173,6 @@ def ensure_config(config: ProcessingConfig | None) -> ProcessingConfig:
     """
     if config is None:
         return ProcessingConfig()
-
-    # Ensure channels is normalized
-    if config.channels is None:
-        config.channels = Channels()
-    else:
-        config.channels.normalize()
 
     # Ensure params is a dict
     if config.params is None:
@@ -139,5 +203,7 @@ __all__ = [
     "save_config",
     "ensure_config",
     "config_path",
+    "parse_channels_data",
+    "serialize_channels_data",
     "CONFIG_FILENAME",
 ]

@@ -44,7 +44,7 @@ Click **Start Complete Workflow**. Progress will be shown in the status bar.
 
 1. Switch to the **Visualization** tab
 2. Click **Load Folder** and select your processing output directory
-3. Select FOV number and channels (e.g., `pc_ch_0`, `seg_labeled_ch_0`, `fl_background_ch_0`)
+3. Select FOV number and channels (e.g., `pc_ch_0`, `seg_tracked_ch_0`, `fl_background_ch_0`)
 4. Click **Start Visualization**
 5. Navigate frames using the navigation buttons
 6. Inspect traces by clicking trace IDs in the list

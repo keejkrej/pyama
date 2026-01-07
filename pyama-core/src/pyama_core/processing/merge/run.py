@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
-from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
 import pandas as pd
 import yaml
 
-from pyama_core.io import naming, load_config
+from pyama_core.io import load_config, naming
 from pyama_core.io.processing_csv import get_dataframe
 from pyama_core.io.trace_paths import resolve_trace_path
-from pyama_core.types.processing import Channels, Result, FeatureMaps
+from pyama_core.types.merge import MergeResult, get_merge_fields
+from pyama_core.types.processing import (
+    Channels,
+    FeatureMaps,
+    get_processing_base_fields,
+    get_processing_feature_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +29,9 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def get_channel_feature_config_from_channels(channels: Channels) -> list[tuple[int, list[str]]]:
+def get_channel_feature_config_from_channels(
+    channels: Channels,
+) -> list[tuple[int, list[str]]]:
     """Determine the channel/feature selections from Channels config.
 
     Returns:
@@ -176,15 +184,14 @@ def extract_channel_dataframe(
     Returns:
         DataFrame with base columns and only the configured features for this channel
     """
-    suffix = f"_ch_{channel}"
-    base_fields = ["fov"] + [field.name for field in dataclass_fields(Result)]
+    base_fields = ["fov"] + get_processing_base_fields()
     base_cols = [col for col in base_fields if col in df.columns]
 
     # Only extract features that are configured for this channel
     feature_cols = []
     rename_map = {}
     for feature_name in configured_features:
-        feature_col = f"{feature_name}{suffix}"
+        feature_col = get_processing_feature_field(feature_name, channel)
         if feature_col in df.columns:
             feature_cols.append(feature_col)
             rename_map[feature_col] = feature_name
@@ -217,7 +224,6 @@ def write_feature_csv(
     fovs: Iterable[int],
     feature_name: str,
     feature_maps_by_fov: dict[int, FeatureMaps],
-    channel: int,
 ) -> None:
     """Write a feature CSV in tidy/long format.
 
@@ -228,6 +234,9 @@ def write_feature_csv(
 
     # Filter to only include FOVs that have data
     available_fovs = [fov for fov in fov_list if fov in feature_maps_by_fov]
+
+    # Get column names for DataFrame
+    col_names = get_merge_fields()
 
     # Build rows in long format: frame, fov, cell, value
     rows = []
@@ -244,14 +253,14 @@ def write_feature_csv(
             for cell in sorted(feature_maps.cells):
                 value = feature_map.get((frame, cell))
                 if value is not None:
-                    rows.append({
-                        "frame": frame,
-                        "fov": fov,
-                        "cell": cell,
-                        "value": value,
-                    })
+                    result = MergeResult(frame=frame, fov=fov, cell=cell, value=value)
+                    rows.append(dataclasses.asdict(result))
 
-    df = pd.DataFrame(rows)
+    try:
+        df = pd.DataFrame(rows, columns=col_names)
+    except Exception:
+        raise ValueError(f"Failed to create DataFrame. Expected columns: {col_names}")
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False, float_format="%.6f")
 
@@ -292,7 +301,9 @@ def run_merge(
         raise FileNotFoundError(f"Processing config not found: {config_path}")
 
     proc_config = load_config(config_path)
-    channel_feature_config = get_channel_feature_config_from_channels(proc_config.channels)
+    channel_feature_config = get_channel_feature_config_from_channels(
+        proc_config.channels
+    )
 
     # Collect all FOVs from samples
     all_fovs: set[int] = set()
@@ -391,7 +402,9 @@ def run_merge(
                 if not has_data:
                     logger.debug(
                         "Skipping feature '%s' for sample '%s', channel %s: no data found",
-                        feature_name, sample_name, channel
+                        feature_name,
+                        sample_name,
+                        channel,
                     )
                     continue
 
@@ -403,7 +416,6 @@ def run_merge(
                     sample_fovs,
                     feature_name,
                     channel_feature_maps,
-                    channel,
                 )
                 created_files.append(output_path)
                 logger.info("Created: %s", output_filename)
