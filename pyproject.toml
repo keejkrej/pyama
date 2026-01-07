@@ -1,0 +1,15 @@
+[tool.uv.workspace]
+members = [
+    "pyama-core",
+    "pyama-qt",
+    "pyama-acdc",
+    "pyama-fastapi",
+]
+
+[tool.uv.sources]
+pyama-core = { workspace = true }
+pyama-qt = { workspace = true }
+
+[dependency-groups]
+dev = ["ty", "ruff", "pyinstaller", "ipykernel"]
+docs = ["sphinx>=7.0", "myst-parser>=2.0", "sphinx-rtd-theme>=2.0", "sphinx-copybutton"]
