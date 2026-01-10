@@ -5,7 +5,7 @@ This module defines utilities for handling CSV files consumed by the
 processing module. The format includes FOV information, cell tracking data,
 and extracted features.
 
-Format: fov, cell, frame, good, position_x, position_y, and dynamic feature columns
+Format: fov, cell, frame, good, xc, yc, x, y, w, h, and dynamic feature columns
 """
 
 from pathlib import Path
@@ -162,7 +162,7 @@ def extract_cell_position_dataframe(df: pd.DataFrame, cell_id: int) -> pd.DataFr
         cell_id: Cell ID to extract data for
 
     Returns:
-        DataFrame with columns 'frame', 'position_x', 'position_y'
+        DataFrame with columns 'frame', 'xc', 'yc'
     """
     # Filter data for the specific cell
     cell_df = df[df["cell"] == cell_id].copy()
@@ -177,8 +177,8 @@ def extract_cell_position_dataframe(df: pd.DataFrame, cell_id: int) -> pd.DataFr
     result_df = pd.DataFrame(
         {
             "frame": cell_df["frame"].values,
-            "position_x": cell_df["position_x"].values,
-            "position_y": cell_df["position_y"].values,
+            "xc": cell_df["xc"].values,
+            "yc": cell_df["yc"].values,
         }
     )
 
@@ -201,7 +201,7 @@ def extract_all_cells_data(df: pd.DataFrame) -> dict:
             "cell_id": {
                 "quality": bool,
                 "features": {"frame": array, "feature1": array, ...},
-                "positions": {"frames": array, "position_x": array, "position_y": array}
+                "positions": {"frames": array, "xc": array, "yc": array}
             },
             ...
         }
@@ -230,8 +230,8 @@ def extract_all_cells_data(df: pd.DataFrame) -> dict:
         positions_df = extract_cell_position_dataframe(df, cell_id)
         positions = {
             "frames": positions_df["frame"].values,
-            "position_x": positions_df["position_x"].values,
-            "position_y": positions_df["position_y"].values,
+            "xc": positions_df["xc"].values,
+            "yc": positions_df["yc"].values,
         }
 
         result[str_id] = {

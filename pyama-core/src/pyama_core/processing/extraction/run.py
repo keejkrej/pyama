@@ -72,8 +72,8 @@ def extract_trace_from_crops(
     - cancel_event: Optional threading.Event for cancellation support
 
     Returns:
-    - DataFrame with columns [cell, frame, good, position_x, position_y,
-      bbox_x0, bbox_y0, bbox_x1, bbox_y1, <feature>_<channel>, ...]
+    - DataFrame with columns [cell, frame, good, xc, yc, x, y, w, h,
+      <feature>_<channel>, ...]
     """
     import h5py
 
@@ -119,17 +119,17 @@ def extract_trace_from_crops(
                     continue
                 mask = masks_grp[frame_key][:]
 
-                # Compute position from mask (global coordinates)
+                # Compute centroid from mask (global coordinates)
                 _, y0, x0, y1, x1 = bbox
                 if not mask.any():
-                    position_x = float((x0 + x1) / 2.0)
-                    position_y = float((y0 + y1) / 2.0)
+                    xc = float((x0 + x1) / 2.0)
+                    yc = float((y0 + y1) / 2.0)
                 else:
                     ys, xs = np.where(mask)
                     local_x = float(np.mean(xs))
                     local_y = float(np.mean(ys))
-                    position_x = float(x0) + local_x
-                    position_y = float(y0) + local_y
+                    xc = float(x0) + local_x
+                    yc = float(y0) + local_y
 
                 # Extract features from each channel
                 feature_values = {}
@@ -207,12 +207,12 @@ def extract_trace_from_crops(
                     cell=cell_id,
                     frame=int(frame_idx),
                     good=True,
-                    position_x=position_x,
-                    position_y=position_y,
-                    bbox_x0=float(x0),
-                    bbox_y0=float(y0),
-                    bbox_x1=float(x1),
-                    bbox_y1=float(y1),
+                    xc=xc,
+                    yc=yc,
+                    x=float(x0),
+                    y=float(y0),
+                    w=float(x1 - x0),
+                    h=float(y1 - y0),
                     **feature_values,
                 )
                 rows.append(dataclasses.asdict(result))

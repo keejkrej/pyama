@@ -39,17 +39,29 @@ class Channels:
 
 @dataclass(frozen=True)
 class ProcessingBaseResult:
-    """Result from trace extraction for a single cell at a single frame."""
+    """Result from trace extraction for a single cell at a single frame.
+
+    Attributes:
+        cell: Cell ID.
+        frame: Frame index.
+        good: Quality flag.
+        xc: Centroid x coordinate (computed from mask, falls back to bbox center).
+        yc: Centroid y coordinate (computed from mask, falls back to bbox center).
+        x: Bounding box left edge (x0).
+        y: Bounding box top edge (y0).
+        w: Bounding box width (x1 - x0).
+        h: Bounding box height (y1 - y0).
+    """
 
     cell: int
     frame: int
     good: bool
-    position_x: float
-    position_y: float
-    bbox_x0: float
-    bbox_y0: float
-    bbox_x1: float
-    bbox_y1: float
+    xc: float
+    yc: float
+    x: float
+    y: float
+    w: float
+    h: float
 
 
 def get_processing_base_fields() -> list[str]:

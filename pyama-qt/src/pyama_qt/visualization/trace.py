@@ -211,9 +211,7 @@ class TracePanel(QWidget):
         if item:
             trace_id = item.data(Qt.ItemDataRole.UserRole)
             if trace_id:
-                logger.debug(
-                    "UI Event: Trace list right-click (trace_id=%s)", trace_id
-                )
+                logger.debug("UI Event: Trace list right-click (trace_id=%s)", trace_id)
                 self.on_trace_quality_toggled(trace_id)
 
     def on_cell_selected(self, cell_id: str) -> None:
@@ -362,7 +360,7 @@ class TracePanel(QWidget):
         if path_to_load is None:
             self.trace_data_loaded.emit(False, f"Invalid trace path: {csv_path}")
             return
-        
+
         try:
             df = get_dataframe(path_to_load)
             base_fields = ["fov"] + [field.name for field in dataclass_fields(Result)]
@@ -422,8 +420,8 @@ class TracePanel(QWidget):
             self._trace_positions[cell_id] = PositionData(
                 frames=data["positions"]["frames"],
                 position={
-                    "x": data["positions"]["position_x"],
-                    "y": data["positions"]["position_y"],
+                    "x": data["positions"]["xc"],
+                    "y": data["positions"]["yc"],
                 },
             )
             logger.debug(
@@ -623,9 +621,7 @@ class TracePanel(QWidget):
             all_features = set()
             for trace_id, trace_data in self._trace_features.items():
                 trace_features = list(trace_data.features.keys())
-                logger.debug(
-                    "Trace %s features detected: %s", trace_id, trace_features
-                )
+                logger.debug("Trace %s features detected: %s", trace_id, trace_features)
                 all_features.update(trace_features)
             features = sorted(list(all_features))
             logger.debug("All unique features found (%d): %s", len(features), features)
