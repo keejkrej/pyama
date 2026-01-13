@@ -5,20 +5,35 @@
 # =============================================================================
 
 import logging
+import re
 import threading
 from pathlib import Path
 from typing import Any, Sequence
-import re
 
 import pandas as pd
+from pyama_core.io import (
+    MicroscopyMetadata,
+    ProcessingConfig,
+    ensure_config,
+    load_microscopy_file,
+)
+from pyama_core.processing.extraction.features import (
+    list_fluorescence_features,
+    list_phase_features,
+)
+from pyama_core.processing.workflow import run_complete_workflow
+from pyama_core.types.processing import (
+    Channels,
+    ChannelSelection,
+)
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QCheckBox,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -28,17 +43,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyama_core.io import MicroscopyMetadata, load_microscopy_file
-from pyama_core.processing.extraction.features import (
-    list_fluorescence_features,
-    list_phase_features,
-)
-from pyama_core.processing.workflow import run_complete_workflow
-from pyama_core.io import ProcessingConfig, ensure_config
-from pyama_core.types.processing import (
-    ChannelSelection,
-    Channels,
-)
 from pyama_qt.components.parameter_table import ParameterTable
 from pyama_qt.constants import DEFAULT_DIR
 from pyama_qt.utils import start_worker
@@ -163,7 +167,9 @@ class WorkflowPanel(QWidget):
         header.addStretch()
 
         self._split_checkbox = QCheckBox("Split files")
-        self._split_checkbox.setToolTip("When checked, load sibling scene files (e.g., *_scene0.ome.tiff) as one dataset.")
+        self._split_checkbox.setToolTip(
+            "When checked, load sibling scene files (e.g., *_scene0.ome.tiff) as one dataset."
+        )
         header.addWidget(self._split_checkbox)
 
         self._nd2_button = QPushButton("Browse")
@@ -327,7 +333,9 @@ class WorkflowPanel(QWidget):
             self._initialize_state()
             self._microscopy_path = Path(file_path)
             self.display_microscopy_path(self._microscopy_path)
-            self._load_microscopy(self._microscopy_path, split_mode=self._split_checkbox.isChecked())
+            self._load_microscopy(
+                self._microscopy_path, split_mode=self._split_checkbox.isChecked()
+            )
 
     @Slot()
     def _on_output_clicked(self) -> None:
@@ -347,7 +355,9 @@ class WorkflowPanel(QWidget):
         )
         if directory:
             logger.info(
-                "Output directory chosen: %s (exists=%s)", directory, Path(directory).exists()
+                "Output directory chosen: %s (exists=%s)",
+                directory,
+                Path(directory).exists(),
             )
             self._output_dir = Path(directory)
             self.display_output_directory(self._output_dir)
@@ -784,7 +794,9 @@ class WorkflowPanel(QWidget):
             not enabled
         )  # Cancel enabled when processing is disabled
 
-    def set_parameter_defaults(self, defaults: dict[str, dict[str, Any]] | pd.DataFrame) -> None:
+    def set_parameter_defaults(
+        self, defaults: dict[str, dict[str, Any]] | pd.DataFrame
+    ) -> None:
         """Replace the parameter table with controller-provided defaults.
 
         Args:
@@ -809,7 +821,7 @@ class WorkflowPanel(QWidget):
         logger.info(
             "Resetting workflow panel to initial state (clearing paths, features, parameters)"
         )
-        
+
         # Initialize/reset all internal state variables to initial values
         # Note: _microscopy_path will be set immediately after this reset when loading a file
         self._microscopy_path = None
@@ -827,11 +839,11 @@ class WorkflowPanel(QWidget):
         self._workflow_runner = None
         self._available_fl_features = []
         self._available_pc_features = []
-        
+
         # Clear UI displays
         self.display_output_directory(None)
         self.display_microscopy_path(None)
-        
+
         # Reset parameter table to defaults
         defaults_data = {
             "fov_start": {"value": 0},
@@ -841,28 +853,28 @@ class WorkflowPanel(QWidget):
             "background_weight": {"value": 1.0},
         }
         self._param_panel.set_parameters(defaults_data)
-        
+
         # Clear channel selections and features
         self._pc_combo.blockSignals(True)
         self._pc_combo.clear()
         self._pc_combo.blockSignals(False)
-        
+
         self._fl_channel_combo.blockSignals(True)
         self._fl_channel_combo.clear()
         self._fl_channel_combo.blockSignals(False)
-        
+
         self._feature_combo.blockSignals(True)
         self._feature_combo.clear()
         self._feature_combo.blockSignals(False)
-        
+
         self._pc_feature_list.blockSignals(True)
         self._pc_feature_list.clear()
         self._pc_feature_list.blockSignals(False)
-        
+
         self._mapping_list.clear()
         self._mapping_list.clearSelection()
         self._remove_button.setEnabled(False)
-        
+
         # Clear available features lists
         self._available_fl_features = []
         self._available_pc_features = []
@@ -905,11 +917,15 @@ class WorkflowPanel(QWidget):
 
         if split_mode:
             suffixes = [s.lower() for s in path.suffixes]
-            is_ome_tiff = (
-                len(suffixes) >= 2 and suffixes[-2:] in ([".ome", ".tif"], [".ome", ".tiff"])
+            is_ome_tiff = len(suffixes) >= 2 and suffixes[-2:] in (
+                [".ome", ".tif"],
+                [".ome", ".tiff"],
             )
             if is_ome_tiff:
-                split_regex = re.compile(r"^(?P<prefix>.+)_scene(?P<scene_idx>\d+)\.ome\.tiff?$", re.IGNORECASE)
+                split_regex = re.compile(
+                    r"^(?P<prefix>.+)_scene(?P<scene_idx>\d+)\.ome\.tiff?$",
+                    re.IGNORECASE,
+                )
                 match = split_regex.match(path.name)
                 prefix = match.group("prefix") if match else path.stem
                 glob_pattern = f"{prefix}_scene*.ome.tif*"
@@ -932,7 +948,9 @@ class WorkflowPanel(QWidget):
         self._microscopy_loader = handle
 
     @Slot(bool, object)
-    def _on_microscopy_finished(self, success: bool, metadata: MicroscopyMetadata | None) -> None:
+    def _on_microscopy_finished(
+        self, success: bool, metadata: MicroscopyMetadata | None
+    ) -> None:
         """Handle microscopy loading completion.
 
         Args:
@@ -957,16 +975,24 @@ class WorkflowPanel(QWidget):
                 # Update UI to reflect actual FOV range from metadata
                 self._update_fov_parameters(self._fov_start, self._fov_end)
 
-            filename = self._microscopy_path.name if self._microscopy_path else "ND2 file"
-            self.microscopy_loading_finished.emit(True, f"{filename} loaded successfully")
+            filename = (
+                self._microscopy_path.name if self._microscopy_path else "ND2 file"
+            )
+            self.microscopy_loading_finished.emit(
+                True, f"{filename} loaded successfully"
+            )
         else:
-            filename = self._microscopy_path.name if self._microscopy_path else "ND2 file"
+            filename = (
+                self._microscopy_path.name if self._microscopy_path else "ND2 file"
+            )
             logger.error(
                 "Failed to load microscopy metadata for %s (success=%s)",
                 filename,
                 success,
             )
-            filename = self._microscopy_path.name if self._microscopy_path else "ND2 file"
+            filename = (
+                self._microscopy_path.name if self._microscopy_path else "ND2 file"
+            )
             self.microscopy_loading_finished.emit(False, f"Failed to load {filename}")
 
     @Slot()
@@ -989,13 +1015,7 @@ class WorkflowPanel(QWidget):
             return
         if not self._output_dir:
             return
-        if self._pc_features and self._phase_channel is None:
-            return
-        if (
-            self._phase_channel is None
-            and not self._fl_features
-            and not self._pc_features
-        ):
+        if self._phase_channel is None:
             return
 
         # Validate parameters
@@ -1003,14 +1023,11 @@ class WorkflowPanel(QWidget):
             return
 
         # Set up context and run workflow
-        pc_selection = (
-            ChannelSelection(
-                channel=int(self._phase_channel),
-                features=list(self._pc_features),
-            )
-            if self._phase_channel is not None
-            else None
+        pc_selection = ChannelSelection(
+            channel=int(self._phase_channel),
+            features=list(self._pc_features),
         )
+
         fl_selections = [
             ChannelSelection(channel=int(channel), features=list(features))
             for channel, features in sorted(self._fl_features.items())
@@ -1137,7 +1154,9 @@ class MicroscopyLoaderWorker(QObject):
     # ------------------------------------------------------------------------
     # SIGNALS
     # ------------------------------------------------------------------------
-    finished = Signal(bool, object)  # Emitted when worker completes (success, metadata or None)
+    finished = Signal(
+        bool, object
+    )  # Emitted when worker completes (success, metadata or None)
 
     # ------------------------------------------------------------------------
     # INITIALIZATION
@@ -1254,8 +1273,6 @@ class ProcessingWorkflowWorker(QObject):
                     self._fov_start,
                     self._fov_end,
                 )
-                # Commented out cleanup to preserve partial results for debugging
-                # self._cleanup_fov_folders()
                 self.finished.emit(False, "Workflow cancelled")
                 return
 
@@ -1286,8 +1303,6 @@ class ProcessingWorkflowWorker(QObject):
                     self._fov_start,
                     self._fov_end,
                 )
-                # Commented out cleanup to preserve partial results for debugging
-                # self._cleanup_fov_folders()
                 self.finished.emit(False, "Workflow cancelled")
                 return
 
@@ -1319,47 +1334,3 @@ class ProcessingWorkflowWorker(QObject):
         self._cancel_event.set()
         # Don't emit finished signal here - let the worker detect cancellation
         # and emit it naturally when it exits
-
-    def _cleanup_fov_folders(self) -> None:
-        """Clean up FOV folders created during processing when cancelled.
-
-        Removes only the FOV directories that were being processed in this workflow
-        to prevent partial results from being left behind.
-        """
-        try:
-            output_dir = self._output_dir
-            if not output_dir or not output_dir.exists():
-                return
-
-            logger.info("Cleaning up FOV folders after cancellation")
-
-            # Remove only the FOV directories for the range being processed
-            removed_count = 0
-            for fov_idx in range(self._fov_start, self._fov_end + 1):
-                fov_dir = output_dir / f"fov_{fov_idx:03d}"
-                if fov_dir.exists() and fov_dir.is_dir():
-                    try:
-                        import shutil
-
-                        shutil.rmtree(fov_dir)
-                        removed_count += 1
-                        logger.debug("Removed FOV directory: %s", fov_dir)
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to remove FOV directory %s: %s", fov_dir, e
-                        )
-
-            # Also remove any processing_config.yaml if it exists
-            config_file = output_dir / "processing_config.yaml"
-            if config_file.exists():
-                try:
-                    config_file.unlink()
-                    logger.debug("Removed processing config file: %s", config_file)
-                except Exception as e:
-                    logger.warning(
-                        "Failed to remove config file %s: %s", config_file, e
-                    )
-            logger.info("Cleanup finished (removed_fov_dirs=%d)", removed_count)
-
-        except Exception as e:
-            logger.warning("Error during FOV folder cleanup: %s", e)

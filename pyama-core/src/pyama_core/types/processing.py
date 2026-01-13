@@ -1,7 +1,8 @@
 """Dataclasses shared across workflow services to avoid circular imports."""
 
-from collections.abc import Iterable, Mapping, Sequence
+import dataclasses
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -12,158 +13,17 @@ class ChannelSelection:
     channel: int
     features: list[str] = field(default_factory=list)
 
-    def __post_init__(self) -> None:
-        self.channel = int(self.channel)
-        self._normalize()
-
-    def _normalize(self) -> None:
-        seen: set[str] = set()
-        normalized: list[str] = []
-        for feature in self.features:
-            if feature is None:
-                continue
-            feature_str = str(feature)
-            if feature_str and feature_str not in seen:
-                seen.add(feature_str)
-                normalized.append(feature_str)
-        normalized.sort()
-        self.features = normalized
-
-    def extend_features(self, new_features: Iterable[Any]) -> None:
-        if not new_features:
-            return
-        combined = list(self.features)
-        for feature in new_features:
-            if feature is None:
-                continue
-            feature_str = str(feature)
-            if feature_str:
-                combined.append(feature_str)
-        self.features = combined
-        self._normalize()
-
-    def merge(self, other: "ChannelSelection") -> None:
-        if other.channel != self.channel:
-            return
-        self.extend_features(other.features)
-
-    def copy(self) -> "ChannelSelection":
-        return ChannelSelection(self.channel, list(self.features))
-
-    def to_payload(self) -> list[Any]:
-        return [self.channel, list(self.features)]
-
-    @classmethod
-    def from_value(cls, value: Any) -> "ChannelSelection | None":
-        if value is None:
-            return None
-        if isinstance(value, cls):
-            return value.copy()
-        # Handle dictionary format: {channel: N, features: [...]}
-        if isinstance(value, Mapping):
-            try:
-                channel = int(value["channel"])
-                features = value.get("features", [])
-                if features is None:
-                    features = []
-                return cls(channel=channel, features=list(features))
-            except (KeyError, ValueError, TypeError):
-                return None
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-            if not value:
-                return None
-            try:
-                channel = int(value[0])
-            except (ValueError, TypeError):
-                return None
-            remainder = list(value[1:])
-            feature_values: list[Any] = []
-            if remainder:
-                head = remainder[0]
-                if isinstance(head, Sequence) and not isinstance(head, (str, bytes)):
-                    feature_values.extend(head)
-                    extra = remainder[1:]
-                else:
-                    if head is not None:
-                        feature_values.append(head)
-                    extra = remainder[1:]
-                for item in extra:
-                    if isinstance(item, Sequence) and not isinstance(
-                        item, (str, bytes)
-                    ):
-                        feature_values.extend(item)
-                    elif item is not None:
-                        feature_values.append(item)
-            return cls(channel=channel, features=list(feature_values))
-        if isinstance(value, (int, str)):
-            try:
-                return cls(channel=int(value))
-            except Exception:
-                return None
-        return None
-
 
 @dataclass(slots=True)
 class Channels:
-    pc: ChannelSelection | None = None
+    pc: ChannelSelection
     fl: list[ChannelSelection] = field(default_factory=list)
 
-    def __post_init__(self) -> None:
-        self._normalize_inplace()
-
-    def _normalize_inplace(self) -> None:
-        self.pc = ChannelSelection.from_value(self.pc)
-        self.fl = self._normalize_fl(self.fl)
-
-    def normalize(self) -> None:
-        self._normalize_inplace()
-
-    @staticmethod
-    def _normalize_fl(value: Any) -> list[ChannelSelection]:
-        normalized: dict[int, ChannelSelection] = {}
-        entries: list[Any] = []
-
-        if isinstance(value, ChannelSelection):
-            entries.append(value)
-        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-            entries.extend(value)
-        elif value is None:
-            entries.append(value)
-
-        for entry in entries:
-            selection = ChannelSelection.from_value(entry)
-            if selection is None:
-                continue
-            existing = normalized.get(selection.channel)
-            if existing is None:
-                normalized[selection.channel] = selection
-            else:
-                existing.merge(selection)
-
-        return [normalized[channel] for channel in sorted(normalized)]
-
-    def merge_from(self, other: "Channels") -> None:
-        if other.pc:
-            if self.pc is None:
-                self.pc = other.pc.copy()
-            elif self.pc.channel == other.pc.channel:
-                self.pc.merge(other.pc)
-
-        fl_map: dict[int, ChannelSelection] = {sel.channel: sel for sel in self.fl}
-        for selection in other.fl:
-            existing = fl_map.get(selection.channel)
-            if existing is None:
-                fl_map[selection.channel] = selection.copy()
-            else:
-                existing.merge(selection)
-
-        self.fl = self._normalize_fl(list(fl_map.values()))
-
-    def get_pc_channel(self) -> int | None:
-        return self.pc.channel if self.pc else None
+    def get_pc_channel(self) -> int:
+        return self.pc.channel
 
     def get_pc_features(self) -> list[str]:
-        return list(self.pc.features) if self.pc else []
+        return list(self.pc.features)
 
     def get_fl_feature_map(self) -> dict[int, list[str]]:
         return {selection.channel: list(selection.features) for selection in self.fl}
@@ -171,64 +31,64 @@ class Channels:
     def get_fl_channels(self) -> list[int]:
         return [selection.channel for selection in self.fl]
 
-    def to_raw(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "pc": self.pc.to_payload() if self.pc else None,
-            "fl": [selection.to_payload() for selection in self.fl],
-        }
-        return payload
-
-    @classmethod
-    def from_serialized(cls, data: Any) -> "Channels":
-        if not isinstance(data, Mapping):
-            raise ValueError("Channels payload must be a mapping")
-
-        raw_pc = data.get("pc")
-        pc_selection = ChannelSelection.from_value(raw_pc)
-
-        raw_fl = data.get("fl", [])
-        if raw_fl is None:
-            raw_fl = []
-        if not isinstance(raw_fl, Sequence) or isinstance(raw_fl, (str, bytes)):
-            raise ValueError("channels.fl must be a sequence of [channel, features]")
-
-        fl_list: list[ChannelSelection] = []
-        for entry in raw_fl:
-            selection = ChannelSelection.from_value(entry)
-            if selection is None:
-                continue  # Skip invalid entries, consistent with _normalize_fl
-            fl_list.append(selection)
-
-        return cls(pc=pc_selection, fl=fl_list)
-
 
 # =============================================================================
 # EXTRACTION TYPES
 # =============================================================================
 
-FeatureResult = dict[str, float]
-
 
 @dataclass(frozen=True)
-class Result:
-    """Result from trace extraction for a single cell at a single frame."""
+class ProcessingBaseResult:
+    """Result from trace extraction for a single cell at a single frame.
+
+    Attributes:
+        cell: Cell ID.
+        frame: Frame index.
+        good: Quality flag.
+        xc: Centroid x coordinate (computed from mask, falls back to bbox center).
+        yc: Centroid y coordinate (computed from mask, falls back to bbox center).
+        x: Bounding box left edge (x0).
+        y: Bounding box top edge (y0).
+        w: Bounding box width (x1 - x0).
+        h: Bounding box height (y1 - y0).
+    """
 
     cell: int
     frame: int
     good: bool
-    position_x: float
-    position_y: float
-    bbox_x0: float
-    bbox_y0: float
-    bbox_x1: float
-    bbox_y1: float
+    xc: float
+    yc: float
+    x: float
+    y: float
+    w: float
+    h: float
 
 
-@dataclass(frozen=True)
-class ResultWithFeatures(Result):
-    """Result with extracted features."""
+def get_processing_base_fields() -> list[str]:
+    """Get the base field names for the Result dataclass."""
+    return [f.name for f in dataclasses.fields(ProcessingBaseResult)]
 
-    features: FeatureResult
+
+def get_processing_feature_field(feature: str, channel_id: int) -> str:
+    """Get the CSV column name for a feature and channel."""
+    return f"{feature}_ch_{channel_id}"
+
+
+def make_processing_result(feature_columns: list[str]) -> type:
+    """Dynamically create a Result dataclass with base fields + feature columns.
+
+    The resulting class will inherit from BaseResult and be frozen.
+    Feature fields will be floats defaulting to NaN.
+    """
+    feature_fields = [
+        (col, float, field(default=float("nan"))) for col in feature_columns
+    ]
+    return dataclasses.make_dataclass(
+        "Result",
+        feature_fields,
+        bases=(ProcessingBaseResult,),
+        frozen=True,
+    )
 
 
 @dataclass
@@ -237,7 +97,9 @@ class ExtractionContext:
 
     image: np.ndarray
     mask: np.ndarray
-    background: np.ndarray  # Always present; zeros if no background correction available
+    background: (
+        np.ndarray
+    )  # Always present; zeros if no background correction available
     background_weight: float = 1.0  # Weight for background subtraction (default: 1.0)
 
 
@@ -297,14 +159,31 @@ class FeatureMaps:
     cells: list[int]
 
 
+# =============================================================================
+# CONTEXT TYPES
+# =============================================================================
+
+
+@dataclass
+class ProcessingContext:
+    """Context passing through the processing pipeline."""
+
+    output_dir: Path
+    channels: Channels
+    params: dict[str, Any] = field(default_factory=dict)
+    results: dict[int, Any] = field(default_factory=dict)
+
+
 __all__ = [
     "ChannelSelection",
     "Channels",
-    "FeatureResult",
-    "Result",
-    "ResultWithFeatures",
+    "ProcessingBaseResult",
+    "get_processing_base_fields",
+    "get_processing_feature_field",
+    "make_processing_result",
     "ExtractionContext",
     "Region",
     "TileSupport",
     "FeatureMaps",
+    "ProcessingContext",
 ]

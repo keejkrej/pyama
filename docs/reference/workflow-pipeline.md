@@ -97,9 +97,9 @@ For each time frame `t`:
    ```
 
 #### Output
-- Binary segmentation: `{basename}_fov_{fov:03d}_seg_ch_{pc_id}.npy`
-- Format: `(T, H, W)` of `bool`
-- `True` = foreground (cells)
+- Labeled segmentation: `{basename}_fov_{fov:03d}_seg_labeled_ch_{pc_id}.npy`
+- Format: `(T, H, W)` of `uint16`
+- `0` = background, `1-N` = cell IDs (frame-specific)
 
 #### Algorithm Characteristics
 - Computes per-pixel local intensity variation
@@ -120,7 +120,7 @@ For each fluorescence channel and frame `t`:
 
 1. **Mask Foreground**:
    ```
-   dilated = binary_dilation(seg_mask, disk(10))
+   dilated = binary_dilation(seg_labeled, disk(10))
    masked = np.where(dilated, np.nan, fluorescence_image)
    ```
 
@@ -206,7 +206,7 @@ For each fluorescence channel and frame `t`:
    - Disappeared cells: terminate trace
 
 #### Output
-- Labeled tracking: `{basename}_fov_{fov:03d}_seg_labeled_ch_{pc_id}.npy`
+- Labeled tracking: `{basename}_fov_{fov:03d}_seg_tracked_ch_{pc_id}.npy`
 - Format: `(T, H, W)` of `uint16`
 - `0` = background, `1-N` = cell IDs (consistent across frames)
 
@@ -328,8 +328,8 @@ output_dir/
 ├── fov_000/
 │   ├── basename_fov_000_pc_ch_0.npy          # Raw PC stack
 │   ├── basename_fov_000_fl_ch_1.npy          # Raw FL stacks (one per channel)
-│   ├── basename_fov_000_seg_ch_0.npy         # Binary segmentation
-│   ├── basename_fov_000_seg_labeled_ch_0.npy # Tracked cell IDs
+│   ├── basename_fov_000_seg_labeled_ch_0.npy         # Labeled segmentation (untracked)
+│   ├── basename_fov_000_seg_tracked_ch_0.npy # Tracked cell IDs
 │   ├── basename_fov_000_fl_background_ch_1.npy # Background interpolation stacks
 │   └── basename_fov_000_traces.csv                 # Combined feature traces
 ├── fov_001/
@@ -424,7 +424,7 @@ if context.check_cancelled():
 | Stage | File Type | Data Type | Dimensions | Notes |
 |-------|-----------|-----------|------------|-------|
 | Raw Images | .npy | uint16 | (T, H, W) | Memory-mapped for efficiency |
-| Segmentation | .npy | bool | (T, H, W) | Binary mask |
+| Segmentation | .npy | uint16 | (T, H, W) | Labeled mask (untracked) |
 | Tracking | .npy | uint16 | (T, H, W) | Cell IDs, 0=background |
 | Background | .npy | float32 | (T, H, W) | Estimate per channel |
 

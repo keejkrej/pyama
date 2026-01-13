@@ -1,5 +1,12 @@
 """
 Cropping service for extracting cell bounding box crops from tracked segmentation.
+
+**Channel-Conditional Behavior:**
+- **Skipped** if no PC channel configured (needs tracked segmentation masks)
+- Works with PC-only data: crops PC channel data only
+- With FL configured: crops both PC and FL channels, applies background if available
+- Creates HDF5 with /cell_XXXX/ structure containing masks, channels/, and backgrounds/
+- Essential for extraction step - provides cropped regions for efficient feature extraction
 """
 
 from pathlib import Path
@@ -41,21 +48,21 @@ class CroppingService(BaseProcessingService):
             return
 
         # Use naming module for paths
-        seg_labeled_path = naming.seg_labeled(output_dir, base_name, fov, pc_channel)
+        seg_tracked_path = naming.seg_tracked(output_dir, base_name, fov, pc_channel)
         crops_path = naming.crops_h5(output_dir, base_name, fov)
 
-        if not seg_labeled_path.exists():
+        if not seg_tracked_path.exists():
             raise FileNotFoundError(
-                f"Tracked segmentation not found: {seg_labeled_path}"
+                f"Tracked segmentation not found: {seg_tracked_path}"
             )
 
-        # Skip if already exists
+        # If output already exists, skip
         if crops_path.exists():
-            logger.info("FOV %d: Crops file already exists, skipping", fov)
+            logger.info("FOV %d: Crops already exist, skipping", fov)
             return
 
         logger.info("FOV %d: Loading tracked segmentation...", fov)
-        labeled = np.load(seg_labeled_path, mmap_mode="r")
+        seg_tracked_data = np.load(seg_tracked_path, mmap_mode="r")
 
         # Gather channel data to crop
         channels: dict[str, np.ndarray] = {}
@@ -97,7 +104,7 @@ class CroppingService(BaseProcessingService):
 
         # Extract crops
         cell_crops = crop_cells(
-            labeled=labeled,
+            labeled=seg_tracked_data,
             channels=channels,
             backgrounds=backgrounds,
             padding=padding,
@@ -134,23 +141,15 @@ class CroppingService(BaseProcessingService):
     def _save_crops_h5(self, path: Path, cell_crops, cancel_event=None) -> None:
         """Save cell crops to HDF5 file.
 
-        Structure:
-            /cell_001/
-                bboxes          (n_frames, 5) int32 - [t, y0, x0, y1, x1]
-                frames          (n_frames,) int32
-                masks/
-                    frame_000   (h, w) bool
-                    frame_001   ...
-                channels/
-                    pc_ch_0/
-                        frame_000   (h, w) uint16
-                        frame_001   ...
-                    fl_ch_1/
-                        ...
-                backgrounds/
-                    fl_ch_1/
-                        frame_000   (h, w) float32
-                        frame_001   ...
+        See docs/reference/file-formats.md for complete HDF5 structure documentation.
+
+        Structure (summary):
+            /cell_XXXX/
+                bboxes     (n_frames, 5) [t, y0, x0, y1, x1] int32
+                frames     (n_frames,) frame indices int32
+                masks/     (h, w) boolean masks per frame
+                channels/  cropped image data (pc_ch_*, fl_ch_*)
+                backgrounds/ background data for FL channels (optional)
         """
         with h5py.File(path, "w") as f:
             for crop in cell_crops:

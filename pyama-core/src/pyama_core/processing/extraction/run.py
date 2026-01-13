@@ -13,8 +13,9 @@ and is designed for performance with time-series datasets:
 - Filters traces to remove short-lived or low-quality cells
 """
 
+import dataclasses
 from dataclasses import dataclass
-from typing import Callable, Any
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,11 @@ import pandas as pd
 from pyama_core.processing.extraction.features import (
     ExtractionContext,
     get_feature_extractor,
+)
+from pyama_core.types.processing import (
+    get_processing_base_fields,
+    get_processing_feature_field,
+    make_processing_result,
 )
 
 
@@ -38,6 +44,7 @@ class ChannelFeatureConfig:
         use_bbox_as_mask: If True (default), use entire bounding box as mask.
             If False, use the cell segmentation mask.
     """
+
     channel_name: str
     channel_id: int
     background_name: str | None
@@ -65,21 +72,19 @@ def extract_trace_from_crops(
     - cancel_event: Optional threading.Event for cancellation support
 
     Returns:
-    - DataFrame with columns [cell, frame, good, position_x, position_y,
-      bbox_x0, bbox_y0, bbox_x1, bbox_y1, <feature>_<channel>, ...]
+    - DataFrame with columns [cell, frame, good, xc, yc, x, y, w, h,
+      <feature>_<channel>, ...]
     """
     import h5py
 
-    if not channel_configs:
-        return pd.DataFrame()
-
-    # Build column names: base columns + feature_channel columns
-    base_fields = ["cell", "frame", "good", "position_x", "position_y",
-                   "bbox_x0", "bbox_y0", "bbox_x1", "bbox_y1"]
+    # Build column names: base columns (always included) + feature_channel columns
+    base_fields = get_processing_base_fields()
     feature_columns = []
     for cfg in channel_configs:
         for feat in cfg.features:
-            feature_columns.append(f"{feat}_ch_{cfg.channel_id}")
+            feature_columns.append(get_processing_feature_field(feat, cfg.channel_id))
+
+    ProcessingResult = make_processing_result(feature_columns)
 
     col_names = base_fields + feature_columns
     rows: list[dict[str, Any]] = []
@@ -103,7 +108,7 @@ def extract_trace_from_crops(
             backgrounds_grp = cell_grp.get("backgrounds")
 
             # Process each frame for this cell
-            for i, (frame_idx, bbox) in enumerate(zip(frames, bboxes)):
+            for frame_idx, bbox in zip(frames, bboxes):
                 if cancel_event and cancel_event.is_set():
                     break
 
@@ -114,60 +119,56 @@ def extract_trace_from_crops(
                     continue
                 mask = masks_grp[frame_key][:]
 
-                # Compute position from mask (global coordinates)
+                # Compute centroid from mask (global coordinates)
                 _, y0, x0, y1, x1 = bbox
-                row_inds = np.where(mask.any(axis=1))[0]
-                col_inds = np.where(mask.any(axis=0))[0]
-                if row_inds.size == 0 or col_inds.size == 0:
-                    position_x = float((x0 + x1) / 2.0)
-                    position_y = float((y0 + y1) / 2.0)
+                if not mask.any():
+                    xc = float((x0 + x1) / 2.0)
+                    yc = float((y0 + y1) / 2.0)
                 else:
-                    local_x = float((col_inds[0] + col_inds[-1]) / 2.0)
-                    local_y = float((row_inds[0] + row_inds[-1]) / 2.0)
-                    position_x = float(x0) + local_x
-                    position_y = float(y0) + local_y
-
-                # Start building row with base columns
-                row: dict[str, Any] = {
-                    "cell": cell_id,
-                    "frame": int(frame_idx),
-                    "good": True,
-                    "position_x": position_x,
-                    "position_y": position_y,
-                    "bbox_x0": float(x0),
-                    "bbox_y0": float(y0),
-                    "bbox_x1": float(x1),
-                    "bbox_y1": float(y1),
-                }
+                    ys, xs = np.where(mask)
+                    local_x = float(np.mean(xs))
+                    local_y = float(np.mean(ys))
+                    xc = float(x0) + local_x
+                    yc = float(y0) + local_y
 
                 # Extract features from each channel
+                feature_values = {}
                 for cfg in channel_configs:
-                    col_suffix = f"_ch_{cfg.channel_id}"
-
                     # Get channel data
                     if channels_grp is None or cfg.channel_name not in channels_grp:
                         # Fill with NaN if channel not available
                         for feat in cfg.features:
-                            row[f"{feat}{col_suffix}"] = np.nan
+                            feature_values[
+                                get_processing_feature_field(feat, cfg.channel_id)
+                            ] = np.nan
                         continue
 
                     ch_grp = channels_grp[cfg.channel_name]
                     if frame_key not in ch_grp:
                         for feat in cfg.features:
-                            row[f"{feat}{col_suffix}"] = np.nan
+                            feature_values[
+                                get_processing_feature_field(feat, cfg.channel_id)
+                            ] = np.nan
                         continue
 
                     image_crop = ch_grp[frame_key][:]
 
-                    # Get background data
-                    if cfg.background_name and backgrounds_grp and cfg.background_name in backgrounds_grp:
+                    # Get background data - optimize to skip loading when not needed
+                    if (
+                        cfg.background_weight
+                        > 0.0  # Only need background if weight > 0
+                        and cfg.background_name  # Background must be named
+                        and backgrounds_grp  # Backgrounds group must exist
+                        and cfg.background_name
+                        in backgrounds_grp  # Specific background must exist
+                    ):
                         bg_grp = backgrounds_grp[cfg.background_name]
                         if frame_key in bg_grp:
                             bg_crop = bg_grp[frame_key][:]
                         else:
-                            bg_crop = np.zeros_like(image_crop, dtype=np.float32)
+                            bg_crop = None  # Missing frame, signal to features
                     else:
-                        bg_crop = np.zeros_like(image_crop, dtype=np.float32)
+                        bg_crop = None  # No background needed or available
 
                     # Determine which mask to use
                     if cfg.use_bbox_as_mask:
@@ -178,22 +179,50 @@ def extract_trace_from_crops(
                         effective_mask = mask
 
                     # Create extraction context
+                    background = (
+                        bg_crop.astype(np.float32) if bg_crop is not None else None
+                    )
                     ctx = ExtractionContext(
                         image=image_crop.astype(np.float32),
                         mask=effective_mask,
-                        background=bg_crop.astype(np.float32),
+                        background=background,
+                        background_weight=cfg.background_weight,
+                    )
+                    ctx = ExtractionContext(
+                        image=image_crop.astype(np.float32),
+                        mask=effective_mask,
+                        background=background,
                         background_weight=cfg.background_weight,
                     )
 
                     # Extract each feature
                     for feat in cfg.features:
                         extractor = get_feature_extractor(feat)
-                        row[f"{feat}{col_suffix}"] = float(extractor(ctx))
+                        feature_values[
+                            get_processing_feature_field(feat, cfg.channel_id)
+                        ] = float(extractor(ctx))
 
-                rows.append(row)
+                # Create result object
+                result = ProcessingResult(
+                    cell=cell_id,
+                    frame=int(frame_idx),
+                    good=True,
+                    xc=xc,
+                    yc=yc,
+                    x=float(x0),
+                    y=float(y0),
+                    w=float(x1 - x0),
+                    h=float(y1 - y0),
+                    **feature_values,
+                )
+                rows.append(dataclasses.asdict(result))
 
             if progress_callback:
                 progress_callback(cell_idx, total_cells, "Extracting features")
 
-    df = pd.DataFrame(rows, columns=col_names)
+    try:
+        df = pd.DataFrame(rows, columns=col_names)
+    except Exception:
+        raise ValueError(f"Failed to create DataFrame. Expected columns: {col_names}")
+
     return df

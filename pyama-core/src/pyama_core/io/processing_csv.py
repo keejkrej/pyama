@@ -5,7 +5,7 @@ This module defines utilities for handling CSV files consumed by the
 processing module. The format includes FOV information, cell tracking data,
 and extracted features.
 
-Format: fov, cell, frame, good, position_x, position_y, and dynamic feature columns
+Format: fov, cell, frame, good, xc, yc, x, y, w, h, and dynamic feature columns
 """
 
 from pathlib import Path
@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 # Import Result class for field definitions
-from pyama_core.types.processing import Result
+from pyama_core.types.processing import get_processing_base_fields
 
 
 def get_dataframe(csv_path: Path) -> pd.DataFrame:
@@ -78,7 +78,7 @@ def extract_cell_feature_dataframe(df: pd.DataFrame, cell_id: int) -> pd.DataFra
         raise ValueError(f"Cell ID {cell_id} not found in DataFrame")
 
     # Get available features (exclude basic columns and metadata)
-    basic_cols = [f.name for f in Result.__dataclass_fields__.values()]
+    basic_cols = get_processing_base_fields()
     # Also exclude 'fov' which is metadata, not a feature
     metadata_cols = ["fov", "exist"]  # Add other metadata columns as needed
     exclude_cols = set(basic_cols) | set(metadata_cols)
@@ -162,7 +162,7 @@ def extract_cell_position_dataframe(df: pd.DataFrame, cell_id: int) -> pd.DataFr
         cell_id: Cell ID to extract data for
 
     Returns:
-        DataFrame with columns 'frame', 'position_x', 'position_y'
+        DataFrame with columns 'frame', 'xc', 'yc'
     """
     # Filter data for the specific cell
     cell_df = df[df["cell"] == cell_id].copy()
@@ -177,8 +177,8 @@ def extract_cell_position_dataframe(df: pd.DataFrame, cell_id: int) -> pd.DataFr
     result_df = pd.DataFrame(
         {
             "frame": cell_df["frame"].values,
-            "position_x": cell_df["position_x"].values,
-            "position_y": cell_df["position_y"].values,
+            "xc": cell_df["xc"].values,
+            "yc": cell_df["yc"].values,
         }
     )
 
@@ -201,7 +201,7 @@ def extract_all_cells_data(df: pd.DataFrame) -> dict:
             "cell_id": {
                 "quality": bool,
                 "features": {"frame": array, "feature1": array, ...},
-                "positions": {"frames": array, "position_x": array, "position_y": array}
+                "positions": {"frames": array, "xc": array, "yc": array}
             },
             ...
         }
@@ -230,8 +230,8 @@ def extract_all_cells_data(df: pd.DataFrame) -> dict:
         positions_df = extract_cell_position_dataframe(df, cell_id)
         positions = {
             "frames": positions_df["frame"].values,
-            "position_x": positions_df["position_x"].values,
-            "position_y": positions_df["position_y"].values,
+            "xc": positions_df["xc"].values,
+            "yc": positions_df["yc"].values,
         }
 
         result[str_id] = {

@@ -92,7 +92,7 @@ The pipeline processes FOVs in batches using multithreading (`ThreadPoolExecutor
 
 ### Processing Context
 
-The `ProcessingContext` dataclass (in `pyama_core.processing.types`) is the central data structure that flows through the pipeline, containing:
+The `ProcessingContext` dataclass (in `pyama_core.types.processing`) is the central data structure that flows through the pipeline, containing:
 
 - Output directory paths
 - Channel configurations (`Channels` dataclass with `pc` and `fl` fields)

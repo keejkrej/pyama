@@ -102,8 +102,8 @@ output_dir/
 ├── fov_000/                         # Per-FOV results
 │   ├── basename_fov_000_pc_ch_0.npy         # Raw phase contrast
 │   ├── basename_fov_000_fl_ch_1.npy         # Raw fluorescence
-│   ├── basename_fov_000_seg_ch_0.npy        # Binary segmentation
-│   ├── basename_fov_000_seg_labeled_ch_0.npy# Tracked cell IDs
+│   ├── basename_fov_000_seg_labeled_ch_0.npy        # Labeled segmentation (untracked)
+│   ├── basename_fov_000_seg_tracked_ch_0.npy# Tracked cell IDs
 │   ├── basename_fov_000_fl_background_ch_1.npy# Background estimate
 │   └── basename_fov_000_traces.csv          # Feature traces
 ├── fov_001/

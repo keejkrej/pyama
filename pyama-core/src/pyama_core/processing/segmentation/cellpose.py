@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 try:
     from cellpose import models
     from cellpose.core import assign_device
+
     CELLPOSE_AVAILABLE = True
 except ImportError:
     CELLPOSE_AVAILABLE = False
@@ -51,13 +52,13 @@ def segment_cell(
     """Segment a 3D stack using CellPose-SAM deep learning model.
 
     For each frame, converts grayscale to 3-channel format, applies CellPose-SAM
-    to detect cell boundaries, and converts the labeled masks to binary
-    foreground/background masks. Writes results into ``out`` in-place.
+    to detect cell boundaries, and returns the labeled masks. Writes results into
+    ``out`` in-place.
 
     Args:
         image: 3D float-like array ``(T, H, W)``. Grayscale images will be
             converted to 3-channel format automatically.
-        out: Preallocated boolean array ``(T, H, W)`` for masks.
+        out: Preallocated integer array ``(T, H, W)`` for labeled masks (uint16).
         progress_callback: Optional callable ``(t, total, msg)`` for progress.
         cancel_event: Optional threading.Event for cancellation support.
         pretrained_model: CellPose model path or name. Default is 'cpsam'
@@ -96,7 +97,7 @@ def segment_cell(
 
     # Convert to float32 for processing (view if possible, copy if needed)
     image = image.astype(np.float32, copy=False)
-    out = out.astype(bool, copy=False)
+    out = out.astype(np.uint16, copy=False)
 
     # Initialize CellPose-SAM model (reuse across frames for efficiency)
     # CellPose v4+ uses assign_device instead of use_gpu
@@ -106,8 +107,10 @@ def segment_cell(
             device, gpu = assign_device(gpu=False)
         else:
             device, _ = assign_device(gpu=gpu)
-    
-    logger.info("Initializing CellPose-SAM model '%s' (device: %s)", pretrained_model, device)
+
+    logger.info(
+        "Initializing CellPose-SAM model '%s' (device: %s)", pretrained_model, device
+    )
     model = models.CellposeModel(pretrained_model=pretrained_model, device=device)
 
     n_frames = image.shape[0]
@@ -119,7 +122,7 @@ def segment_cell(
 
         # Extract single frame (copy to avoid modifying input)
         frame = image[t].copy()
-        
+
         # CellPose-SAM requires 3-channel images (C, H, W format)
         # Convert grayscale (H, W) to 3-channel (3, H, W) by replicating
         if frame.ndim == 2:
@@ -161,10 +164,8 @@ def segment_cell(
         else:
             masks = result
 
-        # Convert labeled masks to binary (foreground = any cell)
-        # CellPose-SAM returns masks where 0 is background and >0 are cell IDs
-        binary_mask = masks > 0
-        out[t] = binary_mask
+        # Write labeled masks directly to output
+        out[t] = masks.astype(np.uint16, copy=False)
 
         if progress_callback is not None:
             progress_callback(t, n_frames, "CellPose-SAM Segmentation")

@@ -3,25 +3,25 @@ Workflow pipeline for microscopy image analysis.
 Consolidates types, helpers, and the orchestration function.
 """
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from pyama_core.io import (
     MicroscopyMetadata,
     ProcessingConfig,
+    config_path,
     ensure_config,
     save_config,
-    config_path,
 )
 from pyama_core.processing.workflow.services import (
-    CopyingService,
-    SegmentationService,
     BackgroundEstimationService,
-    TrackingService,
+    CopyingService,
     CroppingService,
     ExtractionService,
+    SegmentationService,
+    TrackingService,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,8 +70,13 @@ def run_single_worker(
 
     try:
         config = ensure_config(config)
-        segmentation = SegmentationService()
-        tracking = TrackingService()
+
+        # Read algorithm choice from config params
+        seg_method = config.get_param("segmentation_method", "logstd")
+        track_method = config.get_param("tracking_method", "iou")
+
+        segmentation = SegmentationService(method=seg_method)
+        tracking = TrackingService(method=track_method)
         background_estimation = BackgroundEstimationService()
         cropping = CroppingService()
         trace_extraction = ExtractionService()
@@ -117,9 +122,7 @@ def run_single_worker(
             )
             return (fovs, 2, len(fovs) - 2, "Cancelled after tracking")
 
-        logger.info(
-            "Starting Background Estimation for FOVs %d-%d", fovs[0], fovs[-1]
-        )
+        logger.info("Starting Background Estimation for FOVs %d-%d", fovs[0], fovs[-1])
         background_estimation.process_all_fovs(
             metadata=metadata,
             config=config,
@@ -172,29 +175,6 @@ def run_single_worker(
         return fovs, 0, len(fovs), error_msg
 
 
-def _cleanup_fov_folders(output_dir: Path, fov_start: int, fov_end: int) -> None:
-    """Clean up FOV folders created during processing when cancelled."""
-    try:
-        if not output_dir or not output_dir.exists():
-            return
-
-        logger.info("Cleaning up FOV folders after cancellation")
-
-        for fov_idx in range(fov_start, fov_end + 1):
-            fov_dir = output_dir / f"fov_{fov_idx:03d}"
-            if fov_dir.exists() and fov_dir.is_dir():
-                try:
-                    import shutil
-
-                    shutil.rmtree(fov_dir)
-                    logger.debug("Removed FOV directory: %s", fov_dir)
-                except Exception as e:
-                    logger.warning("Failed to remove FOV directory %s: %s", fov_dir, e)
-
-    except Exception as e:
-        logger.warning("Error during FOV folder cleanup: %s", e)
-
-
 def run_complete_workflow(
     metadata: MicroscopyMetadata,
     config: ProcessingConfig,
@@ -206,6 +186,20 @@ def run_complete_workflow(
     cancel_event: threading.Event | None = None,
 ) -> bool:
     """Run the complete processing workflow.
+
+    The workflow consists of these steps (parallelized unless noted):
+
+    1. Copying (sequential per batch): Extract data from ND2 files
+    2. Segmentation: Cell detection (requires PC channel)
+    3. Tracking: Cell tracking across frames (requires PC channel)
+    4. Background Estimation: Fluorescence background fitting (requires FL channels)
+    5. Cropping: Extract cell bounding boxes (works with PC-only, optionally with FL)
+    6. Extraction: Feature extraction to CSV (position/bbox with PC-only, more features with FL)
+
+    **Channel-Conditional Behavior:**
+    - No PC channel configured: Segmentation, tracking, cropping, extraction are skipped
+    - No FL channels configured: Background estimation is skipped automatically
+    - PC channel with no features: Extraction still outputs position/bbox data for tracking
 
     Args:
         metadata: Microscopy file metadata.
@@ -322,9 +316,7 @@ def run_complete_workflow(
                                 message,
                             )
                     except Exception as e:
-                        error_msg = (
-                            f"Worker exception for FOVs {fov_range[0]}-{fov_range[-1]}: {str(e)}"
-                        )
+                        error_msg = f"Worker exception for FOVs {fov_range[0]}-{fov_range[-1]}: {str(e)}"
                         logger.error(error_msg)
 
                     progress = int(completed_fovs / total_fovs * 100)

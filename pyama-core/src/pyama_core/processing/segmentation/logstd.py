@@ -19,6 +19,7 @@ from scipy.ndimage import (
     binary_opening,
     binary_closing,
 )
+from skimage.measure import label, regionprops
 from typing import Callable
 
 
@@ -94,18 +95,24 @@ def _morph_cleanup(mask: np.ndarray, size: int = 7, iterations: int = 3) -> np.n
 def segment_cell(
     image: np.ndarray,
     out: np.ndarray,
+    min_size: int | None = None,
+    max_size: int | None = None,
     progress_callback: Callable | None = None,
     cancel_event=None,
 ) -> None:
     """Segment a 3D stack using log-STD thresholding and morphology.
 
     For each frame, computes a log-STD image, selects a histogram-based
-    threshold, and applies basic morphological cleanup. Writes results into
-    ``out`` in-place.
+    threshold, applies basic morphological cleanup, and labels connected
+    components. Writes results into ``out`` in-place.
 
     Args:
         image: 3D float-like array ``(T, H, W)``.
-        out: Preallocated boolean array ``(T, H, W)`` for masks.
+        out: Preallocated integer array ``(T, H, W)`` for labeled masks (uint16).
+        min_size: Minimum region size in pixels (inclusive). Regions smaller than
+            this are removed.
+        max_size: Maximum region size in pixels (inclusive). Regions larger than
+            this are removed.
         progress_callback: Optional callable ``(t, total, msg)`` for progress.
         cancel_event: Optional threading.Event for cancellation support.
 
@@ -122,7 +129,7 @@ def segment_cell(
         raise ValueError("image and out must have the same shape (T, H, W)")
 
     image = image.astype(np.float32, copy=False)
-    out = out.astype(bool, copy=False)
+    out = out.astype(np.uint16, copy=False)
 
     for t in range(image.shape[0]):
         # Check for cancellation before processing each frame
@@ -136,6 +143,36 @@ def segment_cell(
         logstd = _compute_logstd_2d(image[t])
         thresh = _threshold_by_histogram(logstd)
         binary = logstd > thresh
-        out[t] = _morph_cleanup(binary)
+        cleaned = _morph_cleanup(binary)
+
+        # Label connected components
+        labeled = label(cleaned, connectivity=1).astype(np.uint16)
+
+        # Filter by size if needed
+        if min_size is not None or max_size is not None:
+            props = regionprops(labeled)
+            mask_to_remove = np.zeros_like(labeled, dtype=bool)
+
+            for p in props:
+                area = p.area
+                if (min_size is not None and area < min_size) or (
+                    max_size is not None and area > max_size
+                ):
+                    # Mark pixels for removal
+                    # Using coords is faster than boolean indexing for sparse removals,
+                    # but boolean indexing is simpler. Let's use simple boolean masking
+                    # on the label ID since we have the labeled array.
+                    mask_to_remove |= labeled == p.label
+
+            labeled[mask_to_remove] = 0
+
+            # Relabel to ensure consecutive IDs (optional, but good practice)
+            # Actually, for tracking it doesn't strictly matter if IDs are consecutive,
+            # but it keeps the max ID lower. However, relabeling can be expensive.
+            # Tracking usually handles non-consecutive IDs fine.
+            # Let's skip relabeling for performance unless necessary.
+
+        out[t] = labeled
+
         if progress_callback is not None:
             progress_callback(t, image.shape[0], "Segmentation")

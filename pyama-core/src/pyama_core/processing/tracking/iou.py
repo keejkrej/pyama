@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
-from skimage.measure import label, regionprops
+from skimage.measure import regionprops
 from scipy.optimize import linear_sum_assignment
 
 from pyama_core.types.processing import Region
@@ -38,16 +38,15 @@ class IterationState:
     prev_regions: LabeledRegions
 
 
-def _extract_regions(frame: np.ndarray) -> LabeledRegions:
-    """Extract connected components from a 2D binary frame.
+def _regions_from_labeled(labeled: np.ndarray) -> LabeledRegions:
+    """Extract regions from a 2D labeled frame.
 
     Args:
-        frame: 2D boolean array ``(H, W)``; nonzero values indicate foreground.
+        labeled: 2D integer array ``(H, W)`` with labeled regions.
 
     Returns:
         Mapping ``label -> Region`` with area, bbox and pixel coordinates.
     """
-    labeled = label(frame, connectivity=1)
     regions = {}
     for p in regionprops(labeled):
         regions[p.label] = Region(
@@ -132,29 +131,6 @@ def _build_cost_matrix(
                 valid[i, j] = True
 
     return cost, valid
-
-
-def _filter_regions_by_size(
-    regions: LabeledRegions, min_size: int | None, max_size: int | None
-) -> LabeledRegions:
-    """Filter regions by pixel area.
-
-    Args:
-        regions: Mapping ``label -> Region``.
-        min_size: Minimum area in pixels (inclusive). ``None`` disables lower bound.
-        max_size: Maximum area in pixels (inclusive). ``None`` disables upper bound.
-
-    Returns:
-        Filtered mapping with regions outside bounds removed.
-    """
-    out: LabeledRegions = {}
-    for lbl, r in regions.items():
-        if max_size and r.area > max_size:
-            continue
-        if min_size and r.area < min_size:
-            continue
-        out[lbl] = r
-    return out
 
 
 def _assign_prev_to_curr(
@@ -266,8 +242,6 @@ def _process_frame(
 def track_cell(
     image: np.ndarray,
     out: np.ndarray,
-    min_size: int | None = None,
-    max_size: int | None = None,
     min_iou: float = 0.1,
     progress_callback: Callable | None = None,
     cancel_event=None,
@@ -279,10 +253,8 @@ def track_cell(
     consistent cell IDs. Writes results into ``out`` in-place.
 
     Args:
-        image: 3D boolean array ``(T, H, W)`` with segmented foreground.
-        out: Preallocated integer array ``(T, H, W)`` to receive labeled IDs.
-        min_size: Minimum region size to track in pixels (inclusive).
-        max_size: Maximum region size to track in pixels (inclusive).
+        image: 3D labeled array ``(T, H, W)`` (uint16) with cell segments.
+        out: Preallocated integer array ``(T, H, W)`` to receive tracked labeled IDs.
         min_iou: Minimum IoU threshold for candidate matches.
         progress_callback: Optional callable ``(t, total, msg)`` for progress.
         cancel_event: Optional threading.Event for cancellation support.
@@ -299,10 +271,10 @@ def track_cell(
     if out.shape != image.shape:
         raise ValueError("image and out must have the same shape (T, H, W)")
 
-    image = image.astype(bool, copy=False)
+    image = image.astype(np.uint16, copy=False)
     out = out.astype(np.uint16, copy=False)
 
-    # Extract and prefilter regions for all frames
+    # Extract regions for all frames
     regions_all: list[LabeledRegions] = []
     for t in range(image.shape[0]):
         # Check for cancellation before processing each frame
@@ -313,17 +285,19 @@ def track_cell(
             logger.info("Tracking cancelled at frame %d", t)
             return
 
-        regions = _extract_regions(image[t])
-        regions = _filter_regions_by_size(regions, min_size, max_size)
+        regions = _regions_from_labeled(image[t])
         regions_all.append(regions)
         if progress_callback is not None:
-            progress_callback(t, image.shape[0], "Labeling")
+            progress_callback(t, image.shape[0], "Region Extraction")
 
     # Initialize iteration state with frame 0 regions
     # NOTE: traces are seeded only from frame 0. Regions that first appear
     # in later frames will NOT be assigned new trace IDs by this algorithm.
     # This means newborn regions are ignored unless they overlap a region
     # from the previous frame and become matched via IoU assignment.
+    if not regions_all:
+        return
+
     init_prev_labels = list(regions_all[0].keys())
     init_prev_regions = regions_all[0]
     # Each trace stores mapping frame_id -> label
