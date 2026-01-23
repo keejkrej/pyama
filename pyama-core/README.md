@@ -286,9 +286,10 @@ MODELS = {
 
 See the tests directory for working examples:
 
-- `tests/test_workflow.py`: End-to-end workflow execution
-- `tests/test_merge.py`: Merge operations
-- `tests/test_results_yaml.py`: Results file handling
+- `tests/processing/test_merge.py`: Merge operations
+- `tests/processing/test_seg.py`: Segmentation testing
+- `tests/processing/test_track.py`: Tracking testing
+- `tests/analysis/`: Analysis model tests
 
 ## Integration
 

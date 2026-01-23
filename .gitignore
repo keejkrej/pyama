@@ -4,9 +4,9 @@ __pycache__/
 *$py.class
 
 # Test artifacts
-/tests/_plots/
-/tests/_fake_samples/
-*_plots/
+**/tests/_results/
+**/tests/_plots/
+*.npy
 
 # C extensions
 *.so

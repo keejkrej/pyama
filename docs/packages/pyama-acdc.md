@@ -246,7 +246,7 @@ python -c "from pyama_acdc import pyAMA_Win; print('Plugin works')"
 ### Testing Integration
 
 ```python
-# tests/test_integration.py
+# pyama-acdc/tests/test_integration.py (if created)
 def test_cell_acdc_integration():
     """Test that plugin integrates correctly with Cell-ACDC."""
     from pyama_acdc import pyAMA_Win
@@ -338,6 +338,6 @@ print(report.summary())
 - Cell-ACDC documentation: https://github.com/pycellacdc/pycellacdc
 - PyAMA user guide: [User Guide](../user-guide/)
 - Integration examples in `examples/` directory
-- Test data for development in `tests/test_data/`
+- Test data for development in package-specific test directories
 
 PyAMA-ACDC bridges the gap between Cell-ACDC's user-friendly interface and PyAMA's advanced analytical capabilities, providing a seamless experience for microscopy image analysis workflows.

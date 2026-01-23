@@ -13,28 +13,30 @@ PyAMA testing follows a multi-layered approach:
 
 ## Test Organization
 
+Tests are organized within each package directory. Each package has its own `tests/` subdirectory. The main test suite is currently in `pyama-core/tests/`:
+
 ```
-tests/
+{package}/tests/  (e.g., pyama-core/tests/)
 ├── _plots/                    # Generated visual test outputs
-├── unit/                      # Unit tests by package
-│   ├── test_core.py
-│   ├── test_pro.py
-│   ├── test_air.py
-│   ├── test_backend.py
-│   └── test_frontend.py
-├── integration/               # Cross-component tests
-│   ├── test_workflow.py
-│   ├── test_api.py
-│   └── test_cli.py
-├── visual/                    # Algorithm verification
-│   ├── test_segmentation.py
-│   ├── test_tracking.py
-│   └── test_extraction.py
-├── gui/                       # GUI application tests
-│   └── PROTOCOL.md            # Manual GUI testing guide
-└── performance/               # Performance benchmarks
-    ├── test_memory.py
-    └── test_speed.py
+├── _results/                  # Test artifacts (gitignored)
+├── __init__.py
+├── conftest.py                # Pytest configuration
+├── analysis/                  # Analysis model tests
+│   ├── test_event.py
+│   └── test_kinetic.py
+├── features/                  # Feature extraction tests
+│   ├── __init__.py
+│   ├── test_area.py
+│   ├── test_intensity_total.py
+│   └── test_particle_num.py
+├── processing/                # Processing workflow tests
+│   ├── test_merge.py
+│   ├── test_normalization.py
+│   ├── test_seg.py
+│   └── test_track.py
+└── utils/                     # Utility function tests
+    ├── __init__.py
+    └── progress.py
 ```
 
 ## Running Tests
@@ -59,7 +61,7 @@ uv run pytest tests/unit/
 uv run pytest tests/integration/
 
 # Visual tests (require manual inspection)
-uv run python tests/test_algo.py
+uv run pytest pyama-core/tests/processing/test_seg.py -v
 
 # Performance tests
 uv run pytest tests/performance/
@@ -69,7 +71,7 @@ uv run pytest tests/performance/
 
 ### Plot Generation
 
-All visual tests save plots to `tests/_plots/`:
+All visual tests save plots to `{package}/tests/_plots/` (e.g., `pyama-core/tests/_plots/` for core tests):
 
 ```python
 def test_segmentation_round_cells():
@@ -99,9 +101,10 @@ def test_segmentation_round_cells():
                            fill=False, edgecolor='red', linewidth=2)
             axes[1].add_patch(rect)
     
-    # Save plot
-    os.makedirs('tests/_plots', exist_ok=True)
-    plt.savefig('tests/_plots/segmentation_round_cells.pdf', dpi=150)
+    # Save plot (adjust package name as needed)
+    plot_dir = os.getenv('PYAMA_PLOT_DIR', 'pyama-core/tests/_plots')
+    os.makedirs(plot_dir, exist_ok=True)
+    plt.savefig(f'{plot_dir}/segmentation_round_cells.pdf', dpi=150)
     plt.close(fig)  # important: close figure
     
     # Assertions
@@ -118,7 +121,7 @@ From `AGENTS.md` protocol rules:
    - Particle counting: many Gaussian particles with bounding boxes
 
 2. **Output Location**
-   - Always save to `tests/_plots/`
+   - Always save to `{package}/tests/_plots/` (e.g., `pyama-core/tests/_plots/` for core tests)
    - Override with `PYAMA_PLOT_DIR` environment variable
 
 3. **Deterministic RNG**
@@ -513,7 +516,7 @@ jobs:
 
 ```bash
 # Run single test with debugging
-uv run pytest tests/test_workflow.py::test_end_to_end -v -s --pdb
+uv run pytest pyama-core/tests/processing/test_merge.py -v -s --pdb
 
 # Enable debug logging
 PYAMA_LOG_LEVEL=DEBUG uv run pytest

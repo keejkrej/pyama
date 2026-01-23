@@ -31,7 +31,7 @@ from pyama_core.io.processing_csv import (
     write_dataframe,
 )
 from pyama_core.io.trace_paths import resolve_trace_path
-from pyama_core.types.processing import Result
+from pyama_core.types.processing import ProcessingBaseResult
 from pyama_qt.components.mpl_canvas import MplCanvas
 from pyama_qt.types.visualization import FeatureData, PositionData
 
@@ -363,7 +363,7 @@ class TracePanel(QWidget):
 
         try:
             df = get_dataframe(path_to_load)
-            base_fields = ["fov"] + [field.name for field in dataclass_fields(Result)]
+            base_fields = ["fov"] + [field.name for field in dataclass_fields(ProcessingBaseResult)]
             missing = [col for col in base_fields if col not in df.columns]
             if missing:
                 raise ValueError(

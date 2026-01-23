@@ -27,6 +27,7 @@ from pyama_core.io.config import (
     save_config,
     ensure_config,
     config_path,
+    serialize_channels_data,
 )
 
 
@@ -51,4 +52,5 @@ __all__ = [
     "save_config",
     "ensure_config",
     "config_path",
+    "serialize_channels_data",
 ]

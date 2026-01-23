@@ -8,7 +8,13 @@ from typing import Iterable
 import typer
 import yaml
 
-from pyama_core.io import ProcessingConfig, load_microscopy_file
+from pyama_core.io import (
+    ProcessingConfig,
+    load_microscopy_file,
+    save_config,
+    config_path,
+    load_config,
+)
 from pyama_core.processing.extraction.features import (
     list_fluorescence_features,
     list_phase_features,
@@ -19,11 +25,15 @@ from pyama_core.processing.merge import (
 from pyama_core.processing.merge import (
     run_merge as run_core_merge,
 )
+from pyama_core.processing.segmentation import list_segmenters
+from pyama_core.processing.tracking import list_trackers
 from pyama_core.processing.workflow.run import run_complete_workflow
+from pyama_core.processing.workflow.worker import WorkflowWorker
 from pyama_core.types.processing import (
     Channels,
     ChannelSelection,
 )
+from pyama_core.utils.plotting import plot_numpy_array
 
 app = typer.Typer(help="pyama-core utilities")
 logger = logging.getLogger(__name__)
@@ -101,6 +111,61 @@ def _prompt_features(channel_label: str, options: list[str]) -> list[str]:
         if typer.confirm(f"Enable '{feature}' for {channel_label}?", default=True):
             selected.append(feature)
     return selected
+
+
+def _prompt_choice(prompt_text: str, options: list[str], default: str) -> str:
+    """Prompt for a choice from a list of options."""
+    while True:
+        typer.echo(f"\n{prompt_text}")
+        for idx, option in enumerate(options, 1):
+            marker = " (default)" if option == default else ""
+            typer.echo(f"  [{idx}] {option}{marker}")
+        value = typer.prompt("Select option", default=default).strip()
+        if value in options:
+            return value
+        # Try numeric selection
+        try:
+            idx = int(value)
+            if 1 <= idx <= len(options):
+                return options[idx - 1]
+        except ValueError:
+            pass
+        typer.secho(
+            f"Invalid choice '{value}'. Please select from {options}",
+            err=True,
+            fg=typer.colors.RED,
+        )
+
+
+def _prompt_float(
+    prompt_text: str,
+    default: float,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
+    """Prompt for a float value with optional min/max constraints."""
+    while True:
+        value = typer.prompt(prompt_text, default=str(default)).strip()
+        try:
+            number = float(value)
+        except ValueError:
+            typer.secho("Please enter a numeric value.", err=True, fg=typer.colors.RED)
+            continue
+        if minimum is not None and number < minimum:
+            typer.secho(
+                f"Value must be >= {minimum}.",
+                err=True,
+                fg=typer.colors.RED,
+            )
+            continue
+        if maximum is not None and number > maximum:
+            typer.secho(
+                f"Value must be <= {maximum}.",
+                err=True,
+                fg=typer.colors.RED,
+            )
+            continue
+        return number
 
 
 def _print_channel_summary(channel_names: list[str]) -> None:
@@ -213,8 +278,22 @@ def _save_samples_yaml(path: Path, samples: list[dict[str, str]]) -> None:
 
 
 @app.command()
-def workflow() -> None:
-    """Run an interactive workflow wizard to process microscopy data."""
+def workflow(
+    config_path: Path | None = typer.Option(
+        None, "--config", "-c", help="Path to processing config YAML file"
+    ),
+    nd2_path: Path | None = typer.Option(
+        None, "--nd2-path", "-n", help="Path to ND2 microscopy file"
+    ),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", "-o", help="Output directory for results"
+    ),
+) -> None:
+    """Run a processing workflow, either interactively or with provided config file.
+
+    If --config is provided, loads configuration from the YAML file and runs non-interactively.
+    Otherwise, runs an interactive wizard to collect inputs.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -250,6 +329,140 @@ def workflow() -> None:
         PC_FEATURE_OPTIONS = ["area"]
         FL_FEATURE_OPTIONS = ["intensity_total"]
 
+    # Non-interactive mode: load config from file
+    if config_path is not None:
+        config_path = Path(config_path).expanduser()
+        if not config_path.exists():
+            typer.secho(
+                f"Config file not found: {config_path}", err=True, fg=typer.colors.RED
+            )
+            raise typer.Exit(code=1)
+
+        typer.echo(f"Loading configuration from {config_path}...")
+        try:
+            config = load_config(config_path)
+        except Exception as exc:
+            typer.secho(f"Failed to load config: {exc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+
+        # Determine output directory (use config file directory if not specified)
+        if output_dir is None:
+            output_dir = config_path.parent
+        else:
+            output_dir = Path(output_dir).expanduser()
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get ND2 path (required for non-interactive mode)
+        if nd2_path is None:
+            typer.secho(
+                "ND2 file path is required when using --config. Use --nd2-path to specify it.",
+                err=True,
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+        nd2_path = Path(nd2_path).expanduser()
+        if not nd2_path.exists():
+            typer.secho(
+                f"ND2 file not found: {nd2_path}", err=True, fg=typer.colors.RED
+            )
+            raise typer.Exit(code=1)
+
+        # Load metadata
+        typer.echo(f"Loading microscopy metadata from {nd2_path}...")
+        try:
+            image, metadata = load_microscopy_file(nd2_path)
+            if hasattr(image, "close"):
+                try:
+                    image.close()
+                except Exception:  # pragma: no cover - best effort cleanup
+                    pass
+        except Exception as exc:
+            typer.secho(
+                f"Failed to load microscopy file: {exc}", err=True, fg=typer.colors.RED
+            )
+            raise typer.Exit(code=1) from exc
+
+        # Extract workflow parameters from config
+        fov_start = config.get_param("fov_start", 0)
+        fov_end = config.get_param("fov_end", metadata.n_fovs - 1)
+        batch_size = config.get_param("batch_size", 2)
+        n_workers = config.get_param("n_workers", 1)
+
+        # Validate config
+        if config.channels is None:
+            typer.secho(
+                "Config file missing channels configuration",
+                err=True,
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+        # Display configuration summary
+        typer.echo("\n" + "=" * 60)
+        typer.secho("Processing Configuration", bold=True)
+        typer.echo("=" * 60)
+        typer.echo(f"\nChannels:")
+        typer.echo(f"  Phase Contrast:")
+        typer.echo(f"    Channel: {config.channels.pc.channel}")
+        typer.echo(
+            f"    Features: {', '.join(config.channels.pc.features) if config.channels.pc.features else '(none)'}"
+        )
+        if config.channels.fl:
+            typer.echo(f"  Fluorescence:")
+            for fl in config.channels.fl:
+                typer.echo(f"    Channel {fl.channel}: {', '.join(fl.features)}")
+        else:
+            typer.echo(f"  Fluorescence: (none)")
+        typer.echo(f"\nProcessing Parameters:")
+        typer.echo(
+            f"  Segmentation method: {config.get_param('segmentation_method', 'N/A')}"
+        )
+        typer.echo(f"  Tracking method: {config.get_param('tracking_method', 'N/A')}")
+        typer.echo(
+            f"  Background weight: {config.get_param('background_weight', 'N/A')}"
+        )
+        typer.echo(f"\nWorkflow Parameters:")
+        typer.echo(f"  FOV range: {fov_start} to {fov_end}")
+        typer.echo(f"  Batch size: {batch_size}")
+        typer.echo(f"  Number of workers: {n_workers}")
+        typer.echo(f"\nOutput Directory: {output_dir}")
+        typer.echo("=" * 60)
+
+        typer.secho("\nStarting workflow...", bold=True)
+
+        # Create and run workflow worker
+        worker = WorkflowWorker(
+            metadata=metadata,
+            config=config,
+            output_dir=output_dir,
+            fov_start=fov_start,
+            fov_end=fov_end,
+            batch_size=batch_size,
+            n_workers=n_workers,
+        )
+
+        try:
+            success, message = worker.run()
+        except KeyboardInterrupt:
+            typer.echo("\n")
+            typer.secho("Workflow interrupted by user", fg=typer.colors.YELLOW)
+            worker.cancel()
+            raise typer.Exit(code=130)  # Standard exit code for SIGINT
+        except Exception as exc:  # pragma: no cover - defensive
+            typer.secho(f"Workflow failed: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1) from exc
+
+        status = "SUCCESS" if success else "FAILED"
+        color = typer.colors.GREEN if success else typer.colors.RED
+        typer.secho(f"Workflow finished: {status}", bold=True, fg=color)
+        if message:
+            typer.echo(f"  {message}")
+
+        return
+
+    # Interactive mode: prompt for all inputs
     typer.echo(
         "Welcome to PyAMA workflow! Let's collect the inputs for PyAMA processing.\n"
     )
@@ -337,21 +550,40 @@ def workflow() -> None:
     output_dir = Path(output_dir_input).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    config = ProcessingConfig(
-        channels=Channels(
-            pc=ChannelSelection(channel=pc_channel, features=sorted(pc_features)),
-            fl=[
-                ChannelSelection(channel=channel, features=sorted(features))
-                for channel, features in sorted(fl_feature_map.items())
-            ],
-        ),
-        params={},
+    # Prompt for processing parameters
+    typer.echo("\n" + "=" * 60)
+    typer.secho("Processing Parameters", bold=True)
+    typer.echo("=" * 60)
+
+    # Segmentation method
+    try:
+        seg_methods = list_segmenters()
+    except Exception:
+        seg_methods = ["logstd", "cellpose"]
+    seg_method = _prompt_choice(
+        "Select segmentation method",
+        seg_methods,
+        default="logstd",
     )
 
-    typer.secho("\nPrepared config:", bold=True)
-    typer.echo(f"  PC channel: {pc_channel}, features: {pc_features}")
-    typer.echo(f"  FL channels: {fl_feature_map}")
-    typer.echo(f"  Output: {output_dir}")
+    # Tracking method
+    try:
+        track_methods = list_trackers()
+    except Exception:
+        track_methods = ["iou", "btrack"]
+    track_method = _prompt_choice(
+        "Select tracking method",
+        track_methods,
+        default="iou",
+    )
+
+    # Background weight
+    background_weight = _prompt_float(
+        "Background weight (0.0-1.0)",
+        default=1.0,
+        minimum=0.0,
+        maximum=1.0,
+    )
 
     default_fov_end = max(metadata.n_fovs - 1, 0)
 
@@ -374,22 +606,97 @@ def workflow() -> None:
                 continue
             return number
 
+    typer.echo("\n" + "=" * 60)
+    typer.secho("Workflow Execution Parameters", bold=True)
+    typer.echo("=" * 60)
+
     fov_start = _prompt_int("FOV start", 0, minimum=0)
     fov_end = _prompt_int("FOV end", default_fov_end, minimum=fov_start)
     batch_size = _prompt_int("Batch size", 2, minimum=1)
     n_workers = _prompt_int("Number of workers", 1, minimum=1)
 
+    # Create ProcessingConfig with all collected parameters
+    config = ProcessingConfig(
+        channels=Channels(
+            pc=ChannelSelection(channel=pc_channel, features=sorted(pc_features)),
+            fl=[
+                ChannelSelection(channel=channel, features=sorted(features))
+                for channel, features in sorted(fl_feature_map.items())
+            ],
+        ),
+        params={
+            "segmentation_method": seg_method,
+            "tracking_method": track_method,
+            "background_weight": background_weight,
+            # Workflow execution parameters
+            "fov_start": fov_start,
+            "fov_end": fov_end,
+            "batch_size": batch_size,
+            "n_workers": n_workers,
+        },
+    )
+
+    # Display complete ProcessingConfig summary
+    typer.echo("\n" + "=" * 60)
+    typer.secho("Processing Configuration Summary", bold=True)
+    typer.echo("=" * 60)
+    typer.echo(f"\nChannels:")
+    typer.echo(f"  Phase Contrast:")
+    typer.echo(f"    Channel: {pc_channel}")
+    typer.echo(
+        f"    Features: {', '.join(sorted(pc_features)) if pc_features else '(none)'}"
+    )
+    if fl_feature_map:
+        typer.echo(f"  Fluorescence:")
+        for ch, features in sorted(fl_feature_map.items()):
+            typer.echo(f"    Channel {ch}: {', '.join(sorted(features))}")
+    else:
+        typer.echo(f"  Fluorescence: (none)")
+    typer.echo(f"\nProcessing Parameters:")
+    typer.echo(f"  Segmentation method: {seg_method}")
+    typer.echo(f"  Tracking method: {track_method}")
+    typer.echo(f"  Background weight: {background_weight}")
+    typer.echo(f"\nWorkflow Parameters:")
+    typer.echo(f"  FOV range: {fov_start} to {fov_end}")
+    typer.echo(f"  Batch size: {batch_size}")
+    typer.echo(f"  Number of workers: {n_workers}")
+    typer.echo(f"\nOutput Directory: {output_dir}")
+    typer.echo("=" * 60)
+
+    # Ask for confirmation before proceeding
+    typer.echo("")
+    if not typer.confirm("Proceed with workflow execution?", default=True):
+        typer.secho("Workflow cancelled by user.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    # Save config YAML so user can use --config flag later
+    config_yaml_path = config_path(output_dir)
+    save_config(config, config_yaml_path)
+    typer.secho(
+        f"Saved processing config to {config_yaml_path}",
+        fg=typer.colors.GREEN,
+    )
+
     typer.secho("\nStarting workflow...", bold=True)
+
+    # Create and run workflow worker
+    worker = WorkflowWorker(
+        metadata=metadata,
+        config=config,
+        output_dir=output_dir,
+        fov_start=fov_start,
+        fov_end=fov_end,
+        batch_size=batch_size,
+        n_workers=n_workers,
+    )
+
     try:
-        success = run_complete_workflow(
-            metadata=metadata,
-            config=config,
-            output_dir=output_dir,
-            fov_start=fov_start,
-            fov_end=fov_end,
-            batch_size=batch_size,
-            n_workers=n_workers,
-        )
+        success, message = worker.run()
+    except KeyboardInterrupt:
+        typer.echo("\n")
+        typer.secho("Workflow interrupted by user", fg=typer.colors.YELLOW)
+        worker.cancel()
+        raise typer.Exit(code=130)  # Standard exit code for SIGINT
     except Exception as exc:  # pragma: no cover - defensive
         typer.secho(f"Workflow failed: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
@@ -397,6 +704,8 @@ def workflow() -> None:
     status = "SUCCESS" if success else "FAILED"
     color = typer.colors.GREEN if success else typer.colors.RED
     typer.secho(f"Workflow finished: {status}", bold=True, fg=color)
+    if message:
+        typer.echo(f"  {message}")
 
 
 @app.command()
@@ -453,6 +762,239 @@ def merge() -> None:
         raise typer.Exit(code=1) from exc
 
     typer.secho(message, fg=typer.colors.GREEN, bold=True)
+
+
+@app.command()
+def trajectory(
+    csv_path: Path = typer.Argument(..., help="Path to traces CSV file"),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output path for plot (default: <csv_path>_trajectories.png)",
+    ),
+    good_only: bool = typer.Option(
+        True, "--good-only/--all", help="Only plot trajectories with good=True"
+    ),
+    alpha: float = typer.Option(
+        0.6, "--alpha", help="Transparency of trajectory lines (0-1)"
+    ),
+) -> None:
+    """Plot cell trajectories from a traces CSV file."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    )
+
+    csv_path = csv_path.expanduser()
+    if not csv_path.exists():
+        typer.secho(
+            f"CSV file '{csv_path}' does not exist.", err=True, fg=typer.colors.RED
+        )
+        raise typer.Exit(code=1)
+
+    if not csv_path.is_file():
+        typer.secho(f"Path '{csv_path}' is not a file.", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Loading trajectory data from {csv_path}...")
+    try:
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError as exc:
+        typer.secho(
+            f"Missing required dependencies: {exc}. Install with: pip install pandas matplotlib numpy",
+            err=True,
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1) from exc
+
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as exc:
+        typer.secho(f"Failed to read CSV file: {exc}", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    # Validate required columns
+    required_cols = {"fov", "cell", "frame", "xc", "yc"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        typer.secho(
+            f"CSV file missing required columns: {missing_cols}",
+            err=True,
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+
+    # Filter by good flag if requested
+    if good_only and "good" in df.columns:
+        df = df[df["good"] == True]  # noqa: E712
+        typer.echo(f"Filtered to {len(df)} rows with good=True")
+
+    # Group by (fov, cell) to get trajectories
+    grouped = df.groupby(["fov", "cell"])
+    n_trajectories = len(grouped)
+    typer.echo(f"Found {n_trajectories} cell trajectories")
+
+    if n_trajectories == 0:
+        typer.secho("No trajectories to plot.", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Use a colormap to distinguish trajectories
+    colors = plt.cm.tab20(np.linspace(0, 1, min(n_trajectories, 20)))
+    if n_trajectories > 20:
+        # Cycle through colors if we have more than 20 trajectories
+        colors = plt.cm.tab20(np.linspace(0, 1, 20))
+        color_cycle = np.tile(colors, (n_trajectories // 20 + 1, 1))
+        colors = color_cycle[:n_trajectories]
+
+    for idx, ((fov, cell), group) in enumerate(grouped):
+        # Sort by frame to ensure correct trajectory order
+        group_sorted = group.sort_values("frame")
+
+        # Get xc, yc coordinates
+        x_coords = group_sorted["xc"].values
+        y_coords = group_sorted["yc"].values
+
+        # Plot trajectory line
+        ax.plot(
+            x_coords,
+            y_coords,
+            color=colors[idx % len(colors)],
+            alpha=alpha,
+            linewidth=1.5,
+            label=f"FOV {fov}, Cell {cell}" if n_trajectories <= 20 else None,
+        )
+
+        # Mark start point
+        ax.scatter(
+            x_coords[0],
+            y_coords[0],
+            color=colors[idx % len(colors)],
+            marker="o",
+            s=30,
+            alpha=0.8,
+            edgecolors="black",
+            linewidths=0.5,
+        )
+
+        # Mark end point
+        ax.scatter(
+            x_coords[-1],
+            y_coords[-1],
+            color=colors[idx % len(colors)],
+            marker="s",
+            s=30,
+            alpha=0.8,
+            edgecolors="black",
+            linewidths=0.5,
+        )
+
+    ax.set_xlabel("X position (xc)", fontsize=12)
+    ax.set_ylabel("Y position (yc)", fontsize=12)
+    ax.set_title(
+        f"Cell Trajectories ({n_trajectories} trajectories)",
+        fontsize=14,
+        fontweight="bold",
+    )
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect("equal", adjustable="box")
+
+    # Add legend if we have reasonable number of trajectories
+    if n_trajectories <= 20:
+        ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8, ncol=1)
+    else:
+        # Add a note about number of trajectories
+        ax.text(
+            0.02,
+            0.98,
+            f"{n_trajectories} trajectories shown",
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        )
+
+    plt.tight_layout()
+
+    # Determine output path
+    if output is None:
+        output = csv_path.parent / f"{csv_path.stem}_trajectories.png"
+    else:
+        output = output.expanduser()
+        if output.is_dir():
+            output = output / f"{csv_path.stem}_trajectories.png"
+
+    # Save the plot
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    typer.secho(f"Trajectory plot saved to: {output}", fg=typer.colors.GREEN, bold=True)
+
+
+@app.command()
+def plot(
+    npy_path: Path = typer.Argument(..., help="Path to numpy array file (.npy)"),
+    frame: int | None = typer.Option(
+        None,
+        "--frame",
+        "-f",
+        help="Frame index to plot (for 3D arrays). If not specified, plots middle frame.",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output path for plot (default: <npy_path>_plot.png)",
+    ),
+    cmap: str | None = typer.Option(
+        None,
+        "--cmap",
+        help="Colormap to use (e.g., 'gray', 'nipy_spectral'). Auto-detected if not specified.",
+    ),
+    dpi: int = typer.Option(150, "--dpi", help="Resolution for saved plot"),
+) -> None:
+    """Plot a frame from a numpy array file for quick visualization."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    )
+
+    npy_path = npy_path.expanduser()
+    if not npy_path.exists():
+        typer.secho(f"File '{npy_path}' does not exist.", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    if not npy_path.is_file():
+        typer.secho(f"Path '{npy_path}' is not a file.", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    if not npy_path.suffix == ".npy":
+        typer.secho(
+            f"File '{npy_path}' does not have .npy extension.",
+            err=True,
+            fg=typer.colors.YELLOW,
+        )
+
+    typer.echo(f"Loading array from {npy_path}...")
+    try:
+        output_path = plot_numpy_array(
+            array_path=npy_path,
+            frame=frame,
+            output_path=output,
+            cmap=cmap,
+            dpi=dpi,
+        )
+    except Exception as exc:
+        typer.secho(f"Failed to plot array: {exc}", err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.secho(f"Plot saved to: {output_path}", fg=typer.colors.GREEN, bold=True)
 
 
 if __name__ == "__main__":

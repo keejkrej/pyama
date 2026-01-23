@@ -209,7 +209,7 @@ class AnalysisTab(QWidget):
 ### Test Structure
 
 ```python
-# tests/test_processing.py
+# pyama-core/tests/processing/test_seg.py
 import pytest
 import numpy as np
 from pyama_core.processing.segmentation import segment_cells
@@ -251,18 +251,27 @@ class TestSegmentation:
 From `AGENTS.md` testing requirements:
 
 1. **Essential tests only**: Implement minimal tests that demonstrate correctness
-2. **Save plots** to `tests/_plots/` directory
+2. **Save plots** to `{package}/tests/_plots/` directory (e.g., `pyama-core/tests/_plots/` for core tests)
 3. **Use deterministic RNG** with `np.random.seed()`
 4. **Keep assertions robust**: Avoid tight numerical tolerances
 
 ```python
-tests/
-├── _plots/          # Generated test plots
-├── test_workflow.py # End-to-end workflow
-├── test_algo.py     # Visual algorithm tests
-└── test_unit/       # Unit tests
-    ├── test_segmentation.py
-    └── test_tracking.py
+pyama-core/tests/
+├── _plots/              # Generated test plots
+├── analysis/            # Analysis model tests
+│   ├── test_event.py
+│   └── test_kinetic.py
+├── features/            # Feature extraction tests
+│   ├── test_area.py
+│   ├── test_intensity_total.py
+│   └── test_particle_num.py
+├── processing/          # Processing workflow tests
+│   ├── test_merge.py
+│   ├── test_normalization.py
+│   ├── test_seg.py
+│   └── test_track.py
+└── utils/               # Utility function tests
+    └── progress.py
 ```
 
 ### Running Tests
@@ -272,13 +281,13 @@ tests/
 uv run pytest
 
 # Run specific test file
-uv run pytest tests/test_workflow.py
+uv run pytest pyama-core/tests/processing/test_merge.py
 
 # Run with coverage
 uv run pytest --cov=pyama_core
 
 # Run visual tests
-uv run python tests/test_algo.py
+uv run pytest pyama-core/tests/processing/test_seg.py -v
 ```
 
 ## Documentation Guidelines

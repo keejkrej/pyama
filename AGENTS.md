@@ -33,11 +33,11 @@ uv pip install -e pyama-qt/
 # Run pytest (test discovery from workspace root)
 uv run pytest
 
-# Run specific test workflow
-uv run python tests/test_workflow.py
+# Run specific test module
+uv run pytest pyama-core/tests/processing/test_merge.py
 
-# Run visual algorithm testing script
-uv run python tests/test_algo.py
+# Run tests for a specific package
+uv run pytest pyama-core/tests/
 ```
 
 #### Testing rules (agents must follow)
@@ -45,13 +45,13 @@ uv run python tests/test_algo.py
 - Only implement essential tests that demonstrate correctness visually for core algorithms.
   - Event detection: include noisy step-up and step-down only; each test saves a plot with a vertical event line.
   - Particle counting: include a single scenario with many Gaussian particles on a noisy background; assert all particles are detected and draw bounding boxes.
-- Plots must always be saved under `tests/_plots/` (Windows-friendly path). Allow override via `PYAMA_PLOT_DIR` env var.
+- Plots must always be saved under `{package}/tests/_plots/` (e.g., `pyama-core/tests/_plots/` for core tests). Allow override via `PYAMA_PLOT_DIR` env var.
 - Use deterministic RNG (`np.random.seed(...)` or `RandomState`) inside tests to avoid flakiness.
 - Keep assertions robust and minimal (e.g., count matches expected, event index near the step), avoid tight numerical tolerances on noisy data.
 - Do not depend on OS-specific temp directories; never write to `/tmp` in tests.
 - Keep tests top-level functions (no classes/fixtures unless necessary) to reduce boilerplate and speed up runs.
 - Ensure tests can run headless; use Matplotlib without interactive backends and always close figures (`plt.close(fig)`).
-- Add `tests/_plots/` to `.gitignore` so generated images aren’t committed.
+- Add `**/tests/_plots/` to `.gitignore` so generated images aren’t committed.
 
 ### Code Quality
 
@@ -370,7 +370,7 @@ fov,cell,frame,good,position_x,position_y,intensity_total_ch_1,area_ch_0
 - Built on Python 3.11+ with scientific computing stack (numpy, scipy, scikit-image, xarray)
 - Qt GUI built with PySide6
 - Processing pipeline supports multiprocessing with configurable worker counts
-- Test workflow available in `tests/test_workflow.py` for CLI testing
+- Tests are located in `{package}/tests/` directories (e.g., `pyama-core/tests/` for core) organized by component (analysis, features, processing, utils)
 - Typing style: prefer built-in generics (dict, list, tuple) and union types using '|' over typing.Dict, typing.List, typing.Tuple, typing.Union
 - **Import organization**: All import statements must be at the top of the file - no scattered imports within functions
 - **Logging in pyama-qt**: `logger.info` messages must communicate user-facing progress with actionable context (paths, counts, selected options), while `logger.debug` should capture developer diagnostics (IDs, parameter values, ranges) rather than generic text.

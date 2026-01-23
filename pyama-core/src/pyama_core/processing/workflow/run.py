@@ -331,10 +331,15 @@ def run_complete_workflow(
         logger.info("Completed processing %d/%d FOVs", completed_fovs, total_fovs)
 
         # Save config to output directory for reference
-        try:
-            save_config(config, config_path(output_dir))
-        except Exception as e:
-            logger.warning("Failed to save processing_config.yaml: %s", e)
+        # Skip if config already exists (e.g., saved by CLI before workflow execution)
+        config_file = config_path(output_dir)
+        if not config_file.exists():
+            try:
+                save_config(config, config_file)
+            except Exception as e:
+                logger.warning("Failed to save processing_config.yaml: %s", e)
+        else:
+            logger.debug("Config file already exists at %s, skipping save", config_file)
 
         return overall_success
     except Exception as e:

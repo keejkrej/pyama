@@ -317,9 +317,10 @@ Models are automatically discovered when the module is imported.
 
 See the tests directory for working examples:
 
-- `tests/test_workflow.py`: End-to-end workflow execution
-- `tests/test_merge.py`: Merge operations
-- `tests/test_results_yaml.py`: Results file handling
+- `pyama-core/tests/processing/test_merge.py`: Merge operations
+- `pyama-core/tests/processing/test_seg.py`: Segmentation testing
+- `pyama-core/tests/processing/test_track.py`: Tracking testing
+- `pyama-core/tests/analysis/`: Analysis model tests
 
 ## Integration
 

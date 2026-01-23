@@ -103,8 +103,8 @@ def segment_cell(
     # CellPose v4+ uses assign_device instead of use_gpu
     if device is None:
         if gpu is None:
-            # Auto-detect GPU
-            device, gpu = assign_device(gpu=False)
+            # Auto-detect GPU (prefer GPU if available)
+            device, gpu = assign_device(gpu=True)
         else:
             device, _ = assign_device(gpu=gpu)
 

@@ -274,6 +274,10 @@ def track_cell(
     image = image.astype(np.uint16, copy=False)
     out = out.astype(np.uint16, copy=False)
 
+    # Note: iou.py only reads from image (via image[t] and regionprops),
+    # so read-only arrays are fine. No need to copy like in btrack.py where
+    # update_segmentation() requires a writable array.
+
     # Extract regions for all frames
     regions_all: list[LabeledRegions] = []
     for t in range(image.shape[0]):

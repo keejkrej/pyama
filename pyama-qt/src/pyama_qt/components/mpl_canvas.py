@@ -5,8 +5,10 @@ Shared and componentized Matplotlib canvas widget for embedding plots in Qt.
 import matplotlib
 from matplotlib.patches import Circle, Polygon
 
-matplotlib.use("Qt5Agg")
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+# Don't set backend here - let matplotlib auto-detect based on available Qt bindings
+# The backend will be set automatically when FigureCanvasQTAgg is imported
+# This avoids issues with headless detection and works with both Qt5 and Qt6
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
 from PySide6.QtWidgets import QWidget
