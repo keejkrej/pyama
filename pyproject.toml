@@ -3,14 +3,11 @@ members = [
     "pyama-core",
     "pyama-qt",
     "pyama-acdc",
-    "pyama-fastapi",
 ]
 
 [tool.uv.sources]
 pyama-core = { workspace = true }
 pyama-qt = { workspace = true }
-# Note: btrack 0.6.x (required for tracking) conflicts with pyama-fastapi due to pydantic version requirements
-# btrack requires pydantic<2.0, pyama-fastapi requires pydantic>=2.0
 
 [dependency-groups]
 dev = ["ty", "ruff", "pyinstaller", "ipykernel"]

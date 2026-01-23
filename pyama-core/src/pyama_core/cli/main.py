@@ -997,5 +997,47 @@ def plot(
     typer.secho(f"Plot saved to: {output_path}", fg=typer.colors.GREEN, bold=True)
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind to"),
+    port: int = typer.Option(8000, "--port", "-p", help="Port to bind to"),
+    reload: bool = typer.Option(
+        False, "--reload", "-r", help="Enable auto-reload for development"
+    ),
+) -> None:
+    """Start the FastAPI server for the PyAMA API.
+
+    The server provides REST endpoints for:
+    - Loading microscopy file metadata
+    - Getting processing configuration schema
+    - Creating and managing processing tasks
+
+    Example:
+        pyama-core serve --port 8000 --reload
+    """
+    import uvicorn
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    )
+    # Suppress verbose debug messages from fsspec (used by bioio)
+    logging.getLogger("fsspec.local").setLevel(logging.WARNING)
+
+    typer.echo(f"Starting PyAMA Core API server on http://{host}:{port}")
+    typer.echo("API documentation available at:")
+    typer.echo(f"  - Swagger UI: http://{host}:{port}/docs")
+    typer.echo(f"  - ReDoc: http://{host}:{port}/redoc")
+    typer.echo("")
+
+    uvicorn.run(
+        "pyama_core.api.server:create_app",
+        factory=True,
+        host=host,
+        port=port,
+        reload=reload,
+    )
+
+
 if __name__ == "__main__":
     app()

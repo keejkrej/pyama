@@ -34,7 +34,6 @@ PyAMA consists of the following packages:
 - **pyama-core**: Core processing library with analysis workflows
 - **pyama-qt**: Qt-based GUI for comprehensive analysis
 - **pyama-acdc**: Cell-ACDC integration plugin
-- **pyama-blazor**: .NET MAUI Blazor Hybrid desktop app (in development)
 
 ## 🎯 Key Features
 

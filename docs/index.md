@@ -27,7 +27,6 @@ user-guide/merge-workflow.md
 packages/pyama-core.md
 packages/pyama-qt.md
 packages/pyama-acdc.md
-packages/pyama-blazor.md
 ```
 
 ```{toctree}

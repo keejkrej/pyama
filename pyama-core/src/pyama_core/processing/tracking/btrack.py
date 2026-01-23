@@ -34,8 +34,6 @@ if 'cvxopt.glpk' not in sys.modules:
         sys.modules['cvxopt.glpk'] = cvxopt_glpk
 
 # Try to import btrack, raise informative error if not available
-# Note: btrack 0.6.x requires pydantic<2.0, which conflicts with pyama-fastapi's pydantic>=2.0
-# If btrack import fails due to pydantic version, user needs to install compatible versions manually
 BTRACK_AVAILABLE = False
 BayesianTracker = None
 segmentation_to_objects = None
