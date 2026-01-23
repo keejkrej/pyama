@@ -11,7 +11,7 @@ dependencies = [
     "bioio",
     "bioio-nd2",
     "bioio-czi",
-    "bioio-ome-tiff",
+    "bioio-tifffile",
     "pandas",
     "scikit-image",
     "pyyaml",

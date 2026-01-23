@@ -168,7 +168,7 @@ class ProcessingTab(QWidget):
         """
         logger.info("Microscopy loading started from Processing tab")
         if self._status_manager:
-            self._status_manager.show_message("Loading ND2 file...")
+            self._status_manager.show_message("Loading microscopy file...")
 
     @Slot(bool, str)
     def _on_microscopy_loading_finished(self, success: bool, message: str) -> None:
@@ -187,7 +187,7 @@ class ProcessingTab(QWidget):
             if success:
                 self._status_manager.show_message(message)
             else:
-                self._status_manager.show_message(f"Failed to load ND2: {message}")
+                self._status_manager.show_message(f"Failed to load file: {message}")
 
     @Slot()
     def _on_samples_loading_started(self) -> None:

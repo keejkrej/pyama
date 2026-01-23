@@ -7,8 +7,10 @@ from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 hiddenimports = collect_submodules('xsdata_pydantic_basemodel.hooks')
 # Include bioio plugin modules with underscores, not hyphens
 hiddenimports += collect_submodules('bioio_nd2')
-# If CZI plugin is desired, include it as well
+# CZI plugin for Zeiss files
 hiddenimports += collect_submodules('bioio_czi')
+# TIFF plugin for plain TIFF files (no OME metadata parsing)
+hiddenimports += collect_submodules('bioio_tifffile')
 
 block_cipher = None
 
@@ -17,6 +19,7 @@ plugin_metadata = []
 plugin_metadata += copy_metadata('bioio')
 plugin_metadata += copy_metadata('bioio-nd2')
 plugin_metadata += copy_metadata('bioio-czi')
+plugin_metadata += copy_metadata('bioio-tifffile')
 
 a = Analysis(
     ['pyama-qt/src/pyama_qt/main.py'],

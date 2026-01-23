@@ -15,6 +15,13 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
 
+try:
+    from skimage.measure import regionprops
+
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+
 from pyama_core.processing.tracking import get_tracker, list_trackers
 from tests.utils import create_progress_callback
 
@@ -40,13 +47,37 @@ def plot_tracking_frame(seg_input, track_result, method, frame_idx):
     im0 = axes[0].imshow(seg_input, cmap="nipy_spectral", interpolation="nearest")
     axes[0].set_title(f"Input Segmentation (Frame {frame_idx})")
     axes[0].axis("off")
-    plt.colorbar(im0, ax=axes[0], label="Cell ID")
+
+    # Add text labels for each cell ID
+    if HAS_SCIPY:
+        props = regionprops(seg_input)
+        for prop in props:
+            if prop.label > 0:  # Skip background (label 0)
+                y, x = prop.centroid
+                axes[0].text(
+                    x, y, str(prop.label),
+                    ha="center", va="center",
+                    color="white", fontsize=8, fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.5, edgecolor="none")
+                )
 
     # Right: Tracking result (tracked labels)
     im1 = axes[1].imshow(track_result, cmap="nipy_spectral", interpolation="nearest")
     axes[1].set_title(f"Tracking: {method} (Frame {frame_idx})")
     axes[1].axis("off")
-    plt.colorbar(im1, ax=axes[1], label="Track ID")
+
+    # Add text labels for each track ID
+    if HAS_SCIPY:
+        props = regionprops(track_result)
+        for prop in props:
+            if prop.label > 0:  # Skip background (label 0)
+                y, x = prop.centroid
+                axes[1].text(
+                    x, y, str(prop.label),
+                    ha="center", va="center",
+                    color="white", fontsize=8, fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.5, edgecolor="none")
+                )
 
     plt.tight_layout()
     filename = f"track_{method}_frame_{frame_idx:04d}.png"

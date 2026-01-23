@@ -17,6 +17,13 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
 
+try:
+    from skimage.measure import regionprops
+
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+
 from pyama_core.processing.segmentation import get_segmenter, list_segmenters
 from tests.utils import create_progress_callback
 
@@ -47,7 +54,19 @@ def plot_segmentation_frame(seg_result, method, frame_idx, pc_image):
     im = axes[1].imshow(seg_result, cmap="nipy_spectral", interpolation="nearest")
     axes[1].set_title(f"Segmentation: {method} (Frame {frame_idx})")
     axes[1].axis("off")
-    plt.colorbar(im, ax=axes[1], label="Cell ID")
+
+    # Add text labels for each cell ID
+    if HAS_SCIPY:
+        props = regionprops(seg_result)
+        for prop in props:
+            if prop.label > 0:  # Skip background (label 0)
+                y, x = prop.centroid
+                axes[1].text(
+                    x, y, str(prop.label),
+                    ha="center", va="center",
+                    color="white", fontsize=8, fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.5, edgecolor="none")
+                )
 
     plt.tight_layout()
     filename = f"seg_{method}_frame_{frame_idx:04d}.png"

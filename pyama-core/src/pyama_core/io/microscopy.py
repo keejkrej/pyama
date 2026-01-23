@@ -1,9 +1,8 @@
 """
-Unified microscopy file loading utilities for ND2 and CZI data.
+Unified microscopy file loading utilities for ND2, CZI, and TIFF data.
 """
 
 from dataclasses import dataclass
-import re
 from pathlib import Path
 
 import numpy as np
@@ -29,46 +28,13 @@ class MicroscopyMetadata:
     dtype: str
 
 
-class MultiFileBioImage:
-    """Adaptor to treat split per-scene OME-TIFF files as a multi-scene BioImage-like object."""
-
-    def __init__(self, file_paths: list[Path]) -> None:
-        self._images = [BioImage(str(p)) for p in file_paths]
-        self.scenes = list(range(len(self._images)))
-        self._current_idx = 0
-        self._current = self._images[0]
-
-    def set_scene(self, idx: int) -> None:
-        self._current_idx = idx
-        self._current = self._images[idx]
-
-    @property
-    def data(self):
-        return self._current.data
-
-    @property
-    def dims(self):
-        return self._current.dims
-
-    @property
-    def metadata(self):
-        return self._current.metadata
-
-    @property
-    def xarray_dask_data(self):
-        return self._current.xarray_dask_data
-
-
 def load_microscopy_file(
     file_path: Path,
-    force_split: bool = False,
-) -> tuple[BioImage | MultiFileBioImage, MicroscopyMetadata]:
-    """Load a microscopy file (ND2, CZI, etc.) and return the BioImage object and extracted metadata.
+) -> tuple[BioImage, MicroscopyMetadata]:
+    """Load a microscopy file (ND2, CZI, TIFF, etc.) and return the BioImage object and extracted metadata.
 
     Args:
-        file_path: Path to the microscopy file (.nd2, .czi, etc.)
-        force_split: When True and an OME-TIFF is selected, attempt to aggregate
-            sibling files with `_scene{idx}` suffixes even if auto-detection fails.
+        file_path: Path to the microscopy file (.nd2, .czi, .tif, .tiff, etc.)
 
     Returns:
         tuple: (BioImage, MicroscopyMetadata)
@@ -76,46 +42,13 @@ def load_microscopy_file(
         numeric list is provided.
     """
     file_path = Path(file_path)
-    suffixes = [s.lower() for s in file_path.suffixes]
-    # Detect OME-TIFF style suffixes (supports .ome.tif and .ome.tiff)
-    if len(suffixes) >= 2 and suffixes[-2:] in ([".ome", ".tif"], [".ome", ".tiff"]):
-        file_extension = "".join(suffixes[-2:])
-        base_name = file_path.name[: -len(file_extension)]
-        file_type = "ome-tiff"
-    else:
-        file_extension = file_path.suffix.lower()
-        base_name = file_path.stem
-        file_type = file_extension.lstrip(".")
-
-    # Detect split OME-TIFF scene files produced by the converter: *_scene{idx}.ome.tif(f)
-    split_regex = re.compile(r"^(?P<prefix>.+)_scene(?P<scene_idx>\d+)\.ome\.tiff?$", re.IGNORECASE)
-    split_match = split_regex.match(file_path.name)
-    split_group = None
-    split_files: list[Path] = []
-    if split_match:
-        split_group = split_match.group("prefix")
-    elif force_split and file_type == "ome-tiff":
-        # Force aggregation using the base name as prefix when user hints split files
-        split_group = base_name
-
-    if split_group:
-        glob_pattern = f"{split_group}_scene*.ome.tif*"
-        logger.info(
-            "Scanning for split OME-TIFF scenes (prefix=%s, pattern=%s)", split_group, glob_pattern
-        )
-        split_files = sorted(
-            file_path.parent.glob(glob_pattern),
-            key=lambda p: int(re.search(r"_scene(\d+)", p.name).group(1)) if re.search(r"_scene(\d+)", p.name) else 0,
-        )
-        logger.info("Found %d split scene file(s)", len(split_files))
+    file_extension = file_path.suffix.lower()
+    base_name = file_path.stem
+    file_type = file_extension.lstrip(".")
 
     try:
-        # Use bioio to load the microscopy file (or aggregated split files)
-        if split_files:
-            img = MultiFileBioImage(split_files)
-            base_name = split_group if split_group else base_name
-        else:
-            img = BioImage(str(file_path))
+        # Use bioio to load the microscopy file
+        img = BioImage(str(file_path))
 
         # Get xarray data with dask backing for lazy loading
         da = img.xarray_dask_data
