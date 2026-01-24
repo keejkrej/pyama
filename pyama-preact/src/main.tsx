@@ -1,9 +1,9 @@
 import { render } from 'preact'
 import './index.css'
 import { App } from './app.tsx'
-import { initTheme } from './lib/theme.ts'
+import { initializeTheme } from './lib/theme'
 
-// Initialize theme
-initTheme()
+// Initialize theme before render to prevent flash
+initializeTheme()
 
 render(<App />, document.getElementById('app')!)

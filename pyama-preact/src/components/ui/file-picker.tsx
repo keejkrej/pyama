@@ -36,7 +36,7 @@ export function FilePicker({
   return (
     <div className={className}>
       {label && (
-        <label className="text-sm font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-2 block text-foreground">
+        <label className="text-xs font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-1.5 block text-foreground-bright">
           {label}
         </label>
       )}

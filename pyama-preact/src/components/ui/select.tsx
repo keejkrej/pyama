@@ -18,14 +18,14 @@ export function Select({ label, options, error, className, value, onChange, ...p
   return (
     <div className="w-full">
       {label && (
-        <label className="text-sm font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-2 block text-foreground">
+        <label className="text-xs font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-1.5 block text-foreground-bright">
           {label}
         </label>
       )}
       <div className="relative">
         <select
           className={cn(
-            'flex h-10 w-full items-center justify-between rounded-lg border border-input bg-[var(--color-input)] px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-border disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 appearance-none pr-8 hover:border-foreground/30',
+            'flex h-8 w-full items-center justify-between rounded-md border border-border bg-[var(--color-input)] px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-foreground/50 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 appearance-none pr-7 hover:border-foreground/30',
             error && 'border-destructive focus:ring-destructive',
             className
           )}
@@ -39,9 +39,9 @@ export function Select({ label, options, error, className, value, onChange, ...p
             </option>
           ))}
         </select>
-        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
           <svg
-            className="h-4 w-4 opacity-50"
+            className="h-3.5 w-3.5 opacity-50"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -56,7 +56,7 @@ export function Select({ label, options, error, className, value, onChange, ...p
         </div>
       </div>
       {error && (
-        <p className="text-sm font-medium text-destructive mt-1">{error}</p>
+        <p className="text-xs font-medium text-destructive mt-1">{error}</p>
       )}
     </div>
   );

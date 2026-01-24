@@ -19,24 +19,23 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-xl border border-border text-card-foreground transition-all duration-200',
+        'rounded-lg border border-border bg-[var(--color-card)] text-card-foreground transition-all duration-200',
         className
       )}
-      style={{ backgroundColor: 'var(--color-card)' }}
     >
       {title && (
         <div
           className={cn(
-            'flex flex-col space-y-1.5 px-6 py-5 border-b border-border',
+            'flex flex-col space-y-1 px-4 py-3 border-b border-border',
             headerClassName
           )}
         >
-          <h3 className="text-lg font-semibold leading-tight" style={{ color: 'hsl(0 0% 95%)' }}>
+          <h3 className="text-sm font-semibold leading-tight text-foreground-bright">
             {title}
           </h3>
         </div>
       )}
-      <div className={cn('p-6', title ? 'pt-5' : 'pt-6', bodyClassName)}>{children}</div>
+      <div className={cn('p-4', title ? 'pt-3' : 'pt-4', bodyClassName)}>{children}</div>
     </div>
   );
 }

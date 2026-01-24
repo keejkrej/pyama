@@ -10,10 +10,10 @@ export function VisualizationPage(_props: VisualizationPageProps) {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [dataFolder, setDataFolder] = useState('');
   const [fov, setFov] = useState(0);
-  const [totalFovs, setTotalFovs] = useState(0);
+  const [totalFovs] = useState(0);
   const [selectedFeature, setSelectedFeature] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [totalPages] = useState(1);
 
   const features = [
     { value: 'intensity_total', label: 'Intensity Total' },
@@ -22,18 +22,18 @@ export function VisualizationPage(_props: VisualizationPageProps) {
   ];
 
   return (
-    <div className="p-8 min-h-screen bg-background">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold mb-3" style={{ color: 'hsl(0 0% 95%)' }}>Visualization</h1>
-        <p className="text-sm text-muted-foreground">Load and visualize processed microscopy data</p>
+    <div className="p-5">
+      <div className="mb-5">
+        <h1 className="text-lg font-semibold mb-1.5 text-foreground-bright">Visualization</h1>
+        <p className="text-xs text-muted-foreground">Load and visualize processed microscopy data</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-6 items-stretch">
+      <div className="grid grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Load Data Folder */}
         <Card title="Load Data Folder" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
           <div className="flex-1 flex flex-col">
           <Section title="Data Folder">
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Input
                   placeholder="No folder selected"
@@ -54,18 +54,18 @@ export function VisualizationPage(_props: VisualizationPageProps) {
                   buttonText="Browse"
                 />
               </div>
-              <div className="mt-2 p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
+              <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
                 <p className="text-xs text-muted-foreground">Data Folder Metadata</p>
               </div>
             </div>
           </Section>
 
-          <div className="my-6 border-t border-border"></div>
+          <div className="my-4 border-t border-border"></div>
 
           <Section title="Visualization">
-            <div className="space-y-4">
+            <div className="space-y-2.5">
               <div>
-                <label className="block text-sm font-medium mb-2 text-foreground">
+                <label className="block text-xs font-medium mb-1.5 text-foreground">
                   FOV
                 </label>
                 <div className="flex items-center gap-2">
@@ -77,7 +77,7 @@ export function VisualizationPage(_props: VisualizationPageProps) {
                     className="flex-1"
                   />
                   {totalFovs > 0 && (
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
                       / {totalFovs}
                     </span>
                   )}
@@ -101,7 +101,7 @@ export function VisualizationPage(_props: VisualizationPageProps) {
           <div className="flex-1 flex flex-col">
           <Section title="Feature Selection">
             <div>
-              <label className="block text-sm font-medium mb-2 text-foreground">
+              <label className="block text-xs font-medium mb-1.5 text-foreground">
                 Feature
               </label>
               <Select
@@ -113,13 +113,13 @@ export function VisualizationPage(_props: VisualizationPageProps) {
             </div>
           </Section>
 
-          <div className="my-6 border-t border-border"></div>
+          <div className="my-4 border-t border-border"></div>
 
           <Section title="Plot">
-            <div className="p-8 bg-card rounded-lg border border-dashed border-border min-h-[250px] flex items-center justify-center">
+            <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[120px] flex items-center justify-center">
               <div className="text-center">
                 <svg
-                  className="w-20 h-20 mx-auto text-muted-foreground/40 mb-4"
+                  className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -131,7 +131,7 @@ export function VisualizationPage(_props: VisualizationPageProps) {
                     d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                   />
                 </svg>
-                <p className="text-sm text-muted-foreground font-medium">
+                <p className="text-xs text-muted-foreground">
                   Trace plot will appear here
                 </p>
               </div>
@@ -144,20 +144,20 @@ export function VisualizationPage(_props: VisualizationPageProps) {
         <Card title="Trace Selection" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
           <div className="flex-1 flex flex-col">
           <Section title="Traces">
-            <div className="p-6 bg-card rounded-lg border border-dashed border-border min-h-[200px] flex items-center justify-center">
-              <p className="text-sm text-muted-foreground">No traces selected</p>
+            <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
+              <p className="text-xs text-muted-foreground">No traces selected</p>
             </div>
           </Section>
 
-          <div className="my-6 border-t border-border"></div>
+          <div className="my-4 border-t border-border"></div>
 
           <Section title="Navigation">
-            <div className="space-y-4">
-              <div className="p-6 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
+            <div className="space-y-2.5">
+              <div className="p-3 bg-card rounded-lg border border-dashed border-border min-h-[40px] flex items-center justify-center">
                 <p className="text-xs text-muted-foreground">Navigation content</p>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   Page {currentPage} of {totalPages}
                 </span>
                 <div className="flex gap-2">

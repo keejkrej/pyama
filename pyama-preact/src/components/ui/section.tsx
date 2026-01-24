@@ -9,12 +9,12 @@ interface SectionProps {
 
 export function Section({ title, children, className }: SectionProps) {
   if (!title) {
-    return <div className={cn('space-y-4', className)}>{children}</div>;
+    return <div className={cn('space-y-2.5', className)}>{children}</div>;
   }
   return (
-    <div className={cn('mb-6', className)}>
-      <h2 className="text-sm font-semibold mb-3 uppercase tracking-wider" style={{ color: 'hsl(0 0% 95%)' }}>{title}</h2>
-      <div className="space-y-4">{children}</div>
+    <div className={cn('mb-4', className)}>
+      <h2 className="text-xs font-semibold mb-2 uppercase tracking-wider text-foreground-bright">{title}</h2>
+      <div className="space-y-2.5">{children}</div>
     </div>
   );
 }

@@ -4,9 +4,9 @@ import { ProcessingPage, VisualizationPage, AnalysisPage } from './pages';
 
 export function App() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       <Navbar />
-      <main>
+      <main className="flex-1 overflow-y-auto">
         <Router>
           <ProcessingPage path="/" />
           <VisualizationPage path="/visualization" />

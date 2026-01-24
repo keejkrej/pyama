@@ -26,8 +26,8 @@ interface TableCellProps {
 
 export function Table({ children, className }: TableProps) {
   return (
-    <div className="relative w-full overflow-auto rounded-lg border border-border bg-card">
-      <table className={cn('w-full caption-bottom text-sm', className)}>
+    <div className="relative w-full overflow-auto rounded-md border border-border bg-card">
+      <table className={cn('w-full caption-bottom text-xs', className)}>
         {children}
       </table>
     </div>
@@ -65,8 +65,8 @@ export function TableCell({
       colSpan={colSpan}
       className={cn(
         header
-          ? 'h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0'
-          : 'p-4 align-middle [&:has([role=checkbox])]:pr-0',
+          ? 'h-9 px-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0'
+          : 'p-3 align-middle [&:has([role=checkbox])]:pr-0',
         className
       )}
     >

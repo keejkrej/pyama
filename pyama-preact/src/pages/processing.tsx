@@ -42,18 +42,18 @@ export function ProcessingPage(_props: ProcessingPageProps) {
   };
 
   return (
-    <div className="p-8 min-h-screen bg-background">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold mb-3" style={{ color: 'hsl(0 0% 95%)' }}>Processing</h1>
-        <p className="text-sm text-muted-foreground">Configure microscopy file processing and workflow parameters</p>
+    <div className="p-5">
+      <div className="mb-5">
+        <h1 className="text-lg font-semibold mb-1.5 text-foreground-bright">Processing</h1>
+        <p className="text-xs text-muted-foreground">Configure microscopy file processing and workflow parameters</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-6 items-stretch">
+      <div className="grid grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Input */}
         <Card title="Input" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
           <div className="flex-1 flex flex-col">
             <Section title="Microscopy">
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Input
                     placeholder="No microscopy selected"
@@ -72,18 +72,18 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                     buttonText="Browse"
                   />
                 </div>
-                <div className="mt-2 p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
+                <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
                   <p className="text-xs text-muted-foreground">Microscopy Metadata</p>
                 </div>
               </div>
             </Section>
 
-            <div className="my-6 border-t border-border"></div>
+            <div className="my-4 border-t border-border"></div>
 
             <Section title="Channels">
-              <div className="space-y-4">
+              <div className="space-y-2.5">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                  <label className="block text-xs font-medium mb-1.5 text-foreground">
                     Phase Contrast
                   </label>
                   <NumberInput
@@ -92,13 +92,13 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                     min={0}
                     className="w-full"
                   />
-                  <div className="mt-2 p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
+                  <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
                     <p className="text-xs text-muted-foreground">Phase Contrast Features</p>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                  <label className="block text-xs font-medium mb-1.5 text-foreground">
                     Fluorescence
                   </label>
                   <div className="space-y-2 mb-2">
@@ -118,7 +118,7 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                       <p className="text-xs text-muted-foreground mb-1">Channels: {fluorescenceChannels.join(', ')}</p>
                     </div>
                   )}
-                  <div className="mt-2 p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
+                  <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
                     <p className="text-xs text-muted-foreground">Fluorescence Features</p>
                   </div>
                 </div>
@@ -163,7 +163,7 @@ export function ProcessingPage(_props: ProcessingPageProps) {
               </div>
             </Section>
 
-            <div className="my-6 border-t border-border"></div>
+            <div className="my-4 border-t border-border"></div>
 
             <Section title="Parameters">
               <div className="mb-3">
@@ -236,7 +236,7 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                     </>
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center py-8 text-muted-foreground border-r-0">
+                      <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
                         Parameters by default
                       </TableCell>
                     </TableRow>
@@ -245,9 +245,9 @@ export function ProcessingPage(_props: ProcessingPageProps) {
               </Table>
             </Section>
 
-            <div className="my-6 border-t border-border"></div>
+            <div className="my-4 border-t border-border"></div>
 
-            <div className="mt-6 flex gap-2">
+            <div className="mt-4 flex gap-2">
               <Button variant="default" className="flex-1" onClick={() => { }}>
                 Start
               </Button>
@@ -277,7 +277,7 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
-                              onMouseEnter={(e) => {
+                              onMouseEnter={() => {
                                 if (tooltipRef.current && iconRef.current) {
                                   const iconRect = iconRef.current.getBoundingClientRect();
                                   tooltipRef.current.style.left = `${iconRect.left + iconRect.width / 2}px`;
@@ -308,7 +308,7 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                   </TableHeader>
                   <tbody>
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center py-8 text-muted-foreground border-r-0">
+                      <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
                         No samples assigned
                       </TableCell>
                     </TableRow>
@@ -340,12 +340,12 @@ export function ProcessingPage(_props: ProcessingPageProps) {
               </div>
             </Section>
 
-            <div className="my-6 border-t border-border"></div>
+            <div className="my-4 border-t border-border"></div>
 
             <Section title="Merge Samples">
-              <div className="space-y-4">
+              <div className="space-y-2.5">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                  <label className="block text-xs font-medium mb-1.5 text-foreground">
                     Sample YAML
                   </label>
                   <div className="flex items-center gap-2">
@@ -355,7 +355,7 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                  <label className="block text-xs font-medium mb-1.5 text-foreground">
                     Folder of processed FOVs
                   </label>
                   <div className="flex items-center gap-2">
@@ -365,7 +365,7 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                  <label className="block text-xs font-medium mb-1.5 text-foreground">
                     Output folder
                   </label>
                   <div className="flex items-center gap-2">

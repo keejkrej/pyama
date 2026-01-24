@@ -1,7 +1,9 @@
 import type { JSX } from 'preact';
 import { cn } from '../../lib/utils';
 
-export interface InputProps extends JSX.HTMLAttributes<HTMLInputElement> {
+type HTMLInputProps = JSX.IntrinsicElements['input'];
+
+export interface InputProps extends Omit<HTMLInputProps, 'size' | 'class'> {
   label?: string;
   error?: string;
 }
@@ -10,21 +12,20 @@ export function Input({ label, error, className, ...props }: InputProps) {
   return (
     <div className="w-full">
       {label && (
-        <label className="text-sm font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-2 block" style={{ color: 'hsl(0 0% 95%)' }}>
+        <label className="text-xs font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-1.5 block text-foreground-bright">
           {label}
         </label>
       )}
       <input
         className={cn(
-          'flex h-10 w-full rounded-lg border bg-[var(--color-input)] px-4 py-2 text-sm text-foreground file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground transition-all duration-200 focus-visible:outline-none focus-visible:border-border disabled:cursor-not-allowed disabled:opacity-50 hover:border-foreground/30',
+          'flex h-8 w-full rounded-md border border-border bg-[var(--color-input)] px-3 py-1.5 text-xs text-foreground file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground placeholder:text-muted-foreground transition-all duration-200 focus-visible:outline-none focus-visible:border-foreground/50 disabled:cursor-not-allowed disabled:opacity-50 hover:border-foreground/30',
           error && 'border-destructive focus-visible:ring-destructive',
           className
         )}
-        style={{ borderColor: 'var(--color-border)' }}
         {...props}
       />
       {error && (
-        <p className="text-sm font-medium text-destructive mt-1">{error}</p>
+        <p className="text-xs font-medium text-destructive mt-1">{error}</p>
       )}
     </div>
   );

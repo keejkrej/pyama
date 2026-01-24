@@ -9,3 +9,4 @@ export { Table, TableHeader, TableRow, TableCell } from './table';
 export { Checkbox } from './checkbox';
 export { FilePicker } from './file-picker';
 export { Section } from './section';
+export { ThemeToggle } from './theme-toggle';

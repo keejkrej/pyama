@@ -80,11 +80,11 @@ export function NumberInput({
   return (
     <div className={cn(className || 'w-full', 'min-w-0')}>
       {label && (
-        <label className="text-sm font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-2 block text-foreground">
+        <label className="text-xs font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-1.5 block text-foreground-bright">
           {label}
         </label>
       )}
-      <div className="relative flex items-center rounded-lg border border-input overflow-hidden h-10 w-full" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-input)' }}>
+      <div className="relative flex items-center rounded-md border border-border bg-[var(--color-input)] overflow-hidden h-8 w-full">
         <input
           type="number"
           value={localValue}
@@ -94,19 +94,19 @@ export function NumberInput({
           max={max}
           step={step}
           className={cn(
-            'flex h-10 flex-1 bg-transparent px-4 py-2 pr-12 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50',
+            'flex h-8 flex-1 bg-transparent px-3 py-1.5 pr-10 text-xs text-foreground placeholder:text-muted-foreground transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50',
             '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
             error && 'border-destructive focus-visible:ring-destructive'
           )}
           {...props}
         />
-        <div className="absolute right-0 top-0 bottom-0 flex flex-col border-l border-border" style={{ borderLeftColor: 'var(--color-border)' }}>
+        <div className="absolute right-0 top-0 bottom-0 flex flex-col border-l border-border">
           <button
             type="button"
             onClick={increment}
             disabled={max !== undefined && value >= max}
             className={cn(
-              'flex-1 px-2 text-xs bg-[var(--color-input)] hover:bg-accent hover:text-accent-foreground text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center border-b border-border',
+              'flex-1 px-1.5 text-[10px] bg-[var(--color-input)] hover:bg-accent hover:text-accent-foreground text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center border-b border-border',
               'focus-visible:outline-none'
             )}
           >
@@ -117,7 +117,7 @@ export function NumberInput({
             onClick={decrement}
             disabled={min !== undefined && value <= min}
             className={cn(
-              'flex-1 px-2 text-xs bg-[var(--color-input)] hover:bg-accent hover:text-accent-foreground text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center',
+              'flex-1 px-1.5 text-[10px] bg-[var(--color-input)] hover:bg-accent hover:text-accent-foreground text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center',
               'focus-visible:outline-none'
             )}
           >
@@ -126,7 +126,7 @@ export function NumberInput({
         </div>
       </div>
       {error && (
-        <p className="text-sm font-medium text-destructive mt-1">{error}</p>
+        <p className="text-xs font-medium text-destructive mt-1">{error}</p>
       )}
     </div>
   );

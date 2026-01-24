@@ -41,6 +41,18 @@ export default {
           DEFAULT: 'var(--color-destructive)',
           foreground: 'var(--color-destructive-foreground)',
         },
+        success: {
+          DEFAULT: 'var(--color-success)',
+          foreground: 'var(--color-success-foreground)',
+        },
+        warning: {
+          DEFAULT: 'var(--color-warning)',
+          foreground: 'var(--color-warning-foreground)',
+        },
+        info: {
+          DEFAULT: 'var(--color-info)',
+          foreground: 'var(--color-info-foreground)',
+        },
         border: 'var(--color-border)',
         input: 'var(--color-input)',
         ring: 'var(--color-ring)',
