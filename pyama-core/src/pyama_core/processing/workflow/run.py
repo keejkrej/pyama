@@ -11,7 +11,7 @@ from pathlib import Path
 from pyama_core.io import (
     MicroscopyMetadata,
     ProcessingConfig,
-    config_path,
+    get_config_path,
     ensure_config,
     save_config,
 )
@@ -179,8 +179,7 @@ def run_complete_workflow(
     metadata: MicroscopyMetadata,
     config: ProcessingConfig,
     output_dir: Path,
-    fov_start: int | None = None,
-    fov_end: int | None = None,
+    fov_list: list[int] | None = None,
     batch_size: int = 2,
     n_workers: int = 2,
     cancel_event: threading.Event | None = None,
@@ -205,8 +204,8 @@ def run_complete_workflow(
         metadata: Microscopy file metadata.
         config: Processing configuration (channels and params).
         output_dir: Directory to write outputs.
-        fov_start: First FOV to process (default: 0).
-        fov_end: Last FOV to process (default: last FOV in file).
+        fov_list: List of FOV indices to process (default: all FOVs).
+            Use range syntax when calling CLI: "0-5, 7, 10-15"
         batch_size: Number of FOVs to copy before parallel processing.
         n_workers: Number of parallel workers for processing.
         cancel_event: Optional event to signal cancellation.
@@ -223,20 +222,24 @@ def run_complete_workflow(
         output_dir.mkdir(parents=True, exist_ok=True)
 
         n_fov = metadata.n_fovs
-        # Handle None or -1 as "process all FOVs"
-        if fov_start is None or fov_start == -1:
-            fov_start = 0
-        if fov_end is None or fov_end == -1:
-            fov_end = n_fov - 1
 
-        if fov_start < 0 or fov_end >= n_fov or fov_start > fov_end:
-            logger.error(
-                "Invalid FOV range: %d-%d (file has %d FOVs)", fov_start, fov_end, n_fov
-            )
-            return False
+        # Default to all FOVs if not specified
+        if fov_list is None:
+            fov_indices = list(range(n_fov))
+        else:
+            # Validate FOV indices
+            invalid_fovs = [f for f in fov_list if f < 0 or f >= n_fov]
+            if invalid_fovs:
+                logger.error(
+                    "Invalid FOV indices: %s (file has %d FOVs, valid range: 0-%d)",
+                    invalid_fovs,
+                    n_fov,
+                    n_fov - 1,
+                )
+                return False
+            fov_indices = sorted(set(fov_list))  # Remove duplicates and sort
 
-        total_fovs = fov_end - fov_start + 1
-        fov_indices = list(range(fov_start, fov_end + 1))
+        total_fovs = len(fov_indices)
 
         completed_fovs = 0
 
@@ -332,7 +335,7 @@ def run_complete_workflow(
 
         # Save config to output directory for reference
         # Skip if config already exists (e.g., saved by CLI before workflow execution)
-        config_file = config_path(output_dir)
+        config_file = get_config_path(output_dir)
         if not config_file.exists():
             try:
                 save_config(config, config_file)

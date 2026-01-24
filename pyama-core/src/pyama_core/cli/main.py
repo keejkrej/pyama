@@ -12,7 +12,7 @@ from pyama_core.io import (
     ProcessingConfig,
     load_microscopy_file,
     save_config,
-    config_path,
+    get_config_path,
     load_config,
 )
 from pyama_core.processing.extraction.features import (
@@ -37,6 +37,47 @@ from pyama_core.utils.plotting import plot_numpy_array
 
 app = typer.Typer(help="pyama-core utilities")
 logger = logging.getLogger(__name__)
+
+
+def _format_fov_list(fov_list: list[int]) -> str:
+    """Format FOV list for display (compact representation with ranges).
+
+    Examples:
+        [0, 1, 2, 5, 7, 8, 9] -> "0-2, 5, 7-9"
+        [0] -> "0"
+        [] -> "(none)"
+    """
+    if not fov_list:
+        return "(none)"
+
+    sorted_fovs = sorted(set(fov_list))
+    if len(sorted_fovs) == 1:
+        return str(sorted_fovs[0])
+
+    # Group consecutive FOVs into ranges
+    ranges: list[str] = []
+    start = sorted_fovs[0]
+    end = sorted_fovs[0]
+
+    for fov in sorted_fovs[1:]:
+        if fov == end + 1:
+            end = fov
+        else:
+            # Save current range and start new one
+            if start == end:
+                ranges.append(str(start))
+            else:
+                ranges.append(f"{start}-{end}")
+            start = fov
+            end = fov
+
+    # Don't forget the last range
+    if start == end:
+        ranges.append(str(start))
+    else:
+        ranges.append(f"{start}-{end}")
+
+    return ", ".join(ranges)
 
 
 @app.callback()
@@ -385,8 +426,14 @@ def workflow(
             raise typer.Exit(code=1) from exc
 
         # Extract workflow parameters from config
-        fov_start = config.get_param("fov_start", 0)
-        fov_end = config.get_param("fov_end", metadata.n_fovs - 1)
+        fov_list_raw = config.get_param("fov_list", None)
+        if fov_list_raw is not None:
+            fov_list = list(fov_list_raw)
+        else:
+            # Legacy config migration: convert old fov_start/fov_end to fov_list
+            fov_start = config.get_param("fov_start", 0)
+            fov_end = config.get_param("fov_end", metadata.n_fovs - 1)
+            fov_list = list(range(fov_start, fov_end + 1))
         batch_size = config.get_param("batch_size", 2)
         n_workers = config.get_param("n_workers", 1)
 
@@ -424,7 +471,7 @@ def workflow(
             f"  Background weight: {config.get_param('background_weight', 'N/A')}"
         )
         typer.echo(f"\nWorkflow Parameters:")
-        typer.echo(f"  FOV range: {fov_start} to {fov_end}")
+        typer.echo(f"  FOVs: {_format_fov_list(fov_list)}")
         typer.echo(f"  Batch size: {batch_size}")
         typer.echo(f"  Number of workers: {n_workers}")
         typer.echo(f"\nOutput Directory: {output_dir}")
@@ -437,8 +484,7 @@ def workflow(
             metadata=metadata,
             config=config,
             output_dir=output_dir,
-            fov_start=fov_start,
-            fov_end=fov_end,
+            fov_list=fov_list,
             batch_size=batch_size,
             n_workers=n_workers,
         )
@@ -585,7 +631,31 @@ def workflow(
         maximum=1.0,
     )
 
-    default_fov_end = max(metadata.n_fovs - 1, 0)
+    max_fov = metadata.n_fovs - 1
+    default_fov_spec = f"0-{max_fov}" if max_fov > 0 else "0"
+
+    def _prompt_fov_list(max_fov: int) -> list[int]:
+        """Prompt for flexible FOV specification (e.g., '0-5, 7, 10-15')."""
+        while True:
+            fov_spec = typer.prompt(
+                f"FOVs (e.g., '0-5, 7, 10-15', valid: 0-{max_fov})",
+                default=default_fov_spec,
+            ).strip()
+            try:
+                fov_list = parse_fov_range(fov_spec)
+            except ValueError as exc:
+                typer.secho(f"Invalid FOV format: {exc}", err=True, fg=typer.colors.RED)
+                continue
+            # Validate FOV indices are in range
+            invalid = [f for f in fov_list if f < 0 or f > max_fov]
+            if invalid:
+                typer.secho(
+                    f"FOV indices out of range (valid: 0-{max_fov}): {invalid}",
+                    err=True,
+                    fg=typer.colors.RED,
+                )
+                continue
+            return fov_list
 
     def _prompt_int(prompt_text: str, default: int, minimum: int = 0) -> int:
         while True:
@@ -610,8 +680,7 @@ def workflow(
     typer.secho("Workflow Execution Parameters", bold=True)
     typer.echo("=" * 60)
 
-    fov_start = _prompt_int("FOV start", 0, minimum=0)
-    fov_end = _prompt_int("FOV end", default_fov_end, minimum=fov_start)
+    fov_list = _prompt_fov_list(max_fov)
     batch_size = _prompt_int("Batch size", 2, minimum=1)
     n_workers = _prompt_int("Number of workers", 1, minimum=1)
 
@@ -629,8 +698,7 @@ def workflow(
             "tracking_method": track_method,
             "background_weight": background_weight,
             # Workflow execution parameters
-            "fov_start": fov_start,
-            "fov_end": fov_end,
+            "fov_list": fov_list,
             "batch_size": batch_size,
             "n_workers": n_workers,
         },
@@ -657,7 +725,7 @@ def workflow(
     typer.echo(f"  Tracking method: {track_method}")
     typer.echo(f"  Background weight: {background_weight}")
     typer.echo(f"\nWorkflow Parameters:")
-    typer.echo(f"  FOV range: {fov_start} to {fov_end}")
+    typer.echo(f"  FOVs: {_format_fov_list(fov_list)}")
     typer.echo(f"  Batch size: {batch_size}")
     typer.echo(f"  Number of workers: {n_workers}")
     typer.echo(f"\nOutput Directory: {output_dir}")
@@ -670,7 +738,7 @@ def workflow(
         raise typer.Exit(code=0)
 
     # Save config YAML so user can use --config flag later
-    config_yaml_path = config_path(output_dir)
+    config_yaml_path = get_config_path(output_dir)
     save_config(config, config_yaml_path)
     typer.secho(
         f"Saved processing config to {config_yaml_path}",
@@ -684,8 +752,7 @@ def workflow(
         metadata=metadata,
         config=config,
         output_dir=output_dir,
-        fov_start=fov_start,
-        fov_end=fov_end,
+        fov_list=fov_list,
         batch_size=batch_size,
         n_workers=n_workers,
     )

@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyama_core.io import naming, load_config, config_path, serialize_channels_data
+from pyama_core.io import naming, load_config, get_config_path, serialize_channels_data
 from pyama_qt.constants import DEFAULT_DIR
 
 logger = logging.getLogger(__name__)
@@ -279,7 +279,7 @@ class LoadPanel(QWidget):
                 )
 
             # Load config if available
-            cfg_path = config_path(project_path)
+            cfg_path = get_config_path(project_path)
             channels_config = None
             if cfg_path.exists():
                 try:

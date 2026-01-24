@@ -185,7 +185,7 @@ def ensure_config(config: ProcessingConfig | None) -> ProcessingConfig:
 CONFIG_FILENAME = "processing_config.yaml"
 
 
-def config_path(output_dir: Path) -> Path:
+def get_config_path(output_dir: Path) -> Path:
     """Get default config file path for an output directory.
 
     Args:
@@ -202,7 +202,7 @@ __all__ = [
     "load_config",
     "save_config",
     "ensure_config",
-    "config_path",
+    "get_config_path",
     "parse_channels_data",
     "serialize_channels_data",
     "CONFIG_FILENAME",
