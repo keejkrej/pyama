@@ -1,7 +1,5 @@
 """Pydantic schemas for processing configuration."""
 
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 
@@ -19,6 +17,30 @@ class ChannelSelectionSchema(BaseModel):
             "example": {"channel": 0, "features": ["area", "intensity_total"]}
         }
     }
+
+
+class ProcessingParamsSchema(BaseModel):
+    """Processing parameters for the pipeline."""
+
+    fovs: str = Field(
+        default="",
+        description="FOV selection string (e.g., '1-4,6'). Empty means all FOVs.",
+    )
+    batch_size: int = Field(
+        default=2,
+        ge=1,
+        description="Number of FOVs to process in parallel",
+    )
+    n_workers: int = Field(
+        default=2,
+        ge=1,
+        description="Number of worker threads",
+    )
+    background_weight: float = Field(
+        default=1.0,
+        ge=0,
+        description="Weight for background subtraction",
+    )
 
 
 class ChannelsSchema(BaseModel):
@@ -55,9 +77,9 @@ class ProcessingConfigSchema(BaseModel):
         None,
         description="Channel configuration (PC and FL channels with features)",
     )
-    params: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Processing parameters (segmentation_method, tracking_method, background_weight, etc.)",
+    params: ProcessingParamsSchema = Field(
+        default_factory=ProcessingParamsSchema,
+        description="Processing parameters",
     )
 
     model_config = {
@@ -68,10 +90,10 @@ class ProcessingConfigSchema(BaseModel):
                     "fl": [{"channel": 1, "features": ["intensity_total"]}],
                 },
                 "params": {
-                    "segmentation_method": "cellpose",
-                    "tracking_method": "iou",
+                    "fovs": "1-4,6",
+                    "batch_size": 2,
+                    "n_workers": 2,
                     "background_weight": 1.0,
-                    "mask_margin": 5,
                 },
             }
         }

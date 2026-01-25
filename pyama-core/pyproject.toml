@@ -29,6 +29,8 @@ dependencies = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.20",
     "httpx",  # For testing FastAPI
+    # MCP server dependencies
+    "mcp>=1.0.0",
 ]
 
 [tool.uv]

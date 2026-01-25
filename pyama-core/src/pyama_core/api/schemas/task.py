@@ -24,6 +24,7 @@ class TaskCreate(BaseModel):
 
     file_path: str = Field(..., description="Path to the microscopy file to process")
     config: ProcessingConfigSchema = Field(..., description="Processing configuration")
+    fake: bool = Field(False, description="If true, run a fake 60-second task instead of real processing")
 
     model_config = {
         "json_schema_extra": {

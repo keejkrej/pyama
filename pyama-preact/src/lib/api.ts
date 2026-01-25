@@ -32,12 +32,12 @@ export interface TaskProgress {
   phase: string;
   current_fov: number;
   total_fovs: number;
-  progress_percent: number;
-  progress_message: string;
+  percent: number;
+  message: string;
 }
 
 export interface TaskResult {
-  output_path: string;
+  output_dir: string;
   summary: Record<string, unknown>;
 }
 
@@ -98,11 +98,16 @@ export const api = {
 
   /**
    * Create a new processing task
+   * @param fake - If true, runs a 60-second simulated task instead of real processing
    */
-  async createTask(filePath: string, config: Record<string, unknown>): Promise<TaskResponse> {
+  async createTask(
+    filePath: string,
+    config: Record<string, unknown>,
+    fake: boolean = false
+  ): Promise<TaskResponse> {
     return fetchJson(`${API_BASE}/processing/tasks`, {
       method: 'POST',
-      body: JSON.stringify({ file_path: filePath, config }),
+      body: JSON.stringify({ file_path: filePath, config, fake }),
     });
   },
 

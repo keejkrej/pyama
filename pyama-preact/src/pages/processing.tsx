@@ -1,44 +1,187 @@
-import { useState, useRef } from 'preact/hooks';
-import { Card, Button, Input, NumberInput, Checkbox, Table, TableHeader, TableRow, TableCell, FilePicker, Section } from '../components/ui';
+import { useState, useRef, useEffect } from 'preact/hooks';
+import { Card, Button, Input, NumberInput, Checkbox, Select, Table, TableHeader, TableRow, TableCell, FilePicker, Section, Badge } from '../components/ui';
+import { api } from '../lib/api';
+import type { TaskResponse } from '../lib/api';
 
 interface ProcessingPageProps {
   path?: string;
 }
 
-interface ProcessingParams {
-  fov_start: number;
-  fov_end: number;
-  batch_size: number;
-  n_workers: number;
-  background_weight: number;
+interface FlChannelEntry {
+  channel: number;
+  feature: string;
+}
+
+interface SchemaProperty {
+  type: string;
+  default?: unknown;
+  description?: string;
 }
 
 export function ProcessingPage(_props: ProcessingPageProps) {
   const [microscopyFile, setMicroscopyFile] = useState('');
   const [phaseContrastChannel, setPhaseContrastChannel] = useState(0);
-  const [fluorescenceChannels, setFluorescenceChannels] = useState<number[]>([]);
-  const [flChannel1, setFlChannel1] = useState(0);
-  const [flChannel2, setFlChannel2] = useState(0);
+  const [flEntries, setFlEntries] = useState<FlChannelEntry[]>([
+    { channel: 1, feature: 'intensity_total' },
+  ]);
   const [outputDir, setOutputDir] = useState('');
   const [manualParams, setManualParams] = useState(true);
-  const [params, setParams] = useState<ProcessingParams>({
-    fov_start: 0,
-    fov_end: -1,
-    batch_size: 2,
-    n_workers: 2,
-    background_weight: 1,
-  });
+  const [paramsSchema, setParamsSchema] = useState<Record<string, SchemaProperty> | null>(null);
+  const [schemaLoading, setSchemaLoading] = useState(true);
+  const [params, setParams] = useState<Record<string, unknown>>({});
   const tooltipRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<SVGSVGElement>(null);
 
-  const handleAddFluorescence = () => {
-    if (flChannel1 > 0 && !fluorescenceChannels.includes(flChannel1)) {
-      setFluorescenceChannels([...fluorescenceChannels, flChannel1]);
+  // Task state - restore from localStorage on mount
+  const [taskId, setTaskId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('pyama_current_task_id');
+    }
+    return null;
+  });
+  const [taskStatus, setTaskStatus] = useState<TaskResponse | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Persist taskId to localStorage
+  useEffect(() => {
+    if (taskId) {
+      localStorage.setItem('pyama_current_task_id', taskId);
+    } else {
+      localStorage.removeItem('pyama_current_task_id');
+    }
+  }, [taskId]);
+
+  // On mount, check if we have a task to resume
+  useEffect(() => {
+    if (taskId && !taskStatus) {
+      // Fetch current status and resume polling if still running
+      api.getTask(taskId).then(task => {
+        setTaskStatus(task);
+        if (task.status === 'pending' || task.status === 'running') {
+          setIsPolling(true);
+        }
+      }).catch(() => {
+        // Task not found, clear it
+        setTaskId(null);
+      });
+    }
+  }, []);
+
+  // Fetch config schema on mount
+  useEffect(() => {
+    api.getConfigSchema()
+      .then(schema => {
+        const schemaAny = schema as any;
+        // Handle $ref - Pydantic uses $defs for nested models
+        let paramsProps = schemaAny?.properties?.params?.properties;
+        if (!paramsProps && schemaAny?.properties?.params?.$ref) {
+          // Dereference: "$ref": "#/$defs/ProcessingParamsSchema"
+          const refPath = schemaAny.properties.params.$ref;
+          const refName = refPath.split('/').pop();
+          paramsProps = schemaAny?.$defs?.[refName]?.properties;
+        }
+        if (paramsProps) {
+          setParamsSchema(paramsProps);
+          // Initialize params with schema defaults
+          const defaults: Record<string, unknown> = {};
+          for (const [key, prop] of Object.entries(paramsProps)) {
+            if ((prop as SchemaProperty).default !== undefined) {
+              defaults[key] = (prop as SchemaProperty).default;
+            }
+          }
+          setParams(defaults);
+        }
+      })
+      .catch(err => console.warn('Failed to fetch config schema:', err))
+      .finally(() => setSchemaLoading(false));
+  }, []);
+
+  // Poll for task updates
+  useEffect(() => {
+    if (!isPolling || !taskId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const task = await api.getTask(taskId);
+        setTaskStatus(task);
+        if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+          setIsPolling(false);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch task status');
+        setIsPolling(false);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isPolling, taskId]);
+
+  const handleStart = async () => {
+    setError(null);
+    try {
+      // Build config from current state
+      const config = {
+        channels: {
+          pc: { channel: phaseContrastChannel, features: ['area'] },
+          fl: flEntries.map(entry => ({
+            channel: entry.channel,
+            features: [entry.feature]
+          })),
+        },
+        params: manualParams ? params : {},
+      };
+
+      // Create fake task for testing (set to true for 60-second simulation)
+      const task = await api.createTask(microscopyFile, config, true);
+      setTaskId(task.id);
+      setTaskStatus(task);
+      setIsPolling(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create task');
     }
   };
 
-  const updateParam = (key: keyof ProcessingParams, value: number) => {
-    setParams({ ...params, [key]: value });
+  const handleCancel = async () => {
+    if (!taskId) return;
+    try {
+      await api.cancelTask(taskId);
+      setIsPolling(false);
+      setTaskId(null);
+      setTaskStatus(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel task');
+    }
+  };
+
+  const handleAddFluorescence = () => {
+    setFlEntries([...flEntries, { channel: 0, feature: 'intensity_total' }]);
+  };
+
+  const handleRemoveFluorescence = () => {
+    if (flEntries.length > 0) {
+      setFlEntries(flEntries.slice(0, -1));
+    }
+  };
+
+  const renderParamInput = (key: string, prop: SchemaProperty, value: unknown) => {
+    if (prop.type === 'integer' || prop.type === 'number') {
+      return (
+        <NumberInput
+          value={typeof value === 'number' ? value : 0}
+          onChange={(v) => setParams({ ...params, [key]: v })}
+          step={prop.type === 'number' ? 0.1 : 1}
+        />
+      );
+    }
+    // String (including fovs)
+    return (
+      <Input
+        value={typeof value === 'string' ? value : ''}
+        onChange={(e) => setParams({ ...params, [key]: e.currentTarget.value })}
+        placeholder={prop.description || ''}
+      />
+    );
   };
 
   return (
@@ -56,11 +199,10 @@ export function ProcessingPage(_props: ProcessingPageProps) {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Input
-                    placeholder="No microscopy selected"
+                    placeholder="Enter file path or browse..."
                     value={microscopyFile}
                     onChange={(e) => setMicroscopyFile(e.currentTarget.value)}
                     className="flex-1"
-                    readOnly
                   />
                   <FilePicker
                     onFileSelect={(files) => {
@@ -102,22 +244,34 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                     Fluorescence
                   </label>
                   <div className="space-y-2 mb-2">
-                    <NumberInput
-                      value={flChannel1}
-                      onChange={setFlChannel1}
-                      min={0}
-                    />
-                    <NumberInput
-                      value={flChannel2}
-                      onChange={setFlChannel2}
-                      min={0}
-                    />
+                    {flEntries.map((entry, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <NumberInput
+                          value={entry.channel}
+                          onChange={(v) => {
+                            const updated = [...flEntries];
+                            updated[idx] = { ...entry, channel: v };
+                            setFlEntries(updated);
+                          }}
+                          min={0}
+                          className="w-20"
+                        />
+                        <Select
+                          value={entry.feature}
+                          onChange={(e) => {
+                            const updated = [...flEntries];
+                            updated[idx] = { ...entry, feature: e.currentTarget.value };
+                            setFlEntries(updated);
+                          }}
+                          options={[
+                            { value: 'intensity_total', label: 'Intensity Total' },
+                            { value: 'particle_num', label: 'Particle Num' },
+                          ]}
+                          className="flex-1"
+                        />
+                      </div>
+                    ))}
                   </div>
-                  {fluorescenceChannels.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-xs text-muted-foreground mb-1">Channels: {fluorescenceChannels.join(', ')}</p>
-                    </div>
-                  )}
                   <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
                     <p className="text-xs text-muted-foreground">Fluorescence Features</p>
                   </div>
@@ -129,7 +283,7 @@ export function ProcessingPage(_props: ProcessingPageProps) {
               <Button onClick={handleAddFluorescence} variant="secondary">
                 Add
               </Button>
-              <Button variant="secondary" disabled onClick={() => { }}>
+              <Button variant="secondary" onClick={handleRemoveFluorescence} disabled={flEntries.length === 0}>
                 Remove
               </Button>
             </div>
@@ -182,64 +336,31 @@ export function ProcessingPage(_props: ProcessingPageProps) {
                   </TableRow>
                 </TableHeader>
                 <tbody>
-                  {manualParams ? (
-                    <>
-                      <TableRow>
-                        <TableCell className="border-r border-border">fov_start</TableCell>
-                        <TableCell>
-                          <NumberInput
-                            value={params.fov_start}
-                            onChange={(v) => updateParam('fov_start', v)}
-                          />
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="border-r border-border">fov_end</TableCell>
-                        <TableCell>
-                          <NumberInput
-                            value={params.fov_end}
-                            onChange={(v) => updateParam('fov_end', v)}
-                          />
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="border-r border-border">batch_size</TableCell>
-                        <TableCell>
-                          <NumberInput
-                            value={params.batch_size}
-                            onChange={(v) => updateParam('batch_size', v)}
-                            min={1}
-                          />
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="border-r border-border">n_workers</TableCell>
-                        <TableCell>
-                          <NumberInput
-                            value={params.n_workers}
-                            onChange={(v) => updateParam('n_workers', v)}
-                            min={1}
-                          />
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="border-r border-border">background_weight</TableCell>
-                        <TableCell>
-                          <NumberInput
-                            value={params.background_weight}
-                            onChange={(v) => updateParam('background_weight', v)}
-                            min={0}
-                            step={0.1}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    </>
-                  ) : (
+                  {!manualParams ? (
                     <TableRow>
                       <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
                         Parameters by default
                       </TableCell>
                     </TableRow>
+                  ) : schemaLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : !paramsSchema ? (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
+                        No parameters available
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    Object.entries(paramsSchema).map(([key, prop]) => (
+                      <TableRow key={key}>
+                        <TableCell className="border-r border-border">{key}</TableCell>
+                        <TableCell>{renderParamInput(key, prop, params[key])}</TableCell>
+                      </TableRow>
+                    ))
                   )}
                 </tbody>
               </Table>
@@ -247,11 +368,74 @@ export function ProcessingPage(_props: ProcessingPageProps) {
 
             <div className="my-4 border-t border-border"></div>
 
+            {/* Task Status Display */}
+            {(taskStatus || error) && (
+              <Section title="Status">
+                <div className="space-y-2">
+                  {error && (
+                    <div className="p-2 bg-destructive/10 border border-destructive rounded text-sm text-destructive">
+                      {error}
+                    </div>
+                  )}
+                  {taskStatus && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Status:</span>
+                        <Badge
+                          variant={
+                            taskStatus.status === 'completed' ? 'success' :
+                            taskStatus.status === 'failed' ? 'destructive' :
+                            taskStatus.status === 'running' ? 'info' :
+                            'muted'
+                          }
+                        >
+                          {taskStatus.status}
+                        </Badge>
+                      </div>
+                      {taskStatus.progress && (
+                        <>
+                          <div className="w-full bg-muted rounded-full h-2">
+                            <div
+                              className="bg-primary h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${taskStatus.progress.percent || 0}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {taskStatus.progress.message || `${taskStatus.progress.percent?.toFixed(0) || 0}%`}
+                          </p>
+                        </>
+                      )}
+                      {taskStatus.error_message && (
+                        <p className="text-xs text-destructive">{taskStatus.error_message}</p>
+                      )}
+                      {taskStatus.status === 'completed' && taskStatus.result && (
+                        <p className="text-xs text-success">
+                          Output: {taskStatus.result.output_dir}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Section>
+            )}
+
+            {(taskStatus || error) && <div className="my-4 border-t border-border"></div>}
+
             <div className="mt-4 flex gap-2">
-              <Button variant="default" className="flex-1" onClick={() => { }}>
-                Start
+              <Button
+                variant="default"
+                className="flex-1"
+                onClick={handleStart}
+                disabled={isPolling || !microscopyFile}
+              >
+                {isPolling ? 'Processing...' : 'Start'}
               </Button>
-              <Button variant="secondary" className="flex-1" onClick={() => { }}>
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={handleCancel}
+                disabled={!isPolling}
+              >
                 Cancel
               </Button>
             </div>

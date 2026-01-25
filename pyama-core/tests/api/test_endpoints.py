@@ -1,5 +1,6 @@
 """Tests for FastAPI endpoints."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,10 @@ from fastapi.testclient import TestClient
 from pyama_core.api.server import create_app
 
 # Test data path - real nd2 file for integration testing
-TEST_ND2_FILE = Path("/mnt/kingston/data/nd2_files/250129_HuH7.nd2")
+# Can be overridden via PYAMA_TEST_ND2_FILE environment variable
+# Default: {repo_root}/data/test.nd2
+_REPO_ROOT = Path(__file__).parent.parent.parent
+TEST_ND2_FILE = Path(os.environ.get("PYAMA_TEST_ND2_FILE", str(_REPO_ROOT / "data" / "test.nd2")))
 
 
 @pytest.fixture
@@ -143,3 +147,70 @@ class TestTasksEndpoint:
         response = client.get("/processing/tasks/nonexistent-id")
 
         assert response.status_code == 404
+
+
+class TestFakeTask:
+    """Tests for fake task execution."""
+
+    def test_create_fake_task(self, client: TestClient):
+        """Test creating a fake task returns pending status."""
+        response = client.post(
+            "/processing/tasks",
+            json={
+                "file_path": "/fake/file.nd2",
+                "config": {},
+                "fake": True,
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["status"] == "pending"
+        assert data["file_path"] == "/fake/file.nd2"
+
+    def test_fake_task_without_real_file(self, client: TestClient):
+        """Fake task should work without a real file existing."""
+        response = client.post(
+            "/processing/tasks",
+            json={
+                "file_path": "/nonexistent/path/test.nd2",
+                "config": {},
+                "fake": True,
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["status"] == "pending"
+        assert "id" in data
+
+    def test_fake_task_with_empty_config(self, client: TestClient):
+        """Fake task should accept empty config."""
+        response = client.post(
+            "/processing/tasks",
+            json={
+                "file_path": "/fake/file.nd2",
+                "config": {},
+                "fake": True,
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["config"]["channels"] is None
+        assert data["config"]["params"] == {}
+
+    def test_fake_default_is_false(self, client: TestClient):
+        """Task without fake flag should default to false (real task)."""
+        response = client.post(
+            "/processing/tasks",
+            json={
+                "file_path": "/some/file.nd2",
+                "config": {},
+            },
+        )
+
+        assert response.status_code == 201
+        # Real task with non-existent file will fail, but creation succeeds
+        data = response.json()
+        assert data["status"] == "pending"

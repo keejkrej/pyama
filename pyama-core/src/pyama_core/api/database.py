@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     status TEXT NOT NULL,
     file_path TEXT NOT NULL,
     config JSON NOT NULL,
+    fake INTEGER DEFAULT 0,
     phase TEXT,
     current_fov INTEGER,
     total_fovs INTEGER,
@@ -113,7 +114,7 @@ class TaskDB:
             completed_at=completed_at,
         )
 
-    def create_task(self, file_path: str, config: dict[str, Any]) -> TaskResponse:
+    def create_task(self, file_path: str, config: dict[str, Any], fake: bool = False) -> TaskResponse:
         """Create a new task in pending status."""
         task_id = str(uuid.uuid4())
         created_at = datetime.now()
@@ -121,10 +122,10 @@ class TaskDB:
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO tasks (id, status, file_path, config, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO tasks (id, status, file_path, config, fake, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (task_id, TaskStatus.PENDING, file_path, json.dumps(config), created_at.isoformat()),
+                (task_id, TaskStatus.PENDING, file_path, json.dumps(config), int(fake), created_at.isoformat()),
             )
             conn.commit()
 
