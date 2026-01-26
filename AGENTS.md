@@ -10,8 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PyAMA is a modular Python application for microscopy image analysis consisting of the following packages in a UV workspace:
 
-- **pyama-core**: Core processing library with analysis, processing workflows, and I/O utilities
+- **pyama-core**: Core processing library with analysis, processing workflows, I/O utilities, REST API server, and MCP integration
 - **pyama-qt**: Qt-based GUI with tabs for Processing, Analysis, and Visualization
+- **pyama-preact**: Modern web frontend built with Preact + Tailwind CSS, packaged as a Tauri desktop app (lives outside the UV workspace)
 - **pyama-acdc**: Cell-ACDC integration plugin
 
 ## Development Commands
@@ -69,11 +70,43 @@ uv run ty check
 ### Running the Application
 
 ```bash
-# Launch main GUI application
+# Launch Qt GUI application
 uv run pyama-qt
 
 # Alternative: run directly
 uv run python pyama-qt/src/pyama_qt/main.py
+
+# Start API server (for pyama-preact frontend)
+uv run pyama-core serve --port 8000 --reload
+```
+
+### CLI Commands
+
+```bash
+# All commands available via pyama-core CLI
+uv run pyama-core workflow             # Interactive processing workflow
+uv run pyama-core workflow -c cfg.yaml -n data.nd2  # Config-based workflow
+uv run pyama-core merge                # Interactive CSV merge wizard
+uv run pyama-core trajectory traces.csv  # Plot cell trajectories
+uv run pyama-core plot data.npy        # Plot numpy array files
+uv run pyama-core serve                # Start FastAPI server
+```
+
+### Web Frontend (pyama-preact)
+
+```bash
+cd pyama-preact
+
+# Install dependencies
+bun install  # or npm install
+
+# Development
+bun run dev           # Vite dev server (localhost:5173)
+bun run tauri:dev     # Tauri desktop app with hot reload
+
+# Production
+bun run build         # Build web assets
+bun run tauri:build   # Build native desktop app
 ```
 
 ## Architecture
@@ -90,6 +123,10 @@ The application centers around a workflow pipeline (`pyama_core.processing.workf
 
 The pipeline processes FOVs in batches using multithreading (`ThreadPoolExecutor`). Each batch is copied sequentially, then split across threads for parallel processing through steps 2-5. Worker contexts are merged back into the parent context after completion.
 
+**FOV Selection**: FOVs can be specified using flexible range syntax (e.g., `"0-5, 7, 10-15"`) via `parse_fov_range()` in `pyama_core.processing.merge`. The workflow uses `fov_list` parameter; legacy configs with `fov_start`/`fov_end` are auto-migrated.
+
+**Particle Detection**: Fluorescence particle counting uses the Spotiflow deep learning model (`spotiflow` package) with the pretrained "general" model for subpixel-accurate spot detection (see `pyama_core.processing.extraction.features.fluorescence.particle_num`).
+
 ### Processing Context
 
 The `ProcessingContext` dataclass (in `pyama_core.types.processing`) is the central data structure that flows through the pipeline, containing:
@@ -104,6 +141,42 @@ The `ProcessingContext` dataclass (in `pyama_core.types.processing`) is the cent
 
 - `channels.pc` serializes as `[phase_channel, [feature1, ...]]` and `channels.fl` as `[[channel, [feature1, ...]], ...]`, capturing both channel IDs and the enabled feature sets.
 - Per-FOV trace CSVs are at `fov_{id}/{basename}_fov_{id}_traces.csv`. Feature columns are suffixed with `_ch_{channel_id}` (e.g., `intensity_total_ch_1`, `area_ch_0`) so downstream tools can isolate per-channel data.
+
+### REST API & MCP Server
+
+The `pyama_core.api` module provides a FastAPI server (`pyama_core.api.server.create_app`) with both REST and MCP endpoints:
+
+**API Routes** (under `/api`):
+- `POST /api/data/microscopy` - Load microscopy file metadata
+- `POST /api/processing/tasks` - Create a processing task
+- `GET /api/processing/tasks` - List all tasks
+- `GET /api/processing/tasks/{task_id}` - Get task status and progress
+- `DELETE /api/processing/tasks/{task_id}` - Cancel a task
+- `GET /api/processing/config` - Schema discovery for processing configuration
+
+**MCP Endpoint**: SSE transport mounted at `/mcp` with tools mirroring the REST API (`load_microscopy`, `get_processing_config_schema`, `create_task`, etc.)
+
+**Architecture**:
+- **Routes** (`api/routes/`): FastAPI routers for data and processing endpoints
+- **Schemas** (`api/schemas/`): Pydantic models for request/response validation (`TaskCreate`, `TaskResponse`, `ProcessingConfigSchema`, `MicroscopyMetadataSchema`)
+- **Services** (`api/services/`): Business logic layer (`TaskService` for task CRUD/execution, `MicroscopyService` for file handling)
+- **Database** (`api/database.py`): SQLite-based task persistence at `~/.pyama/tasks.db` with columns for status, progress, config, and timing
+- **MCP** (`api/mcp/`): Model Context Protocol server with tool definitions
+
+**CORS**: Configured for Tauri (`tauri://localhost`, `localhost:1420`) and Vite (`localhost:5173`) dev servers.
+
+**Task execution**: Supports both real processing workflows and a `fake` mode (60-second simulation) for frontend development. Tasks track `phase`, `current_fov`, `total_fovs`, `progress_percent`, and `progress_message`.
+
+### Preact Web Frontend (pyama-preact)
+
+A modern desktop application using Preact + Tauri, separate from the UV workspace.
+
+**Stack**: Preact, TypeScript, Tailwind CSS 4, Vite, Tauri 2.x
+
+**Structure**:
+- Custom component library (`components/ui/`): card, button, badge, modal, file-picker, checkbox, select, input, table, theme-toggle
+- Processing page with task creation, configuration, and progress polling
+- Communicates with pyama-core via REST API (`localhost:8000`)
 
 ### Qt Application Structure
 
@@ -256,7 +329,7 @@ For detailed UI architecture information, refer to the component documentation i
 
 ### Key Data Types
 
-- ND2 files are the primary input format for microscopy data
+- ND2 and CZI files are the primary input formats for microscopy data (via bioio-nd2 and bioio-czi)
 - Processing operates on FOVs (fields of view) with configurable batch sizes and worker counts
 - Channel indexing distinguishes phase contrast (pc) from fluorescence (fl) channels
 - Outputs include segmentation masks, corrected fluorescence, and extracted traces (CSV format)
@@ -366,9 +439,11 @@ fov,cell,frame,good,position_x,position_y,intensity_total_ch_1,area_ch_0
 
 ## Development Notes
 
-- Uses UV for dependency management with workspace configuration
+- Uses UV for dependency management with workspace configuration (`pyama-core`, `pyama-qt`, `pyama-acdc`; `pyama-preact` is a separate Node.js project)
 - Built on Python 3.11+ with scientific computing stack (numpy, scipy, scikit-image, xarray)
 - Qt GUI built with PySide6
+- REST API built with FastAPI + uvicorn; MCP integration via `mcp` package
+- Deep learning features via Spotiflow (particle detection) and Cellpose (segmentation)
 - Processing pipeline supports multiprocessing with configurable worker counts
 - Tests are located in `{package}/tests/` directories (e.g., `pyama-core/tests/` for core) organized by component (analysis, features, processing, utils)
 - Typing style: prefer built-in generics (dict, list, tuple) and union types using '|' over typing.Dict, typing.List, typing.Tuple, typing.Union

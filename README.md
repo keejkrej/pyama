@@ -23,32 +23,60 @@ cd pyama
 # Install all dependencies
 uv sync --all-extras
 
-# Launch the GUI
+# Launch the Qt GUI
 uv run pyama-qt
+
+# Or start the API server (for web frontend)
+uv run pyama-core serve
 ```
 
 ## 📦 Packages
 
 PyAMA consists of the following packages:
 
-- **pyama-core**: Core processing library with analysis workflows
+- **pyama-core**: Core processing library with analysis workflows, CLI tools, and REST API server
 - **pyama-qt**: Qt-based GUI for comprehensive analysis
+- **pyama-preact**: Modern web frontend built with Preact, Tailwind CSS, and Tauri for desktop deployment
 - **pyama-acdc**: Cell-ACDC integration plugin
 
 ## 🎯 Key Features
 
-- **Automated Processing**: End-to-end pipeline from ND2 files to CSV traces
+- **Automated Processing**: End-to-end pipeline from ND2/CZI files to CSV traces
 - **Multi-channel Support**: Process phase contrast and multiple fluorescence channels
+- **Deep Learning**: Spotiflow-based particle detection for fluorescence spot counting
 - **Quality Control**: Interactive trace inspection and filtering
 - **Model Fitting**: Built-in models for protein maturation and decay analysis
 - **Batch Processing**: Handle large datasets with configurable parallelism
+- **REST API & MCP**: FastAPI server with Model Context Protocol integration for programmatic access
+- **Modern Web UI**: Preact + Tauri desktop application with task management
 - **Extensible**: Plugin system for custom features and models
+
+## 🖥️ CLI Commands
+
+```bash
+# Run processing workflow (interactive or config-based)
+uv run pyama-core workflow
+uv run pyama-core workflow --config config.yaml --nd2-path data.nd2
+
+# Merge CSV outputs from multiple samples
+uv run pyama-core merge
+
+# Plot cell trajectories
+uv run pyama-core trajectory traces.csv
+
+# Plot numpy array files
+uv run pyama-core plot data.npy
+
+# Start the API server
+uv run pyama-core serve --port 8000 --reload
+```
 
 ## 🐍 Requirements
 
 - Python 3.11 or later
 - UV package manager (recommended) or pip
-- Qt6 for GUI applications
+- Qt6 for GUI applications (pyama-qt)
+- Node.js and Bun/npm for web frontend (pyama-preact)
 
 ## 📖 Learn More
 
