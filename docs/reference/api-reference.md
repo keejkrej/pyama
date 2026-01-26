@@ -1,11 +1,26 @@
 # API Reference
 
-This document provides complete API reference for the PyAMA Backend REST API service, including all endpoints, data models, and usage examples.
+This document provides complete API reference for the PyAMA Backend services, including the REST API, MCP (Model Context Protocol) integration, data models, and usage examples.
 
-## Base URL
+## Server Endpoints
 
+PyAMA Core exposes two interfaces:
+
+| Interface | Path | Description |
+|-----------|------|-------------|
+| REST API | `/api` | Traditional HTTP endpoints for frontend and scripts |
+| MCP | `/mcp` | Model Context Protocol for AI assistant integration |
+
+## Base URLs
+
+**REST API:**
 ```
-http://localhost:8000/api/v1
+http://localhost:8000/api
+```
+
+**MCP SSE Endpoint:**
+```
+http://localhost:8000/mcp
 ```
 
 ## Authentication
@@ -16,6 +31,174 @@ Future support planned:
 - API keys
 - JWT tokens
 - OAuth2
+
+---
+
+## MCP Integration
+
+PyAMA Core supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), enabling AI assistants like Claude to interact with microscopy processing functionality directly.
+
+### Connection
+
+The MCP endpoint uses SSE (Server-Sent Events) transport at `/mcp`. Configure your MCP client to connect to:
+
+```
+http://localhost:8000/mcp
+```
+
+### Available MCP Tools
+
+#### `load_microscopy`
+
+Load a microscopy file and extract metadata.
+
+**Parameters:**
+| Name | Type | Description |
+|------|------|-------------|
+| `file_path` | string | Path to microscopy file (ND2, CZI, or TIFF format) |
+
+**Returns:** Metadata including dimensions, channels, timepoints, and file info.
+
+**Example Response:**
+```json
+{
+  "n_fovs": 100,
+  "n_frames": 180,
+  "n_channels": 4,
+  "channel_names": ["Phase", "GFP", "RFP", "DAPI"],
+  "pixel_size_um": 0.65,
+  "dtype": "uint16",
+  "shape": [2048, 2048]
+}
+```
+
+#### `get_processing_config_schema`
+
+Get the JSON schema for processing configuration.
+
+**Parameters:** None
+
+**Returns:** JSON schema describing all available processing options including channels and parameters.
+
+#### `create_processing_task`
+
+Create and start a new image processing task.
+
+**Parameters:**
+| Name | Type | Description |
+|------|------|-------------|
+| `file_path` | string | Path to microscopy file to process |
+| `config` | object | Processing configuration (channels and params) |
+| `fake` | boolean | Run a 60-second simulated task for testing (default: false) |
+
+**Config Structure:**
+```json
+{
+  "channels": {
+    "pc": {
+      "channel": 0,
+      "features": ["area", "aspect_ratio"]
+    },
+    "fl": [
+      {
+        "channel": 1,
+        "features": ["intensity_total"]
+      }
+    ]
+  },
+  "params": {
+    "fovs": "0-99",
+    "batch_size": 2,
+    "segmentation_method": "delta"
+  }
+}
+```
+
+**Returns:** Task object with ID and initial status.
+
+#### `list_tasks`
+
+List all processing tasks with their current status.
+
+**Parameters:** None
+
+**Returns:**
+```json
+{
+  "tasks": [...],
+  "total": 5
+}
+```
+
+Task fields include: `id`, `status`, `progress`, `result`.
+
+#### `get_task`
+
+Get detailed status and progress of a specific task.
+
+**Parameters:**
+| Name | Type | Description |
+|------|------|-------------|
+| `task_id` | string | Task ID (UUID) to retrieve |
+
+**Returns:** Complete task information including status, progress, result, error details, and timestamps.
+
+#### `cancel_task`
+
+Cancel a pending or running task.
+
+**Parameters:**
+| Name | Type | Description |
+|------|------|-------------|
+| `task_id` | string | Task ID (UUID) to cancel |
+
+**Returns:** `{"success": true, "task_id": "..."}`
+
+### MCP Client Configuration
+
+To use with Claude Desktop or other MCP-compatible clients, add this to your MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "pyama": {
+      "url": "http://localhost:8000/mcp",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+### Example MCP Workflow
+
+1. **Load file metadata:**
+   ```
+   load_microscopy(file_path="/data/experiment.nd2")
+   ```
+
+2. **Check available config options:**
+   ```
+   get_processing_config_schema()
+   ```
+
+3. **Create a processing task:**
+   ```
+   create_processing_task(
+     file_path="/data/experiment.nd2",
+     config={...}
+   )
+   ```
+
+4. **Monitor progress:**
+   ```
+   get_task(task_id="abc-123-...")
+   ```
+
+---
+
+## REST API
+
+The REST API provides traditional HTTP endpoints for frontend applications and scripts.
 
 ## General Response Format
 
@@ -75,7 +258,7 @@ Load metadata from an ND2/CZI microscopy file.
 #### Example
 
 ```javascript
-const response = await fetch('/api/v1/processing/load-metadata', {
+const response = await fetch('/api/processing/load-metadata', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ file_path: '/data/experiment.nd2' })
@@ -854,7 +1037,7 @@ import requests
 from typing import Optional, Dict, Any
 
 class PyAMAClient:
-    def __init__(self, base_url: str = "http://localhost:8000/api/v1"):
+    def __init__(self, base_url: str = "http://localhost:8000/api"):
         self.base_url = base_url
         self.session = requests.Session()
     
@@ -953,7 +1136,7 @@ interface WorkflowConfig {
 }
 
 class PyAMAClient {
-  constructor(private baseUrl: string = 'http://localhost:8000/api/v1') {}
+  constructor(private baseUrl: string = 'http://localhost:8000/api') {}
   
   async loadMetadata(filePath: string): Promise<MicroscopyMetadata> {
     const response = await fetch(`${this.baseUrl}/processing/load-metadata`, {
