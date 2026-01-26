@@ -4,6 +4,7 @@ This server exposes both REST API (/api) and MCP (/mcp) endpoints for
 interacting with pyama-core functionality.
 """
 
+import contextlib
 import logging
 
 from fastapi import FastAPI
@@ -21,12 +22,19 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI application instance with REST API and MCP support.
     """
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI):
+        async with mcp.session_manager.run():
+            yield
+
     app = FastAPI(
         title="PyAMA Core API",
         description="API for PyAMA microscopy image processing pipeline",
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
 
     # Configure CORS for local development with Tauri
@@ -47,9 +55,8 @@ def create_app() -> FastAPI:
     # Mount REST API under /api
     app.include_router(api_router)
 
-    # Mount MCP SSE endpoint at /mcp
-    # SSE transport handles its own session management internally
-    app.mount("/mcp", mcp.sse_app())
+    # Mount MCP Streamable HTTP endpoint at /mcp
+    app.mount("/mcp", mcp.streamable_http_app())
 
     @app.get("/")
     async def root() -> dict:

@@ -11,3 +11,6 @@ mcp = FastMCP(
     name="PyAMA Core",
     json_response=True,  # Return JSON responses for better interop
 )
+
+# Mount at the root of the path so /mcp (not /mcp/mcp) is the endpoint
+mcp.settings.streamable_http_path = "/"
