@@ -159,7 +159,7 @@ Cancel a pending or running task.
 **Claude Code (CLI):**
 ```bash
 export PYAMA_MCP_URL="http://localhost:8000"  # adjust host/port as needed
-claude mcp add pyama --transport sse "$PYAMA_MCP_URL/mcp"
+claude mcp add pyama --transport http "$PYAMA_MCP_URL/mcp"
 ```
 
 **Claude Desktop** or other MCP-compatible clients — add this to your MCP configuration (adjust URL as needed):
@@ -169,7 +169,7 @@ claude mcp add pyama --transport sse "$PYAMA_MCP_URL/mcp"
   "mcpServers": {
     "pyama": {
       "url": "http://localhost:8000/mcp",
-      "transport": "sse"
+      "transport": "http"
     }
   }
 }
