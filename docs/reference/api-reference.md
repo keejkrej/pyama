@@ -156,7 +156,13 @@ Cancel a pending or running task.
 
 ### MCP Client Configuration
 
-To use with Claude Desktop or other MCP-compatible clients, add this to your MCP configuration:
+**Claude Code (CLI):**
+```bash
+export PYAMA_MCP_URL="http://localhost:8000"  # adjust host/port as needed
+claude mcp add pyama --transport sse "$PYAMA_MCP_URL/mcp"
+```
+
+**Claude Desktop** or other MCP-compatible clients — add this to your MCP configuration (adjust URL as needed):
 
 ```json
 {

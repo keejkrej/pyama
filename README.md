@@ -69,6 +69,10 @@ uv run pyama-core plot data.npy
 
 # Start the API server
 uv run pyama-core serve --port 8000 --reload
+
+# Connect Claude Code as an MCP client (requires server running)
+export PYAMA_MCP_URL="http://localhost:8000"  # adjust host/port as needed
+claude mcp add pyama --transport sse "$PYAMA_MCP_URL/mcp"
 ```
 
 ## 🐍 Requirements

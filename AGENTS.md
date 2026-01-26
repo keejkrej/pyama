@@ -156,6 +156,12 @@ The `pyama_core.api` module provides a FastAPI server (`pyama_core.api.server.cr
 
 **MCP Endpoint**: SSE transport mounted at `/mcp` with tools mirroring the REST API (`load_microscopy`, `get_processing_config_schema`, `create_task`, etc.)
 
+**Connect Claude Code as MCP client** (requires server running):
+```bash
+export PYAMA_MCP_URL="http://localhost:8000"  # adjust host/port as needed
+claude mcp add pyama --transport sse "$PYAMA_MCP_URL/mcp"
+```
+
 **Architecture**:
 - **Routes** (`api/routes/`): FastAPI routers for data and processing endpoints
 - **Schemas** (`api/schemas/`): Pydantic models for request/response validation (`TaskCreate`, `TaskResponse`, `ProcessingConfigSchema`, `MicroscopyMetadataSchema`)
