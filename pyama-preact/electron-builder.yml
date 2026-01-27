@@ -1,0 +1,19 @@
+appId: com.pyama.app
+productName: PyAMA
+directories:
+  buildResources: resources
+  output: release
+files:
+  - out/**/*
+  - "!node_modules"
+mac:
+  target:
+    - dmg
+    - zip
+  artifactName: ${name}-${version}-${arch}.${ext}
+win:
+  target:
+    - nsis
+linux:
+  target:
+    - AppImage

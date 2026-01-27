@@ -37,15 +37,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Configure CORS for local development with Tauri
+    # Configure CORS for local development with Electron
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-            "http://localhost:1420",  # Tauri dev server
-            "http://localhost:5173",  # Vite dev server
-            "http://127.0.0.1:1420",
+            "http://localhost:5173",  # Vite dev server (electron-vite dev)
             "http://127.0.0.1:5173",
-            "tauri://localhost",  # Tauri production
         ],
         allow_credentials=True,
         allow_methods=["*"],
