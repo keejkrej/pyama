@@ -4,8 +4,9 @@
 # IMPORTS
 # =============================================================================
 
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel
 
 from pyama_core.types.processing import FeatureMaps
 
@@ -15,17 +16,19 @@ from pyama_core.types.processing import FeatureMaps
 # =============================================================================
 
 
-@dataclass(frozen=True)
-class ChannelSelectionPayload:
+class ChannelSelectionPayload(BaseModel):
     """Lightweight payload describing selected channels."""
+
+    model_config = {"frozen": True}
 
     phase: int | None
     fluorescence: list[int]
 
 
-@dataclass(frozen=True)
-class MergeRequest:
+class MergeRequest(BaseModel):
     """Data structure for merge operation requests."""
+
+    model_config = {"frozen": True}
 
     sample_yaml: Path
     input_dir: Path

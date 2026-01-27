@@ -10,7 +10,9 @@ import logging
 import threading
 from pathlib import Path
 
-from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config
+from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
+from pyama_core.io import ensure_config
 from pyama_core.processing.workflow.run import run_complete_workflow
 
 logger = logging.getLogger(__name__)

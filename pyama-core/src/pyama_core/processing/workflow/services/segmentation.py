@@ -16,7 +16,9 @@ from functools import partial
 import logging
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
-from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
+from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
+from pyama_core.io import ensure_config, naming
 from pyama_core.processing.segmentation import get_segmenter
 from numpy.lib.format import open_memmap
 

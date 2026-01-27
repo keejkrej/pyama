@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 
 from pyama_core.api.database import TaskDB, get_db
-from pyama_core.api.schemas.task import (
+from pyama_core.types.api import (
     TaskCreate,
     TaskListResponse,
     TaskResponse,
@@ -35,11 +35,11 @@ async def create_task(
 
     If fake=true, runs a 60-second simulated task with progress updates.
     """
-    config_dict = request.config.model_dump()
     task = service.create_task(
         file_path=request.file_path,
-        config=config_dict,
+        config=request.config,
         fake=request.fake,
+        output_dir=request.output_dir,
     )
     return task
 

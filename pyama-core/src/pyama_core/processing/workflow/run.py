@@ -8,9 +8,9 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from pyama_core.types.processing import ProcessingConfig
 from pyama_core.io import (
     MicroscopyMetadata,
-    ProcessingConfig,
     get_config_path,
     ensure_config,
     save_config,
@@ -72,8 +72,8 @@ def run_single_worker(
         config = ensure_config(config)
 
         # Read algorithm choice from config params
-        seg_method = config.get_param("segmentation_method", "logstd")
-        track_method = config.get_param("tracking_method", "iou")
+        seg_method = config.params.segmentation_method
+        track_method = config.params.tracking_method
 
         segmentation = SegmentationService(method=seg_method)
         tracking = TrackingService(method=track_method)

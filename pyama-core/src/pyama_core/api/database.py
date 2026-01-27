@@ -9,13 +9,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Generator
 
-from pyama_core.api.schemas.task import (
+from pyama_core.types.api import (
     TaskProgress,
     TaskResponse,
     TaskResult,
     TaskStatus,
 )
-from pyama_core.api.schemas.processing import ProcessingConfigSchema
+from pyama_core.types.processing import ProcessingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ class TaskDB:
         """Convert a database row to a TaskResponse."""
         # Parse config JSON
         config_data = json.loads(row["config"]) if row["config"] else None
-        config = ProcessingConfigSchema(**config_data) if config_data else None
+        config = ProcessingConfig.model_validate(config_data) if config_data else None
 
         # Build progress if running
         progress = None
@@ -133,7 +133,7 @@ class TaskDB:
             id=task_id,
             status=TaskStatus.PENDING,
             file_path=file_path,
-            config=ProcessingConfigSchema(**config),
+            config=ProcessingConfig.model_validate(config),
             created_at=created_at,
         )
 

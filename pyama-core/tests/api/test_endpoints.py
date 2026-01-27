@@ -26,21 +26,21 @@ class TestProcessingConfig:
     """Tests for GET /processing/config endpoint."""
 
     def test_get_config_schema(self, client: TestClient):
-        """Should return the ProcessingConfigSchema as JSON schema."""
-        response = client.get("/processing/config")
+        """Should return the ProcessingConfig as JSON schema."""
+        response = client.get("/api/processing/config")
 
         assert response.status_code == 200
         data = response.json()
 
         # Check it's a valid JSON schema
         assert "title" in data
-        assert data["title"] == "ProcessingConfigSchema"
+        assert data["title"] == "ProcessingConfig"
         assert "properties" in data
         assert "$defs" in data
 
         # Check expected nested schemas
-        assert "ChannelSelectionSchema" in data["$defs"]
-        assert "ChannelsSchema" in data["$defs"]
+        assert "ChannelSelection" in data["$defs"]
+        assert "Channels" in data["$defs"]
 
 
 class TestMicroscopyEndpoint:
@@ -53,7 +53,7 @@ class TestMicroscopyEndpoint:
     def test_load_microscopy_metadata(self, client: TestClient):
         """Should return metadata for a valid nd2 file."""
         response = client.post(
-            "/data/microscopy",
+            "/api/data/microscopy",
             json={"file_path": str(TEST_ND2_FILE)},
         )
 
@@ -80,7 +80,7 @@ class TestMicroscopyEndpoint:
     def test_load_microscopy_file_not_found(self, client: TestClient):
         """Should return 404 for non-existent file."""
         response = client.post(
-            "/data/microscopy",
+            "/api/data/microscopy",
             json={"file_path": "/nonexistent/file.nd2"},
         )
 
@@ -90,7 +90,7 @@ class TestMicroscopyEndpoint:
     def test_load_microscopy_invalid_request(self, client: TestClient):
         """Should return 422 for invalid request body."""
         response = client.post(
-            "/data/microscopy",
+            "/api/data/microscopy",
             json={},  # Missing required file_path
         )
 
@@ -102,7 +102,7 @@ class TestTasksEndpoint:
 
     def test_list_tasks_empty(self, client: TestClient):
         """Should return empty task list initially."""
-        response = client.get("/processing/tasks")
+        response = client.get("/api/processing/tasks")
 
         assert response.status_code == 200
         data = response.json()
@@ -118,7 +118,7 @@ class TestTasksEndpoint:
     def test_create_task(self, client: TestClient):
         """Should create a new processing task."""
         response = client.post(
-            "/processing/tasks",
+            "/api/processing/tasks",
             json={
                 "file_path": str(TEST_ND2_FILE),
                 "config": {
@@ -140,11 +140,11 @@ class TestTasksEndpoint:
 
         # Clean up - cancel the task
         task_id = data["id"]
-        client.delete(f"/processing/tasks/{task_id}")
+        client.delete(f"/api/processing/tasks/{task_id}")
 
     def test_get_task_not_found(self, client: TestClient):
         """Should return 404 for non-existent task."""
-        response = client.get("/processing/tasks/nonexistent-id")
+        response = client.get("/api/processing/tasks/nonexistent-id")
 
         assert response.status_code == 404
 
@@ -155,7 +155,7 @@ class TestFakeTask:
     def test_create_fake_task(self, client: TestClient):
         """Test creating a fake task returns pending status."""
         response = client.post(
-            "/processing/tasks",
+            "/api/processing/tasks",
             json={
                 "file_path": "/fake/file.nd2",
                 "config": {},
@@ -171,7 +171,7 @@ class TestFakeTask:
     def test_fake_task_without_real_file(self, client: TestClient):
         """Fake task should work without a real file existing."""
         response = client.post(
-            "/processing/tasks",
+            "/api/processing/tasks",
             json={
                 "file_path": "/nonexistent/path/test.nd2",
                 "config": {},
@@ -187,7 +187,7 @@ class TestFakeTask:
     def test_fake_task_with_empty_config(self, client: TestClient):
         """Fake task should accept empty config."""
         response = client.post(
-            "/processing/tasks",
+            "/api/processing/tasks",
             json={
                 "file_path": "/fake/file.nd2",
                 "config": {},
@@ -198,19 +198,24 @@ class TestFakeTask:
         assert response.status_code == 201
         data = response.json()
         assert data["config"]["channels"] is None
-        assert data["config"]["params"] == {}
+        # ProcessingParams has typed defaults, not empty dict
+        assert "batch_size" in data["config"]["params"]
+        assert data["config"]["params"]["batch_size"] == 2
 
     def test_fake_default_is_false(self, client: TestClient):
-        """Task without fake flag should default to false (real task)."""
+        """Task without fake flag should default to false (real task).
+
+        A real task requires output_dir, so omitting it proves fake=False.
+        """
         response = client.post(
-            "/processing/tasks",
+            "/api/processing/tasks",
             json={
                 "file_path": "/some/file.nd2",
                 "config": {},
             },
         )
 
-        assert response.status_code == 201
-        # Real task with non-existent file will fail, but creation succeeds
-        data = response.json()
-        assert data["status"] == "pending"
+        # Validation rejects real tasks without output_dir, proving fake defaults to False
+        assert response.status_code == 422
+        detail = response.json()["detail"][0]
+        assert "output_dir" in detail["msg"]

@@ -4,7 +4,9 @@ Base classes for workflow services (pure Python, no Qt).
 
 import logging
 from pathlib import Path
-from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config
+from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
+from pyama_core.io import ensure_config
 
 
 logger = logging.getLogger(__name__)

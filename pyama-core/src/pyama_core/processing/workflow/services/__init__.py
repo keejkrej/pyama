@@ -4,7 +4,8 @@ from pyama_core.processing.workflow.services.background import BackgroundEstimat
 from pyama_core.processing.workflow.services.tracking import TrackingService
 from pyama_core.processing.workflow.services.cropping import CroppingService
 from pyama_core.processing.workflow.services.extraction import ExtractionService
-from pyama_core.io import ProcessingConfig, ensure_config
+from pyama_core.types.processing import ProcessingConfig
+from pyama_core.io import ensure_config
 
 __all__ = [
     "CopyingService",

@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from pyama_core.api.schemas.processing import ProcessingConfigSchema
+from pyama_core.types.processing import ProcessingConfig
 
 router = APIRouter(prefix="/config", tags=["processing"])
 
@@ -21,4 +21,4 @@ async def get_config_schema() -> dict[str, Any]:
     - channels: PC and FL channel configuration with features
     - params: Processing parameters (segmentation_method, tracking_method, etc.)
     """
-    return ProcessingConfigSchema.model_json_schema()
+    return ProcessingConfig.model_json_schema()

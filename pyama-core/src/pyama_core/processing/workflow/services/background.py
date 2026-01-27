@@ -18,7 +18,9 @@ from functools import partial
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
 from pyama_core.processing.background import estimate_background
-from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
+from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
+from pyama_core.io import ensure_config, naming
 
 
 logger = logging.getLogger(__name__)

@@ -1,20 +1,31 @@
 """
-Analysis types for model fitting.
+Analysis types for model fitting and event detection.
 """
 
-from dataclasses import dataclass
 from typing import TypeAlias
 
+from pydantic import BaseModel
 
-@dataclass(slots=True)
-class FixedParam:
+
+class EventResult(BaseModel):
+    """Result of event detection."""
+
+    event_detected: bool
+    event_time: float | None
+    event_magnitude: float | None
+    confidence: float  # 0.0-1.0, higher is more confident
+    event_index: int | None = None  # Frame index of event
+    cusum_pos_peak: float | None = None  # Peak of positive CUSUM (for diagnostics)
+    cusum_neg_peak: float | None = None  # Peak of negative CUSUM (for diagnostics)
+
+
+class FixedParam(BaseModel):
     """A single fixed parameter with just a value."""
     name: str
     value: float
 
 
-@dataclass(slots=True)
-class FitParam:
+class FitParam(BaseModel):
     """A single parameter to be fitted with value and bounds."""
     name: str
     value: float
@@ -27,14 +38,13 @@ FixedParams: TypeAlias = dict[str, FixedParam]
 FitParams: TypeAlias = dict[str, FitParam]
 
 
-@dataclass
-class FittingResult:
+class FittingResult(BaseModel):
     """Result of model fitting."""
     fixed_params: FixedParams
     fitted_params: FitParams
     success: bool
     r_squared: float = 0.0
-    
+
     def to_dict(self) -> dict[str, float]:
         """Convert result to flat dictionary of parameter values."""
         result = {}

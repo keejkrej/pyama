@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from pyama_core.api.schemas.microscopy import (
+from pyama_core.types.api import (
     MicroscopyLoadRequest,
     MicroscopyMetadataSchema,
     metadata_to_schema,

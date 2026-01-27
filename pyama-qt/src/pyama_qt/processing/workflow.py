@@ -25,6 +25,7 @@ from pyama_core.processing.workflow import run_complete_workflow
 from pyama_core.types.processing import (
     Channels,
     ChannelSelection,
+    ProcessingParams,
 )
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 from PySide6.QtWidgets import (
@@ -1038,7 +1039,7 @@ class WorkflowPanel(QWidget):
 
         config = ProcessingConfig(
             channels=Channels(pc=pc_selection, fl=fl_selections),
-            params={"background_weight": background_weight},
+            params=ProcessingParams(background_weight=background_weight),
         )
 
         logger.debug("ProcessingConfig built from user input: %s", config)

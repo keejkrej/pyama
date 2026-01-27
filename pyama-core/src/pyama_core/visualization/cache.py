@@ -3,18 +3,17 @@ Caching helpers for visualization preprocessing (pure Python, Qt-free).
 """
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from pydantic import BaseModel
 
 from pyama_core.visualization.preprocessing import VisualizationPreprocessingService
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class CachedStack:
+class CachedStack(BaseModel):
     """Metadata for a cached, normalized stack."""
 
     path: Path

@@ -4,17 +4,16 @@
 # IMPORTS
 # =============================================================================
 
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # DATA STRUCTURES
 # =============================================================================
 
 
-@dataclass(slots=True)
-class FittingRequest:
+class FittingRequest(BaseModel):
     """Parameters for triggering a fitting job."""
 
     model_type: str
-    model_params: dict[str, float] = field(default_factory=dict)
-    model_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    model_params: dict[str, float] = Field(default_factory=dict)
+    model_bounds: dict[str, tuple[float, float]] = Field(default_factory=dict)

@@ -276,7 +276,7 @@ For each FOV and time point:
 
 4. **Background Correction**:
    ```python
-   # Configurable weight from ProcessingContext.params["background_weight"]
+   # Configurable weight from params["background_weight"]
    background_weight = clip(params.get("background_weight", 1.0), 0.0, 1.0)
    
    # Apply weight during extraction
@@ -397,21 +397,11 @@ def process_worker(fov_id, config):
 
 ### Cancellation Support
 
-```python
-class ProcessingContext:
-    def __init__(self):
-        self.cancel_event = threading.Event()
-    
-    def check_cancelled(self):
-        """Check if operation should be cancelled."""
-        return self.cancel_event.is_set()
-    
-    def cancel(self):
-        """Request cancellation."""
-        self.cancel_event.set()
+Cancellation is handled via `threading.Event` within the task runner:
 
+```python
 # Usage in workflow
-if context.check_cancelled():
+if cancel_event.is_set():
     logger.info("Cancellation requested, cleaning up")
     cleanup_partial_results()
     return False

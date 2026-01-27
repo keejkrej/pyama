@@ -2,30 +2,15 @@
 Unified microscopy file loading utilities for ND2, CZI, and TIFF data.
 """
 
-from dataclasses import dataclass
+import logging
 from pathlib import Path
 
 import numpy as np
 from bioio import BioImage
-import logging
+
+from pyama_core.types.microscopy import MicroscopyMetadata
 
 logger = logging.getLogger(__name__)
-
-@dataclass
-class MicroscopyMetadata:
-    """Metadata for microscopy files (ND2, CZI, etc.)."""
-
-    file_path: Path
-    base_name: str
-    file_type: str  # 'nd2', 'czi', etc.
-    height: int
-    width: int
-    n_frames: int
-    n_fovs: int
-    n_channels: int
-    timepoints: list[float]
-    channel_names: list[str]
-    dtype: str
 
 
 def load_microscopy_file(

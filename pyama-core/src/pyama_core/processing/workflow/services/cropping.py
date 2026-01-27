@@ -17,7 +17,9 @@ from functools import partial
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
 from pyama_core.processing.cropping import crop_cells
-from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
+from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
+from pyama_core.io import ensure_config, naming
 
 
 logger = logging.getLogger(__name__)
@@ -88,10 +90,10 @@ class CroppingService(BaseProcessingService):
                 backgrounds[f"fl_ch_{fl_ch}"] = np.load(bg_path, mmap_mode="r")
 
         # Get cropping parameters from config
-        padding = config.get_param("crop_padding", 5)
-        mask_margin = config.get_param("mask_margin", 0)
-        min_frames = config.get_param("min_frames", 30)
-        border_margin = config.get_param("border_margin", 50)
+        padding = config.params.crop_padding
+        mask_margin = config.params.mask_margin
+        min_frames = config.params.min_frames
+        border_margin = config.params.border_margin
 
         logger.info(
             "FOV %d: Cropping cells (padding=%d, mask_margin=%d, min_frames=%d, border_margin=%d)...",

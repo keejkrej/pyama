@@ -13,8 +13,6 @@ and is designed for performance with time-series datasets:
 - Filters traces to remove short-lived or low-quality cells
 """
 
-import dataclasses
-from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np
@@ -25,32 +23,11 @@ from pyama_core.processing.extraction.features import (
     get_feature_extractor,
 )
 from pyama_core.types.processing import (
+    ChannelFeatureConfig,
     get_processing_base_fields,
     get_processing_feature_field,
     make_processing_result,
 )
-
-
-@dataclass
-class ChannelFeatureConfig:
-    """Configuration for feature extraction from a single channel.
-
-    Attributes:
-        channel_name: Name of the channel in H5 (e.g., 'fl_ch_1', 'pc_ch_0')
-        channel_id: Numeric channel ID for CSV column naming (e.g., 1)
-        background_name: Name of the background channel, or None for no background
-        features: List of feature names to extract
-        background_weight: Weight for background subtraction (0.0-1.0)
-        use_bbox_as_mask: If True (default), use entire bounding box as mask.
-            If False, use the cell segmentation mask.
-    """
-
-    channel_name: str
-    channel_id: int
-    background_name: str | None
-    features: list[str]
-    background_weight: float = 1.0
-    use_bbox_as_mask: bool = True
 
 
 def extract_trace_from_crops(
@@ -215,7 +192,7 @@ def extract_trace_from_crops(
                     h=float(y1 - y0),
                     **feature_values,
                 )
-                rows.append(dataclasses.asdict(result))
+                rows.append(result.model_dump())
 
             if progress_callback:
                 progress_callback(cell_idx, total_cells, "Extracting features")

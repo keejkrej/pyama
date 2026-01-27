@@ -1,23 +1,28 @@
-"""Dataclasses shared across workflow services to avoid circular imports."""
+"""Pydantic models shared across workflow services to avoid circular imports."""
 
-import dataclasses
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 import numpy as np
+from pydantic import BaseModel, Field, create_model, model_validator
+from dataclasses import dataclass
 
 
-@dataclass(slots=True)
-class ChannelSelection:
+class ChannelSelection(BaseModel):
     channel: int
-    features: list[str] = field(default_factory=list)
+    features: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_list_format(cls, data: Any) -> Any:
+        """Accept legacy YAML format: [channel, [features]]."""
+        if isinstance(data, (list, tuple)) and len(data) == 2:
+            return {"channel": data[0], "features": data[1]}
+        return data
 
 
-@dataclass(slots=True)
-class Channels:
+class Channels(BaseModel):
     pc: ChannelSelection
-    fl: list[ChannelSelection] = field(default_factory=list)
+    fl: list[ChannelSelection] = Field(default_factory=list)
 
     def get_pc_channel(self) -> int:
         return self.pc.channel
@@ -32,13 +37,46 @@ class Channels:
         return [selection.channel for selection in self.fl]
 
 
+class ProcessingParams(BaseModel):
+    """Typed processing parameters for the pipeline."""
+
+    fovs: str = ""
+    batch_size: int = Field(default=2, ge=1)
+    n_workers: int = Field(default=2, ge=1)
+    background_weight: float = Field(default=1.0, ge=0)
+    segmentation_method: str = "logstd"
+    tracking_method: str = "iou"
+    crop_padding: int = Field(default=5, ge=0)
+    mask_margin: int = Field(default=0, ge=0)
+    min_frames: int = Field(default=30, ge=1)
+    border_margin: int = Field(default=50, ge=0)
+    fov_list: list[int] | None = None
+    fov_start: int = Field(default=0, ge=0)
+    fov_end: int | None = None
+
+
+class ProcessingConfig(BaseModel):
+    """Static configuration for processing pipeline.
+
+    Attributes:
+        channels: Channel selection and feature mapping.
+        params: Processing parameters.
+    """
+
+    channels: Channels | None = None
+    params: ProcessingParams = Field(default_factory=ProcessingParams)
+
+    def get_param(self, key: str, default: Any = None) -> Any:
+        """Get a parameter value with default. Deprecated: use config.params.<key> directly."""
+        return getattr(self.params, key, default)
+
+
 # =============================================================================
 # EXTRACTION TYPES
 # =============================================================================
 
 
-@dataclass(frozen=True)
-class ProcessingBaseResult:
+class ProcessingBaseResult(BaseModel):
     """Result from trace extraction for a single cell at a single frame.
 
     Attributes:
@@ -53,6 +91,8 @@ class ProcessingBaseResult:
         h: Bounding box height (y1 - y0).
     """
 
+    model_config = {"frozen": True}
+
     cell: int
     frame: int
     good: bool
@@ -65,8 +105,8 @@ class ProcessingBaseResult:
 
 
 def get_processing_base_fields() -> list[str]:
-    """Get the base field names for the Result dataclass."""
-    return [f.name for f in dataclasses.fields(ProcessingBaseResult)]
+    """Get the base field names for the Result model."""
+    return list(ProcessingBaseResult.model_fields.keys())
 
 
 def get_processing_feature_field(feature: str, channel_id: int) -> str:
@@ -75,19 +115,18 @@ def get_processing_feature_field(feature: str, channel_id: int) -> str:
 
 
 def make_processing_result(feature_columns: list[str]) -> type:
-    """Dynamically create a Result dataclass with base fields + feature columns.
+    """Dynamically create a Result model with base fields + feature columns.
 
-    The resulting class will inherit from BaseResult and be frozen.
+    The resulting class will inherit from ProcessingBaseResult and be frozen.
     Feature fields will be floats defaulting to NaN.
     """
-    feature_fields = [
-        (col, float, field(default=float("nan"))) for col in feature_columns
-    ]
-    return dataclasses.make_dataclass(
+    field_definitions: dict[str, Any] = {
+        col: (float, float("nan")) for col in feature_columns
+    }
+    return create_model(
         "Result",
-        feature_fields,
-        bases=(ProcessingBaseResult,),
-        frozen=True,
+        __base__=ProcessingBaseResult,
+        **field_definitions,
     )
 
 
@@ -150,33 +189,42 @@ class TileSupport:
 # =============================================================================
 
 
-@dataclass
-class FeatureMaps:
+class ChannelFeatureConfig(BaseModel):
+    """Configuration for feature extraction from a single channel.
+
+    Attributes:
+        channel_name: Name of the channel in H5 (e.g., 'fl_ch_1', 'pc_ch_0')
+        channel_id: Numeric channel ID for CSV column naming (e.g., 1)
+        background_name: Name of the background channel, or None for no background
+        features: List of feature names to extract
+        background_weight: Weight for background subtraction (0.0-1.0)
+        use_bbox_as_mask: If True (default), use entire bounding box as mask.
+            If False, use the cell segmentation mask.
+    """
+
+    channel_name: str
+    channel_id: int
+    background_name: str | None
+    features: list[str]
+    background_weight: float = 1.0
+    use_bbox_as_mask: bool = True
+
+
+class FeatureMaps(BaseModel):
     """Container for feature values per frame and cell."""
+
+    model_config = {"arbitrary_types_allowed": True}
 
     features: dict[str, dict[tuple[int, int], float]]
     frames: list[int]
     cells: list[int]
 
 
-# =============================================================================
-# CONTEXT TYPES
-# =============================================================================
-
-
-@dataclass
-class ProcessingContext:
-    """Context passing through the processing pipeline."""
-
-    output_dir: Path
-    channels: Channels
-    params: dict[str, Any] = field(default_factory=dict)
-    results: dict[int, Any] = field(default_factory=dict)
-
-
 __all__ = [
     "ChannelSelection",
     "Channels",
+    "ProcessingConfig",
+    "ProcessingParams",
     "ProcessingBaseResult",
     "get_processing_base_fields",
     "get_processing_feature_field",
@@ -184,6 +232,6 @@ __all__ = [
     "ExtractionContext",
     "Region",
     "TileSupport",
+    "ChannelFeatureConfig",
     "FeatureMaps",
-    "ProcessingContext",
 ]

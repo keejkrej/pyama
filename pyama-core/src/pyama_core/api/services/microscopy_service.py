@@ -3,7 +3,8 @@
 import logging
 from pathlib import Path
 
-from pyama_core.io.microscopy import MicroscopyMetadata, load_microscopy_file
+from pyama_core.types.microscopy import MicroscopyMetadata
+from pyama_core.io.microscopy import load_microscopy_file
 
 logger = logging.getLogger(__name__)
 

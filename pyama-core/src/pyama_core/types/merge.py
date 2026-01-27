@@ -1,9 +1,7 @@
-import dataclasses
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 
-@dataclass
-class MergeResult:
+class MergeResult(BaseModel):
     frame: int
     fov: int
     cell: int
@@ -11,4 +9,4 @@ class MergeResult:
 
 
 def get_merge_fields() -> list[str]:
-    return [field.name for field in dataclasses.fields(MergeResult)]
+    return list(MergeResult.model_fields.keys())

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import logging
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -254,7 +253,7 @@ def write_feature_csv(
                 value = feature_map.get((frame, cell))
                 if value is not None:
                     result = MergeResult(frame=frame, fov=fov, cell=cell, value=value)
-                    rows.append(dataclasses.asdict(result))
+                    rows.append(result.model_dump())
 
     try:
         df = pd.DataFrame(rows, columns=col_names)

@@ -41,7 +41,6 @@ Run complete processing pipelines:
 ```python
 from pyama_core.processing.workflow import run_complete_workflow
 from pyama_core.types.processing import (
-    ProcessingContext,
     ChannelSelection,
     Channels,
 )

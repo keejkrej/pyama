@@ -6,12 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from pyama_core.api.database import TaskDB, get_db
-from pyama_core.api.schemas.task import TaskResponse, TaskStatus, TaskListResponse
+from pyama_core.types.api import TaskResponse, TaskStatus, TaskListResponse
+from pyama_core.types.processing import ProcessingConfig
 
 logger = logging.getLogger(__name__)
-
-# Default output directory for processing results
-DEFAULT_OUTPUT_DIR = Path.home() / ".pyama" / "outputs"
 
 
 class TaskServiceError(Exception):
@@ -40,29 +38,33 @@ class TaskService:
     def create_task(
         self,
         file_path: str,
-        config: dict[str, Any],
+        config: ProcessingConfig,
         fake: bool = False,
         start_immediately: bool = True,
+        output_dir: str | None = None,
     ) -> TaskResponse:
         """Create a new processing task.
 
         Args:
             file_path: Path to microscopy file to process
-            config: Processing configuration dict
+            config: Processing configuration
             fake: If True, run a 60-second simulated task
             start_immediately: If True, start task execution immediately
+            output_dir: Directory for processing outputs (required for real tasks)
 
         Returns:
             TaskResponse with task ID and initial status
         """
-        task = self.db.create_task(file_path=file_path, config=config, fake=fake)
+        task = self.db.create_task(file_path=file_path, config=config.model_dump(), fake=fake)
         logger.info("Created task %s for file: %s (fake=%s)", task.id, file_path, fake)
 
         if start_immediately:
             if fake:
                 asyncio.create_task(self._run_fake_task(task.id))
             else:
-                asyncio.create_task(self._run_real_task(task.id, file_path, config))
+                asyncio.create_task(
+                    self._run_real_task(task.id, file_path, config, output_dir=output_dir)
+                )
 
         return task
 
@@ -149,13 +151,16 @@ class TaskService:
             )
 
     async def _run_real_task(
-        self, task_id: str, file_path: str, config: dict[str, Any]
+        self,
+        task_id: str,
+        file_path: str,
+        config: ProcessingConfig,
+        output_dir: str | None = None,
     ) -> None:
         """Run a real processing task."""
         try:
             # Import here to avoid circular imports
-            from pyama_core.io import load_microscopy_file, ProcessingConfig
-            from pyama_core.io.config import parse_channels_data
+            from pyama_core.io import load_microscopy_file
             from pyama_core.processing.workflow.worker import WorkflowWorker
 
             # Transition to RUNNING
@@ -173,22 +178,25 @@ class TaskService:
 
             _, metadata = load_microscopy_file(file_path_obj)
 
-            # Parse config
-            channels = None
-            if config.get("channels"):
-                channels = parse_channels_data(config["channels"])
-
-            processing_config = ProcessingConfig(
-                channels=channels,
-                params=config.get("params", {}),
-            )
-
             # Create output directory
-            output_dir = DEFAULT_OUTPUT_DIR / task_id
-            output_dir.mkdir(parents=True, exist_ok=True)
+            if output_dir is None:
+                raise ValueError("output_dir is required for real tasks")
+            output_path = Path(output_dir) / task_id
+            output_path.mkdir(parents=True, exist_ok=True)
 
-            # Update status with FOV info
-            fov_list = list(range(metadata.n_fovs))
+            # Parse FOV selection from config
+            from pyama_core.processing.merge.run import parse_fov_range
+
+            fovs_param = config.params.fovs
+            if fovs_param:
+                fov_list = parse_fov_range(fovs_param)
+                invalid = [f for f in fov_list if f < 0 or f >= metadata.n_fovs]
+                if invalid:
+                    raise ValueError(
+                        f"Invalid FOV indices: {invalid} (valid: 0-{metadata.n_fovs - 1})"
+                    )
+            else:
+                fov_list = list(range(metadata.n_fovs))
             self.db.update_task_status(
                 task_id,
                 TaskStatus.RUNNING,
@@ -199,14 +207,18 @@ class TaskService:
                 progress_message=f"Processing {len(fov_list)} FOVs...",
             )
 
+            # Read processing parallelism from config params
+            batch_size = config.params.batch_size or min(10, len(fov_list))
+            n_workers = config.params.n_workers or 4
+
             # Create worker and run in thread
             worker = WorkflowWorker(
                 metadata=metadata,
-                config=processing_config,
-                output_dir=output_dir,
+                config=config,
+                output_dir=output_path,
                 fov_list=fov_list,
-                batch_size=min(10, len(fov_list)),
-                n_workers=4,
+                batch_size=batch_size,
+                n_workers=n_workers,
             )
 
             # Run synchronous workflow in thread pool
@@ -218,7 +230,7 @@ class TaskService:
                     TaskStatus.COMPLETED,
                     progress_percent=100,
                     result={
-                        "output_dir": str(output_dir),
+                        "output_dir": str(output_path),
                         "summary": {"message": message},
                     },
                 )

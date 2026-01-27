@@ -120,7 +120,7 @@ from PySide6.QtWidgets import QWidget
 from scipy import ndimage
 
 # Local imports
-from pyama_core.types.processing import ProcessingContext
+from pyama_core.types.processing import Channels, ChannelSelection
 from pyama_core.utils import validate_config
 ```
 

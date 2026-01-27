@@ -17,7 +17,9 @@ from functools import partial
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
 from pyama_core.processing.tracking import get_tracker
-from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
+from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
+from pyama_core.io import ensure_config, naming
 from numpy.lib.format import open_memmap
 
 

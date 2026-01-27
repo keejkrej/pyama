@@ -13,7 +13,9 @@ import logging
 from functools import partial
 from pathlib import Path
 
-from pyama_core.io import MicroscopyMetadata, ProcessingConfig, ensure_config, naming
+from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
+from pyama_core.io import ensure_config, naming
 from pyama_core.processing.extraction import (
     ChannelFeatureConfig,
     extract_trace_from_crops,
@@ -39,13 +41,7 @@ class ExtractionService(BaseProcessingService):
         config = ensure_config(config)
         base_name = metadata.base_name
 
-        # Get params
-        background_weight = config.get_param("background_weight", 1.0)
-        try:
-            background_weight = float(background_weight)
-            background_weight = max(0.0, min(1.0, background_weight))
-        except (ValueError, TypeError):
-            background_weight = 1.0
+        background_weight = config.params.background_weight
 
         # Get channels from config
         pc_channel = config.channels.get_pc_channel() if config.channels else None

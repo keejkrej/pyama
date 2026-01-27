@@ -8,8 +8,8 @@ from typing import Iterable
 import typer
 import yaml
 
+from pyama_core.types.processing import ProcessingConfig, ProcessingParams
 from pyama_core.io import (
-    ProcessingConfig,
     load_microscopy_file,
     save_config,
     get_config_path,
@@ -426,16 +426,13 @@ def workflow(
             raise typer.Exit(code=1) from exc
 
         # Extract workflow parameters from config
-        fov_list_raw = config.get_param("fov_list", None)
-        if fov_list_raw is not None:
-            fov_list = list(fov_list_raw)
+        if config.params.fov_list is not None:
+            fov_list = list(config.params.fov_list)
         else:
-            # Legacy config migration: convert old fov_start/fov_end to fov_list
-            fov_start = config.get_param("fov_start", 0)
-            fov_end = config.get_param("fov_end", metadata.n_fovs - 1)
-            fov_list = list(range(fov_start, fov_end + 1))
-        batch_size = config.get_param("batch_size", 2)
-        n_workers = config.get_param("n_workers", 1)
+            fov_end = config.params.fov_end if config.params.fov_end is not None else metadata.n_fovs - 1
+            fov_list = list(range(config.params.fov_start, fov_end + 1))
+        batch_size = config.params.batch_size
+        n_workers = config.params.n_workers
 
         # Validate config
         if config.channels is None:
@@ -463,13 +460,9 @@ def workflow(
         else:
             typer.echo(f"  Fluorescence: (none)")
         typer.echo(f"\nProcessing Parameters:")
-        typer.echo(
-            f"  Segmentation method: {config.get_param('segmentation_method', 'N/A')}"
-        )
-        typer.echo(f"  Tracking method: {config.get_param('tracking_method', 'N/A')}")
-        typer.echo(
-            f"  Background weight: {config.get_param('background_weight', 'N/A')}"
-        )
+        typer.echo(f"  Segmentation method: {config.params.segmentation_method}")
+        typer.echo(f"  Tracking method: {config.params.tracking_method}")
+        typer.echo(f"  Background weight: {config.params.background_weight}")
         typer.echo(f"\nWorkflow Parameters:")
         typer.echo(f"  FOVs: {_format_fov_list(fov_list)}")
         typer.echo(f"  Batch size: {batch_size}")
@@ -693,15 +686,14 @@ def workflow(
                 for channel, features in sorted(fl_feature_map.items())
             ],
         ),
-        params={
-            "segmentation_method": seg_method,
-            "tracking_method": track_method,
-            "background_weight": background_weight,
-            # Workflow execution parameters
-            "fov_list": fov_list,
-            "batch_size": batch_size,
-            "n_workers": n_workers,
-        },
+        params=ProcessingParams(
+            segmentation_method=seg_method,
+            tracking_method=track_method,
+            background_weight=background_weight,
+            fov_list=fov_list,
+            batch_size=batch_size,
+            n_workers=n_workers,
+        ),
     )
 
     # Display complete ProcessingConfig summary

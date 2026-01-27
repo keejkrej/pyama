@@ -8,11 +8,11 @@ from functools import partial
 
 from pyama_core.processing.workflow.services.base import BaseProcessingService
 from pyama_core.processing.copying import copy_frames
+from pyama_core.types.processing import ProcessingConfig
 from pyama_core.io import (
     MicroscopyMetadata,
     load_microscopy_file,
     naming,
-    ProcessingConfig,
     ensure_config,
 )
 

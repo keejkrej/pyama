@@ -4,7 +4,6 @@ IO utilities for microscopy image analysis.
 
 # Import from the unified microscopy module
 from pyama_core.io.microscopy import (
-    MicroscopyMetadata,
     load_microscopy_file,
     get_microscopy_frame,
     get_microscopy_channel_stack,
@@ -22,7 +21,6 @@ from pyama_core.io.analysis_csv import (
 
 from pyama_core.io import naming
 from pyama_core.io.config import (
-    ProcessingConfig,
     load_config,
     save_config,
     ensure_config,
@@ -33,7 +31,6 @@ from pyama_core.io.config import (
 
 __all__ = [
     # Unified microscopy functions
-    "MicroscopyMetadata",
     "load_microscopy_file",
     "get_microscopy_frame",
     "get_microscopy_channel_stack",
@@ -47,7 +44,6 @@ __all__ = [
     # File naming utilities
     "naming",
     # Processing config
-    "ProcessingConfig",
     "load_config",
     "save_config",
     "ensure_config",

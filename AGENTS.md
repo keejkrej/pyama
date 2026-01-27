@@ -127,13 +127,10 @@ The pipeline processes FOVs in batches using multithreading (`ThreadPoolExecutor
 
 **Particle Detection**: Fluorescence particle counting uses the Spotiflow deep learning model (`spotiflow` package) with the pretrained "general" model for subpixel-accurate spot detection (see `pyama_core.processing.extraction.features.fluorescence.particle_num`).
 
-### Processing Context
+### Processing Pipeline
 
-The `ProcessingContext` dataclass (in `pyama_core.types.processing`) is the central data structure that flows through the pipeline, containing:
+The processing pipeline passes configuration (output directory, channel configurations via `Channels` dataclass with `pc` and `fl` fields, and processing parameters) through each stage individually.
 
-- Output directory paths
-- Channel configurations (`Channels` dataclass with `pc` and `fl` fields)
-- Processing parameters
 - Config is saved to `processing_config.yaml` for reference
 - FOV outputs are discovered by file naming conventions (e.g., `fov_000/`, `fov_001/`)
 

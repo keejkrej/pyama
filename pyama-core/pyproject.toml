@@ -22,9 +22,7 @@ dependencies = [
     "pytest",
     "matplotlib",
     "spotiflow",
-    "btrack",  # Note: btrack 0.7.0 has known bugs with 2D tracking (Eigen assertion crashes in C library)
-    # If crashes occur, use IoU tracking instead (set tracking_method: iou in config)
-    # Downgrading to btrack 0.6.x is not possible due to pydantic version conflicts with other dependencies
+    "btrack",
     # FastAPI server dependencies
     "fastapi>=0.100",
     "uvicorn[standard]>=0.20",

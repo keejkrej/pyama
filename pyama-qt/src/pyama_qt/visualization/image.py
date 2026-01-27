@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from pyama_core.io.trace_paths import resolve_trace_path
 from pyama_core.io.config import parse_channels_data
-from pyama_core.types.processing import Channels
+from pyama_core.types.processing import Channels, ChannelSelection
 from pyama_qt.utils import WorkerHandle, start_worker
 from pyama_qt.types.visualization import PositionData
 from pyama_core.visualization import VisualizationCache
@@ -750,7 +750,7 @@ class VisualizationLoaderWorker(QObject):
                     channels_model = parse_channels_data(channels_info)
                 except ValueError as exc:  # pragma: no cover - defensive path
                     logger.warning("Invalid channels metadata: %s", exc)
-                    channels_model = Channels()
+                    channels_model = Channels(pc=ChannelSelection(channel=0))
                 channel_ids: set[str] = set()
                 pc_channel = channels_model.get_pc_channel()
                 if pc_channel is not None:

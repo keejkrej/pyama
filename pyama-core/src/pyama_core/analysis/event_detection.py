@@ -4,22 +4,9 @@ Event detection for sudden changes in fluorescence traces (e.g., caspase, PI sig
 Implements CUSUM (Cumulative Sum Control Chart) for robust single-event detection.
 """
 
-from dataclasses import dataclass
-
 import numpy as np
 
-
-@dataclass(slots=True)
-class EventResult:
-    """Result of event detection."""
-
-    event_detected: bool
-    event_time: float | None
-    event_magnitude: float | None
-    confidence: float  # 0.0-1.0, higher is more confident
-    event_index: int | None = None  # Frame index of event
-    cusum_pos_peak: float | None = None  # Peak of positive CUSUM (for diagnostics)
-    cusum_neg_peak: float | None = None  # Peak of negative CUSUM (for diagnostics)
+from pyama_core.types.analysis import EventResult
 
 
 def detect_event_cusum(

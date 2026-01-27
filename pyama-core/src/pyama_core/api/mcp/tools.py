@@ -9,8 +9,8 @@ from typing import Any
 from pydantic import Field
 
 from pyama_core.api.mcp.server import mcp
-from pyama_core.api.schemas.microscopy import metadata_to_schema
-from pyama_core.api.schemas.processing import ProcessingConfigSchema
+from pyama_core.types.api import metadata_to_schema
+from pyama_core.types.processing import ProcessingConfig
 from pyama_core.api.services import (
     MicroscopyService,
     MicroscopyServiceError,
@@ -49,12 +49,15 @@ def get_processing_config_schema() -> dict[str, Any]:
     Use this to understand what configuration options are available before
     creating a processing task.
     """
-    return ProcessingConfigSchema.model_json_schema()
+    return ProcessingConfig.model_json_schema()
 
 
 @mcp.tool()
 def create_processing_task(
     file_path: str = Field(description="Path to microscopy file to process"),
+    output_dir: str = Field(
+        description="Directory where processing outputs will be saved. A task-specific subdirectory will be created inside."
+    ),
     config: dict[str, Any] = Field(description="Processing configuration (channels and params)"),
     fake: bool = Field(
         description="Run a 60-second simulated task for testing",
@@ -66,19 +69,23 @@ def create_processing_task(
     The task runs asynchronously in the background. Use get_task() to check
     progress and results.
 
-    Config should follow the ProcessingConfigSchema structure:
-    - channels.pc: Phase contrast channel config with features
-    - channels.fl: List of fluorescence channel configs with features
-    - params: Processing parameters (fovs, batch_size, segmentation_method, etc.)
+    Config should follow the ProcessingConfig structure:
+    - channels.pc: Phase contrast channel (channel index + features list)
+    - channels.fl: Fluorescence channels — only include channels that need
+      feature extraction. Omit channels with no features entirely.
+    - params.fovs: FOV selection string (e.g., '0-4,6'). REQUIRED — specify
+      which FOVs to process. Empty string means all FOVs.
+    - params.batch_size, params.n_workers: Processing parallelism
     """
     try:
         service = TaskService()
         # Validate config against schema
-        validated_config = ProcessingConfigSchema(**config)
+        validated_config = ProcessingConfig(**config)
         task = service.create_task(
             file_path=file_path,
             config=validated_config.model_dump(),
             fake=fake,
+            output_dir=output_dir,
         )
         return task.model_dump(mode="json")
     except Exception as e:
