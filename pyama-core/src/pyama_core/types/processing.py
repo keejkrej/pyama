@@ -7,34 +7,27 @@ from pydantic import BaseModel, Field, create_model, model_validator
 from dataclasses import dataclass
 
 
-class ChannelSelection(BaseModel):
-    channel: int
-    features: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _accept_list_format(cls, data: Any) -> Any:
-        """Accept legacy YAML format: [channel, [features]]."""
-        if isinstance(data, (list, tuple)) and len(data) == 2:
-            return {"channel": data[0], "features": data[1]}
-        return data
-
-
 class Channels(BaseModel):
-    pc: ChannelSelection
-    fl: list[ChannelSelection] = Field(default_factory=list)
+    pc: dict[int, list[str]]
+    fl: dict[int, list[str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_single_pc_channel(self) -> "Channels":
+        if len(self.pc) != 1:
+            raise ValueError(f"pc must contain exactly one channel, got {len(self.pc)}")
+        return self
 
     def get_pc_channel(self) -> int:
-        return self.pc.channel
+        return next(iter(self.pc))
 
     def get_pc_features(self) -> list[str]:
-        return list(self.pc.features)
+        return list(next(iter(self.pc.values())))
 
     def get_fl_feature_map(self) -> dict[int, list[str]]:
-        return {selection.channel: list(selection.features) for selection in self.fl}
+        return dict(self.fl)
 
     def get_fl_channels(self) -> list[int]:
-        return [selection.channel for selection in self.fl]
+        return list(self.fl.keys())
 
 
 class ProcessingParams(BaseModel):
@@ -221,7 +214,6 @@ class FeatureMaps(BaseModel):
 
 
 __all__ = [
-    "ChannelSelection",
     "Channels",
     "ProcessingConfig",
     "ProcessingParams",

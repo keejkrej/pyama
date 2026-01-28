@@ -29,10 +29,7 @@ from pyama_core.processing.segmentation import list_segmenters
 from pyama_core.processing.tracking import list_trackers
 from pyama_core.processing.workflow.run import run_complete_workflow
 from pyama_core.processing.workflow.worker import WorkflowWorker
-from pyama_core.types.processing import (
-    Channels,
-    ChannelSelection,
-)
+from pyama_core.types.processing import Channels
 from pyama_core.utils.plotting import plot_numpy_array
 
 app = typer.Typer(help="pyama-core utilities")
@@ -386,12 +383,16 @@ def workflow(
             typer.secho(f"Failed to load config: {exc}", err=True, fg=typer.colors.RED)
             raise typer.Exit(code=1) from exc
 
-        # Determine output directory (use config file directory if not specified)
+        # Output directory is required for non-interactive mode
         if output_dir is None:
-            output_dir = config_path.parent
-        else:
-            output_dir = Path(output_dir).expanduser()
+            typer.secho(
+                "Output directory is required when using --config. Use --output-dir to specify it.",
+                err=True,
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
 
+        output_dir = Path(output_dir).expanduser()
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Get ND2 path (required for non-interactive mode)
@@ -449,14 +450,16 @@ def workflow(
         typer.echo("=" * 60)
         typer.echo(f"\nChannels:")
         typer.echo(f"  Phase Contrast:")
-        typer.echo(f"    Channel: {config.channels.pc.channel}")
+        pc_ch = config.channels.get_pc_channel()
+        pc_feats = config.channels.get_pc_features()
+        typer.echo(f"    Channel: {pc_ch}")
         typer.echo(
-            f"    Features: {', '.join(config.channels.pc.features) if config.channels.pc.features else '(none)'}"
+            f"    Features: {', '.join(pc_feats) if pc_feats else '(none)'}"
         )
         if config.channels.fl:
             typer.echo(f"  Fluorescence:")
-            for fl in config.channels.fl:
-                typer.echo(f"    Channel {fl.channel}: {', '.join(fl.features)}")
+            for ch, feats in config.channels.fl.items():
+                typer.echo(f"    Channel {ch}: {', '.join(feats)}")
         else:
             typer.echo(f"  Fluorescence: (none)")
         typer.echo(f"\nProcessing Parameters:")
@@ -680,11 +683,11 @@ def workflow(
     # Create ProcessingConfig with all collected parameters
     config = ProcessingConfig(
         channels=Channels(
-            pc=ChannelSelection(channel=pc_channel, features=sorted(pc_features)),
-            fl=[
-                ChannelSelection(channel=channel, features=sorted(features))
+            pc={pc_channel: sorted(pc_features)},
+            fl={
+                channel: sorted(features)
                 for channel, features in sorted(fl_feature_map.items())
-            ],
+            },
         ),
         params=ProcessingParams(
             segmentation_method=seg_method,

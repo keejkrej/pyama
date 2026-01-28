@@ -99,8 +99,8 @@ def test_merge_functionality():
         config_yaml = input_dir / "processing_config.yaml"
         config_data = {
             "channels": {
-                "pc": [0, ["area"]],
-                "fl": [[1, ["intensity_total"]]],
+                "pc": {0: ["area"]},
+                "fl": {1: ["intensity_total"]},
             },
             "params": {},
         }

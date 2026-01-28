@@ -1,0 +1,12 @@
+params:
+  segmentation_method: cellpose
+  tracking_method: btrack
+  background_weight: 1.0
+  fov_list:
+  - 0
+  batch_size: 1
+  n_workers: 1
+channels:
+  pc:
+    0: []
+  fl: {}

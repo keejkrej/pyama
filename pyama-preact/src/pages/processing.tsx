@@ -123,11 +123,8 @@ export function ProcessingPage(_props: ProcessingPageProps) {
       // Build config from current state
       const config = {
         channels: {
-          pc: { channel: phaseContrastChannel, features: ['area'] },
-          fl: flEntries.map(entry => ({
-            channel: entry.channel,
-            features: [entry.feature]
-          })),
+          pc: { [phaseContrastChannel]: ['area'] },
+          fl: Object.fromEntries(flEntries.map(entry => [entry.channel, [entry.feature]])),
         },
         params: manualParams ? params : {},
       };

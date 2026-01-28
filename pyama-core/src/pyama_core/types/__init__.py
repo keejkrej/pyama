@@ -2,7 +2,6 @@
 
 from pyama_core.types.microscopy import MicroscopyMetadata
 from pyama_core.types.processing import (
-    ChannelSelection,
     Channels,
     ProcessingParams,
     ProcessingConfig,
@@ -41,7 +40,6 @@ __all__ = [
     # Microscopy
     "MicroscopyMetadata",
     # Processing
-    "ChannelSelection",
     "Channels",
     "ProcessingParams",
     "ProcessingConfig",

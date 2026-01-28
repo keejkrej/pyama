@@ -39,7 +39,6 @@ class TestProcessingConfig:
         assert "$defs" in data
 
         # Check expected nested schemas
-        assert "ChannelSelection" in data["$defs"]
         assert "Channels" in data["$defs"]
 
 

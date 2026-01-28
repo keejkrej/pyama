@@ -9,8 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
 from pyama_core.io import (
-    MicroscopyMetadata,
     get_config_path,
     ensure_config,
     save_config,

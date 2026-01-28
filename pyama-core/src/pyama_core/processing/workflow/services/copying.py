@@ -9,8 +9,8 @@ from functools import partial
 from pyama_core.processing.workflow.services.base import BaseProcessingService
 from pyama_core.processing.copying import copy_frames
 from pyama_core.types.processing import ProcessingConfig
+from pyama_core.types.microscopy import MicroscopyMetadata
 from pyama_core.io import (
-    MicroscopyMetadata,
     load_microscopy_file,
     naming,
     ensure_config,
@@ -41,11 +41,10 @@ class CopyingService(BaseProcessingService):
         base_name = metadata.base_name
 
         plan: list[tuple[str, int]] = []
-        pc_selection = config.channels.pc
-        if pc_selection is not None:
-            plan.append(("pc", pc_selection.channel))
-        for selection in config.channels.fl:
-            plan.append(("fl", selection.channel))
+        if config.channels.pc:
+            plan.append(("pc", config.channels.get_pc_channel()))
+        for ch in config.channels.fl:
+            plan.append(("fl", ch))
 
         if not plan:
             logger.info("FOV %d: No channels selected to copy, skipping", fov)
