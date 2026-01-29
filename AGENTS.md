@@ -12,7 +12,7 @@ PyAMA is a modular Python application for microscopy image analysis consisting o
 
 - **pyama-core**: Core processing library with analysis, processing workflows, I/O utilities, REST API server, and MCP integration
 - **pyama-qt**: Qt-based GUI with tabs for Processing, Analysis, and Visualization
-- **pyama-preact**: Modern web frontend built with Preact + Tailwind CSS, packaged as a Tauri desktop app (lives outside the UV workspace)
+- **pyama-react**: Modern web frontend built with React + Tailwind CSS, packaged as a Tauri desktop app (lives outside the UV workspace)
 - **pyama-acdc**: Cell-ACDC integration plugin
 
 ## Development Commands
@@ -76,7 +76,7 @@ uv run pyama-qt
 # Alternative: run directly
 uv run python pyama-qt/src/pyama_qt/main.py
 
-# Start API server (for pyama-preact frontend)
+# Start API server (for pyama-react frontend)
 uv run pyama-core serve --port 8000 --reload
 ```
 
@@ -116,10 +116,10 @@ uv run pyama-core plot data.npy        # Plot numpy array files
 uv run pyama-core serve                # Start FastAPI server
 ```
 
-### Web Frontend (pyama-preact)
+### Web Frontend (pyama-react)
 
 ```bash
-cd pyama-preact
+cd pyama-react
 
 # Install dependencies
 bun install  # or npm install
@@ -194,11 +194,11 @@ claude mcp add pyama --transport http "$PYAMA_MCP_URL/mcp"
 
 **Task execution**: Supports both real processing workflows and a `fake` mode (60-second simulation) for frontend development. Tasks track `phase`, `current_fov`, `total_fovs`, `progress_percent`, and `progress_message`.
 
-### Preact Web Frontend (pyama-preact)
+### React Web Frontend (pyama-react)
 
-A modern desktop application using Preact + Tauri, separate from the UV workspace.
+A modern desktop application using React + Tauri, separate from the UV workspace.
 
-**Stack**: Preact, TypeScript, Tailwind CSS 4, Vite, Tauri 2.x
+**Stack**: React, TypeScript, Tailwind CSS 4, Vite, Tauri 2.x
 
 **Structure**:
 - Custom component library (`components/ui/`): card, button, badge, modal, file-picker, checkbox, select, input, table, theme-toggle
@@ -466,7 +466,7 @@ fov,cell,frame,good,position_x,position_y,intensity_total_ch_1,area_ch_0
 
 ## Development Notes
 
-- Uses UV for dependency management with workspace configuration (`pyama-core`, `pyama-qt`, `pyama-acdc`; `pyama-preact` is a separate Node.js project)
+- Uses UV for dependency management with workspace configuration (`pyama-core`, `pyama-qt`, `pyama-acdc`; `pyama-react` is a separate Node.js project)
 - Built on Python 3.11+ with scientific computing stack (numpy, scipy, scikit-image, xarray)
 - Qt GUI built with PySide6
 - REST API built with FastAPI + uvicorn; MCP integration via `mcp` package

@@ -56,7 +56,7 @@ PyAMA consists of the following packages:
 
 - **pyama-core**: Core processing library with analysis workflows, CLI tools, and REST API server
 - **pyama-qt**: Qt-based GUI for comprehensive analysis
-- **pyama-preact**: Modern web frontend built with Preact, Tailwind CSS, and Tauri for desktop deployment
+- **pyama-react**: Modern web frontend built with React, Tailwind CSS, and Tauri for desktop deployment
 - **pyama-acdc**: Cell-ACDC integration plugin
 
 ## 🎯 Key Features
@@ -68,7 +68,7 @@ PyAMA consists of the following packages:
 - **Model Fitting**: Built-in models for protein maturation and decay analysis
 - **Batch Processing**: Handle large datasets with configurable parallelism
 - **REST API & MCP**: FastAPI server with Model Context Protocol integration for programmatic access
-- **Modern Web UI**: Preact + Tauri desktop application with task management
+- **Modern Web UI**: React + Tauri desktop application with task management
 - **Extensible**: Plugin system for custom features and models
 
 ## 🖥️ CLI Commands
@@ -100,7 +100,7 @@ claude mcp add pyama --transport http "$PYAMA_MCP_URL/mcp"
 - Python 3.11 or later
 - UV package manager (recommended) or pip
 - Qt6 for GUI applications (pyama-qt)
-- Node.js and Bun/npm for web frontend (pyama-preact)
+- Node.js and Bun/npm for web frontend (pyama-react)
 
 ## 📖 Learn More
 
