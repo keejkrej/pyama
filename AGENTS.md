@@ -80,6 +80,30 @@ uv run python pyama-qt/src/pyama_qt/main.py
 uv run pyama-core serve --port 8000 --reload
 ```
 
+### Docker (pyama-core server)
+
+```bash
+cd pyama-core
+
+# Build and run with GPU (default - Linux with NVIDIA)
+docker compose up --build
+
+# Or CPU-only (Mac or no GPU)
+docker compose --profile cpu up --build pyama-core-cpu
+
+# Test the server
+curl http://localhost:8765/health
+```
+
+**Volume mounts** (configured in `docker-compose.yml`):
+- `~/data:/data` - Mount microscopy files (use `/data/...` paths in API requests)
+- `~/results:/results` - Mount output directory (use `/results/...` paths in API requests)
+- `pyama-db:/root/.pyama` - Persist task database
+
+**GPU support**: Default. Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on Linux. Use `--profile cpu` on Mac or systems without GPU.
+
+**Note**: Symlinks in mounted directories won't work - mount the actual data locations instead.
+
 ### CLI Commands
 
 ```bash

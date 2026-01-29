@@ -9,6 +9,10 @@ PyAMA-Core is the core processing library that provides the underlying algorithm
 uv pip install -e pyama-core/
 ```
 
+### Docker
+
+See the [Installation Guide](../getting-started/installation.md#docker-api-server) for running the API server in Docker.
+
 ## Main Components
 
 ### I/O Utilities (`pyama_core.io`)

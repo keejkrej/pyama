@@ -58,6 +58,43 @@ uv sync --all-extras
 pip install pytest ruff ty types-PySide6
 ```
 
+## Docker (API Server)
+
+Run the pyama-core API server in a Docker container:
+
+```bash
+cd pyama-core
+
+# Build and run with GPU (default - Linux with NVIDIA)
+docker compose up --build
+
+# Or CPU-only (Mac or no GPU)
+docker compose --profile cpu up --build pyama-core-cpu
+
+# Server available at http://localhost:8765
+# Health check: curl http://localhost:8765/health
+```
+
+### Volume Mounts
+
+Configure data access in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ~/data:/data        # Microscopy files (use /data/... in API requests)
+  - ~/results:/results  # Output directory (use /results/... in API requests)
+  - pyama-db:/root/.pyama  # Persist task database
+```
+
+**Important**: Symlinks in mounted directories won't work. Mount the actual data locations instead.
+
+### GPU Support
+
+The container uses PyTorch 2.10.0 with CUDA 13.0:
+
+- **GPU (default)**: `docker compose up` - requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on Linux
+- **CPU**: `docker compose --profile cpu up pyama-core-cpu` - works on Mac or systems without GPU
+
 ## Troubleshooting
 
 ### Python Version

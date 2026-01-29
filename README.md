@@ -30,6 +30,26 @@ uv run pyama-qt
 uv run pyama-core serve
 ```
 
+### Docker (API Server)
+
+```bash
+cd pyama-core
+
+# Build and run with GPU (default)
+docker compose up --build
+
+# Or CPU-only (Mac or no GPU)
+docker compose --profile cpu up --build pyama-core-cpu
+
+# Server available at http://localhost:8765
+```
+
+Configure volume mounts in `docker-compose.yml` to access your data:
+- `~/data:/data` - Microscopy files
+- `~/results:/results` - Output directory
+
+GPU is the default (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on Linux). Use `--profile cpu` on Mac or systems without GPU.
+
 ## 📦 Packages
 
 PyAMA consists of the following packages:

@@ -1,0 +1,42 @@
+services:
+  # GPU-enabled service (default)
+  pyama-core:
+    image: pyama-core:latest
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+    ports:
+      - "8765:8765"
+    volumes:
+      - ~/data:/data
+      - ~/results:/results
+      - pyama-db:/root/.pyama
+    environment:
+      - PYAMA_HOST=0.0.0.0
+      - PYAMA_PORT=8765
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # CPU-only service (use with: docker compose --profile cpu up pyama-core-cpu)
+  pyama-core-cpu:
+    image: pyama-core:latest
+    platform: linux/amd64
+    profiles: ["cpu"]
+    ports:
+      - "8765:8765"
+    volumes:
+      - ~/data:/data
+      - ~/results:/results
+      - pyama-db:/root/.pyama
+    environment:
+      - PYAMA_HOST=0.0.0.0
+      - PYAMA_PORT=8765
+
+volumes:
+  pyama-db:
