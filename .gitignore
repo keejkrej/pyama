@@ -228,11 +228,9 @@ pids
 *.seed
 *.pid.lock
 
-# Tauri
-src-tauri/target/
-# Rust
-Cargo.lock
-target/
+# Electron
+pyama-react/out/
+pyama-react/dist/
 
 # IDEs
 .vscode/

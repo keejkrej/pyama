@@ -12,7 +12,7 @@ PyAMA is a modular Python application for microscopy image analysis consisting o
 
 - **pyama-core**: Core processing library with analysis, processing workflows, I/O utilities, REST API server, and MCP integration
 - **pyama-qt**: Qt-based GUI with tabs for Processing, Analysis, and Visualization
-- **pyama-react**: Modern web frontend built with React + Tailwind CSS, packaged as a Tauri desktop app (lives outside the UV workspace)
+- **pyama-react**: Modern web frontend built with React + Tailwind CSS, packaged as an Electron desktop app (lives outside the UV workspace)
 - **pyama-acdc**: Cell-ACDC integration plugin
 
 ## Development Commands
@@ -125,12 +125,11 @@ cd pyama-react
 bun install  # or npm install
 
 # Development
-bun run dev           # Vite dev server (localhost:5173)
-bun run tauri:dev     # Tauri desktop app with hot reload
+bun run dev           # Electron app with hot reload (localhost:5173)
 
 # Production
 bun run build         # Build web assets
-bun run tauri:build   # Build native desktop app
+bun run package       # Build native desktop app
 ```
 
 ## Architecture
@@ -190,20 +189,21 @@ claude mcp add pyama --transport http "$PYAMA_MCP_URL/mcp"
 - **Database** (`api/database.py`): SQLite-based task persistence at `~/.pyama/tasks.db` with columns for status, progress, config, and timing
 - **MCP** (`api/mcp/`): Model Context Protocol server with tool definitions
 
-**CORS**: Configured for Tauri (`tauri://localhost`, `localhost:1420`) and Vite (`localhost:5173`) dev servers.
+**CORS**: Configured for Electron and Vite (`localhost:5173`) dev servers.
 
 **Task execution**: Supports both real processing workflows and a `fake` mode (60-second simulation) for frontend development. Tasks track `phase`, `current_fov`, `total_fovs`, `progress_percent`, and `progress_message`.
 
 ### React Web Frontend (pyama-react)
 
-A modern desktop application using React + Tauri, separate from the UV workspace.
+A modern desktop application using React + Electron, separate from the UV workspace.
 
-**Stack**: React, TypeScript, Tailwind CSS 4, Vite, Tauri 2.x
+**Stack**: React, TypeScript, Tailwind CSS 4, Vite, Electron
 
 **Structure**:
 - Custom component library (`components/ui/`): card, button, badge, modal, file-picker, checkbox, select, input, table, theme-toggle
 - Processing page with task creation, configuration, and progress polling
-- Communicates with pyama-core via REST API (`localhost:8000`)
+- Chat page with Claude Agent SDK integration for natural language interaction with microscopy data
+- Communicates with pyama-core via REST API (`localhost:8000`) and MCP tools
 
 ### Qt Application Structure
 
