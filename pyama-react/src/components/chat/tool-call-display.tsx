@@ -1,6 +1,12 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronRight, Wrench, CheckCircle, XCircle } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Wrench,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
+import { cn } from "../../lib/utils";
 
 interface ToolCallDisplayProps {
   toolName: string;
@@ -20,7 +26,7 @@ export function ToolCallDisplay({
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Extract the actual tool name (remove mcp__pyama__ prefix)
-  const displayName = toolName.replace(/^mcp__pyama__/, '');
+  const displayName = toolName.replace(/^mcp__pyama__/, "");
 
   return (
     <div className="my-2 rounded-md border border-border bg-[var(--color-card)] overflow-hidden">
@@ -39,13 +45,12 @@ export function ToolCallDisplay({
         <span className="text-xs font-medium text-foreground flex-1 text-left">
           {displayName}
         </span>
-        {isComplete && (
-          isError ? (
+        {isComplete &&
+          (isError ? (
             <XCircle className="w-3.5 h-3.5 text-destructive" />
           ) : (
             <CheckCircle className="w-3.5 h-3.5 text-success" />
-          )
-        )}
+          ))}
         {!isComplete && (
           <span className="w-3 h-3 border-2 border-info border-t-transparent rounded-full animate-spin" />
         )}
@@ -63,17 +68,25 @@ export function ToolCallDisplay({
           )}
           {result && (
             <div>
-              <span className={cn(
-                "font-medium",
-                isError ? "text-destructive" : "text-muted-foreground"
-              )}>
+              <span
+                className={cn(
+                  "font-medium",
+                  isError ? "text-destructive" : "text-muted-foreground",
+                )}
+              >
                 {isError ? "Error:" : "Result:"}
               </span>
-              <pre className={cn(
-                "mt-1 p-2 rounded text-xs overflow-x-auto max-h-48",
-                isError ? "bg-destructive/10 text-destructive" : "bg-[var(--color-input)]"
-              )}>
-                {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+              <pre
+                className={cn(
+                  "mt-1 p-2 rounded text-xs overflow-x-auto max-h-48",
+                  isError
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-[var(--color-input)]",
+                )}
+              >
+                {typeof result === "string"
+                  ? result
+                  : JSON.stringify(result, null, 2)}
               </pre>
             </div>
           )}

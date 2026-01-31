@@ -1,7 +1,21 @@
-import { useState, useRef, useEffect } from 'react';
-import { Card, Button, Input, NumberInput, Checkbox, Select, Table, TableHeader, TableRow, TableCell, FilePicker, Section, Badge } from '../components/ui';
-import { api } from '../lib/api';
-import type { TaskResponse } from '../lib/api';
+import { useState, useRef, useEffect } from "react";
+import {
+  Card,
+  Button,
+  Input,
+  NumberInput,
+  Checkbox,
+  Select,
+  Table,
+  TableHeader,
+  TableRow,
+  TableCell,
+  FilePicker,
+  Section,
+  Badge,
+} from "../components/ui";
+import { api } from "../lib/api";
+import type { TaskResponse } from "../lib/api";
 
 interface FlChannelEntry {
   channel: number;
@@ -15,14 +29,17 @@ interface SchemaProperty {
 }
 
 export function ProcessingPage() {
-  const [microscopyFile, setMicroscopyFile] = useState('');
+  const [microscopyFile, setMicroscopyFile] = useState("");
   const [phaseContrastChannel, setPhaseContrastChannel] = useState(0);
   const [flEntries, setFlEntries] = useState<FlChannelEntry[]>([
-    { channel: 1, feature: 'intensity_total' },
+    { channel: 1, feature: "intensity_total" },
   ]);
-  const [outputDir, setOutputDir] = useState('');
+  const [outputDir, setOutputDir] = useState("");
   const [manualParams, setManualParams] = useState(true);
-  const [paramsSchema, setParamsSchema] = useState<Record<string, SchemaProperty> | null>(null);
+  const [paramsSchema, setParamsSchema] = useState<Record<
+    string,
+    SchemaProperty
+  > | null>(null);
   const [schemaLoading, setSchemaLoading] = useState(true);
   const [params, setParams] = useState<Record<string, unknown>>({});
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -30,8 +47,8 @@ export function ProcessingPage() {
 
   // Task state - restore from localStorage on mount
   const [taskId, setTaskId] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('pyama_current_task_id');
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pyama_current_task_id");
     }
     return null;
   });
@@ -42,9 +59,9 @@ export function ProcessingPage() {
   // Persist taskId to localStorage
   useEffect(() => {
     if (taskId) {
-      localStorage.setItem('pyama_current_task_id', taskId);
+      localStorage.setItem("pyama_current_task_id", taskId);
     } else {
-      localStorage.removeItem('pyama_current_task_id');
+      localStorage.removeItem("pyama_current_task_id");
     }
   }, [taskId]);
 
@@ -52,29 +69,33 @@ export function ProcessingPage() {
   useEffect(() => {
     if (taskId && !taskStatus) {
       // Fetch current status and resume polling if still running
-      api.getTask(taskId).then(task => {
-        setTaskStatus(task);
-        if (task.status === 'pending' || task.status === 'running') {
-          setIsPolling(true);
-        }
-      }).catch(() => {
-        // Task not found, clear it
-        setTaskId(null);
-      });
+      api
+        .getTask(taskId)
+        .then((task) => {
+          setTaskStatus(task);
+          if (task.status === "pending" || task.status === "running") {
+            setIsPolling(true);
+          }
+        })
+        .catch(() => {
+          // Task not found, clear it
+          setTaskId(null);
+        });
     }
   }, []);
 
   // Fetch config schema on mount
   useEffect(() => {
-    api.getConfigSchema()
-      .then(schema => {
+    api
+      .getConfigSchema()
+      .then((schema) => {
         const schemaAny = schema as any;
         // Handle $ref - Pydantic uses $defs for nested models
         let paramsProps = schemaAny?.properties?.params?.properties;
         if (!paramsProps && schemaAny?.properties?.params?.$ref) {
           // Dereference: "$ref": "#/$defs/ProcessingParamsSchema"
           const refPath = schemaAny.properties.params.$ref;
-          const refName = refPath.split('/').pop();
+          const refName = refPath.split("/").pop();
           paramsProps = schemaAny?.$defs?.[refName]?.properties;
         }
         if (paramsProps) {
@@ -89,7 +110,7 @@ export function ProcessingPage() {
           setParams(defaults);
         }
       })
-      .catch(err => console.warn('Failed to fetch config schema:', err))
+      .catch((err) => console.warn("Failed to fetch config schema:", err))
       .finally(() => setSchemaLoading(false));
   }, []);
 
@@ -101,11 +122,17 @@ export function ProcessingPage() {
       try {
         const task = await api.getTask(taskId);
         setTaskStatus(task);
-        if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+        if (
+          task.status === "completed" ||
+          task.status === "failed" ||
+          task.status === "cancelled"
+        ) {
           setIsPolling(false);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch task status');
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch task status",
+        );
         setIsPolling(false);
       }
     }, 1000);
@@ -119,8 +146,10 @@ export function ProcessingPage() {
       // Build config from current state
       const config = {
         channels: {
-          pc: { [phaseContrastChannel]: ['area'] },
-          fl: Object.fromEntries(flEntries.map(entry => [entry.channel, [entry.feature]])),
+          pc: { [phaseContrastChannel]: ["area"] },
+          fl: Object.fromEntries(
+            flEntries.map((entry) => [entry.channel, [entry.feature]]),
+          ),
         },
         params: manualParams ? params : {},
       };
@@ -131,7 +160,7 @@ export function ProcessingPage() {
       setTaskStatus(task);
       setIsPolling(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create task');
+      setError(err instanceof Error ? err.message : "Failed to create task");
     }
   };
 
@@ -143,12 +172,12 @@ export function ProcessingPage() {
       setTaskId(null);
       setTaskStatus(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel task');
+      setError(err instanceof Error ? err.message : "Failed to cancel task");
     }
   };
 
   const handleAddFluorescence = () => {
-    setFlEntries([...flEntries, { channel: 0, feature: 'intensity_total' }]);
+    setFlEntries([...flEntries, { channel: 0, feature: "intensity_total" }]);
   };
 
   const handleRemoveFluorescence = () => {
@@ -157,22 +186,26 @@ export function ProcessingPage() {
     }
   };
 
-  const renderParamInput = (key: string, prop: SchemaProperty, value: unknown) => {
-    if (prop.type === 'integer' || prop.type === 'number') {
+  const renderParamInput = (
+    key: string,
+    prop: SchemaProperty,
+    value: unknown,
+  ) => {
+    if (prop.type === "integer" || prop.type === "number") {
       return (
         <NumberInput
-          value={typeof value === 'number' ? value : 0}
+          value={typeof value === "number" ? value : 0}
           onChange={(v) => setParams({ ...params, [key]: v })}
-          step={prop.type === 'number' ? 0.1 : 1}
+          step={prop.type === "number" ? 0.1 : 1}
         />
       );
     }
     // String (including fovs)
     return (
       <Input
-        value={typeof value === 'string' ? value : ''}
+        value={typeof value === "string" ? value : ""}
         onChange={(e) => setParams({ ...params, [key]: e.currentTarget.value })}
-        placeholder={prop.description || ''}
+        placeholder={prop.description || ""}
       />
     );
   };
@@ -180,13 +213,21 @@ export function ProcessingPage() {
   return (
     <div className="p-5">
       <div className="mb-5">
-        <h1 className="text-lg font-semibold mb-1.5 text-foreground-bright">Processing</h1>
-        <p className="text-xs text-muted-foreground">Configure microscopy file processing and workflow parameters</p>
+        <h1 className="text-lg font-semibold mb-1.5 text-foreground-bright">
+          Processing
+        </h1>
+        <p className="text-xs text-muted-foreground">
+          Configure microscopy file processing and workflow parameters
+        </p>
       </div>
 
       <div className="grid grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Input */}
-        <Card title="Input" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
+        <Card
+          title="Input"
+          className="h-full flex flex-col"
+          bodyClassName="flex-1 flex flex-col"
+        >
           <div className="flex-1 flex flex-col">
             <Section title="Microscopy">
               <div className="space-y-2">
@@ -208,7 +249,9 @@ export function ProcessingPage() {
                   />
                 </div>
                 <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
-                  <p className="text-xs text-muted-foreground">Microscopy Metadata</p>
+                  <p className="text-xs text-muted-foreground">
+                    Microscopy Metadata
+                  </p>
                 </div>
               </div>
             </Section>
@@ -228,7 +271,9 @@ export function ProcessingPage() {
                     className="w-full"
                   />
                   <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
-                    <p className="text-xs text-muted-foreground">Phase Contrast Features</p>
+                    <p className="text-xs text-muted-foreground">
+                      Phase Contrast Features
+                    </p>
                   </div>
                 </div>
 
@@ -253,12 +298,18 @@ export function ProcessingPage() {
                           value={entry.feature}
                           onChange={(e) => {
                             const updated = [...flEntries];
-                            updated[idx] = { ...entry, feature: e.currentTarget.value };
+                            updated[idx] = {
+                              ...entry,
+                              feature: e.currentTarget.value,
+                            };
                             setFlEntries(updated);
                           }}
                           options={[
-                            { value: 'intensity_total', label: 'Intensity Total' },
-                            { value: 'particle_num', label: 'Particle Num' },
+                            {
+                              value: "intensity_total",
+                              label: "Intensity Total",
+                            },
+                            { value: "particle_num", label: "Particle Num" },
                           ]}
                           className="flex-1"
                         />
@@ -266,7 +317,9 @@ export function ProcessingPage() {
                     ))}
                   </div>
                   <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
-                    <p className="text-xs text-muted-foreground">Fluorescence Features</p>
+                    <p className="text-xs text-muted-foreground">
+                      Fluorescence Features
+                    </p>
                   </div>
                 </div>
               </div>
@@ -276,7 +329,11 @@ export function ProcessingPage() {
               <Button onClick={handleAddFluorescence} variant="secondary">
                 Add
               </Button>
-              <Button variant="secondary" onClick={handleRemoveFluorescence} disabled={flEntries.length === 0}>
+              <Button
+                variant="secondary"
+                onClick={handleRemoveFluorescence}
+                disabled={flEntries.length === 0}
+              >
                 Remove
               </Button>
             </div>
@@ -284,7 +341,11 @@ export function ProcessingPage() {
         </Card>
 
         {/* Middle Column: Output */}
-        <Card title="Output" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
+        <Card
+          title="Output"
+          className="h-full flex flex-col"
+          bodyClassName="flex-1 flex flex-col"
+        >
           <div className="flex-1 flex flex-col">
             <Section title="Save Directory">
               <div className="flex items-center gap-2">
@@ -299,9 +360,10 @@ export function ProcessingPage() {
                   onFileSelect={(files) => {
                     if (files && files.length > 0) {
                       // Extract directory path from file path
-                      const path = (files[0] as any).webkitRelativePath || files[0].name;
-                      const dirPath = path.substring(0, path.lastIndexOf('/'));
-                      setOutputDir(dirPath || 'Selected');
+                      const path =
+                        (files[0] as any).webkitRelativePath || files[0].name;
+                      const dirPath = path.substring(0, path.lastIndexOf("/"));
+                      setOutputDir(dirPath || "Selected");
                     }
                   }}
                   directory
@@ -324,34 +386,51 @@ export function ProcessingPage() {
               <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableCell header className="border-r border-border w-1/2">Name</TableCell>
-                    <TableCell header className="w-1/2">Value</TableCell>
+                    <TableCell header className="border-r border-border w-1/2">
+                      Name
+                    </TableCell>
+                    <TableCell header className="w-1/2">
+                      Value
+                    </TableCell>
                   </TableRow>
                 </TableHeader>
                 <tbody>
                   {!manualParams ? (
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
+                      <TableCell
+                        colSpan={2}
+                        className="text-center py-6 text-muted-foreground border-r-0"
+                      >
                         Parameters by default
                       </TableCell>
                     </TableRow>
                   ) : schemaLoading ? (
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
+                      <TableCell
+                        colSpan={2}
+                        className="text-center py-6 text-muted-foreground border-r-0"
+                      >
                         Loading...
                       </TableCell>
                     </TableRow>
                   ) : !paramsSchema ? (
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
+                      <TableCell
+                        colSpan={2}
+                        className="text-center py-6 text-muted-foreground border-r-0"
+                      >
                         No parameters available
                       </TableCell>
                     </TableRow>
                   ) : (
                     Object.entries(paramsSchema).map(([key, prop]) => (
                       <TableRow key={key}>
-                        <TableCell className="border-r border-border">{key}</TableCell>
-                        <TableCell>{renderParamInput(key, prop, params[key])}</TableCell>
+                        <TableCell className="border-r border-border">
+                          {key}
+                        </TableCell>
+                        <TableCell>
+                          {renderParamInput(key, prop, params[key])}
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -373,13 +452,18 @@ export function ProcessingPage() {
                   {taskStatus && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Status:</span>
+                        <span className="text-xs text-muted-foreground">
+                          Status:
+                        </span>
                         <Badge
                           variant={
-                            taskStatus.status === 'completed' ? 'success' :
-                            taskStatus.status === 'failed' ? 'destructive' :
-                            taskStatus.status === 'running' ? 'info' :
-                            'muted'
+                            taskStatus.status === "completed"
+                              ? "success"
+                              : taskStatus.status === "failed"
+                                ? "destructive"
+                                : taskStatus.status === "running"
+                                  ? "info"
+                                  : "muted"
                           }
                         >
                           {taskStatus.status}
@@ -390,29 +474,37 @@ export function ProcessingPage() {
                           <div className="w-full bg-muted rounded-full h-2">
                             <div
                               className="bg-primary h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${taskStatus.progress.percent || 0}%` }}
+                              style={{
+                                width: `${taskStatus.progress.percent || 0}%`,
+                              }}
                             />
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {taskStatus.progress.message || `${taskStatus.progress.percent?.toFixed(0) || 0}%`}
+                            {taskStatus.progress.message ||
+                              `${taskStatus.progress.percent?.toFixed(0) || 0}%`}
                           </p>
                         </>
                       )}
                       {taskStatus.error_message && (
-                        <p className="text-xs text-destructive">{taskStatus.error_message}</p>
-                      )}
-                      {taskStatus.status === 'completed' && taskStatus.result && (
-                        <p className="text-xs text-success">
-                          Output: {taskStatus.result.output_dir}
+                        <p className="text-xs text-destructive">
+                          {taskStatus.error_message}
                         </p>
                       )}
+                      {taskStatus.status === "completed" &&
+                        taskStatus.result && (
+                          <p className="text-xs text-success">
+                            Output: {taskStatus.result.output_dir}
+                          </p>
+                        )}
                     </div>
                   )}
                 </div>
               </Section>
             )}
 
-            {(taskStatus || error) && <div className="my-4 border-t border-border"></div>}
+            {(taskStatus || error) && (
+              <div className="my-4 border-t border-border"></div>
+            )}
 
             <div className="mt-4 flex gap-2">
               <Button
@@ -421,7 +513,7 @@ export function ProcessingPage() {
                 onClick={handleStart}
                 disabled={isPolling || !microscopyFile}
               >
-                {isPolling ? 'Processing...' : 'Start'}
+                {isPolling ? "Processing..." : "Start"}
               </Button>
               <Button
                 variant="secondary"
@@ -436,14 +528,23 @@ export function ProcessingPage() {
         </Card>
 
         {/* Right Column: Samples */}
-        <Card title="Samples" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
+        <Card
+          title="Samples"
+          className="h-full flex flex-col"
+          bodyClassName="flex-1 flex flex-col"
+        >
           <div className="flex-1 flex flex-col">
             <Section title="Assign FOVs">
               <div className="relative">
                 <Table className="table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableCell header className="border-r border-border w-1/2">Name</TableCell>
+                      <TableCell
+                        header
+                        className="border-r border-border w-1/2"
+                      >
+                        Name
+                      </TableCell>
                       <TableCell header className="w-1/2">
                         <div className="flex items-center gap-1.5">
                           <span>FOV</span>
@@ -456,18 +557,32 @@ export function ProcessingPage() {
                               viewBox="0 0 24 24"
                               onMouseEnter={() => {
                                 if (tooltipRef.current && iconRef.current) {
-                                  const iconRect = iconRef.current.getBoundingClientRect();
+                                  const iconRect =
+                                    iconRef.current.getBoundingClientRect();
                                   tooltipRef.current.style.left = `${iconRect.left + iconRect.width / 2}px`;
                                   tooltipRef.current.style.top = `${iconRect.top - 8}px`;
-                                  tooltipRef.current.style.transform = 'translate(-50%, -100%)';
-                                  tooltipRef.current.classList.remove('opacity-0', 'invisible');
-                                  tooltipRef.current.classList.add('opacity-100', 'visible');
+                                  tooltipRef.current.style.transform =
+                                    "translate(-50%, -100%)";
+                                  tooltipRef.current.classList.remove(
+                                    "opacity-0",
+                                    "invisible",
+                                  );
+                                  tooltipRef.current.classList.add(
+                                    "opacity-100",
+                                    "visible",
+                                  );
                                 }
                               }}
                               onMouseLeave={() => {
                                 if (tooltipRef.current) {
-                                  tooltipRef.current.classList.add('opacity-0', 'invisible');
-                                  tooltipRef.current.classList.remove('opacity-100', 'visible');
+                                  tooltipRef.current.classList.add(
+                                    "opacity-0",
+                                    "invisible",
+                                  );
+                                  tooltipRef.current.classList.remove(
+                                    "opacity-100",
+                                    "visible",
+                                  );
                                 }
                               }}
                             >
@@ -485,7 +600,10 @@ export function ProcessingPage() {
                   </TableHeader>
                   <tbody>
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center py-6 text-muted-foreground border-r-0">
+                      <TableCell
+                        colSpan={2}
+                        className="text-center py-6 text-muted-foreground border-r-0"
+                      >
                         No samples assigned
                       </TableCell>
                     </TableRow>
@@ -496,24 +614,32 @@ export function ProcessingPage() {
                   ref={tooltipRef}
                   className="fixed px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap opacity-0 invisible pointer-events-none transition-all duration-200"
                   style={{
-                    backgroundColor: 'var(--color-popover)',
-                    color: 'var(--color-popover-foreground)',
-                    border: '1px solid var(--color-border)',
+                    backgroundColor: "var(--color-popover)",
+                    color: "var(--color-popover-foreground)",
+                    border: "1px solid var(--color-border)",
                     zIndex: 9999,
                   }}
                 >
                   Format: 0-5, 7, 9-11
                   <div
                     className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent"
-                    style={{ borderTopColor: 'var(--color-border)' }}
+                    style={{ borderTopColor: "var(--color-border)" }}
                   ></div>
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2">
-                <Button variant="secondary" onClick={() => { }}>Add</Button>
-                <Button variant="secondary" onClick={() => { }} disabled>Remove</Button>
-                <Button variant="secondary" onClick={() => { }}>Load</Button>
-                <Button variant="secondary" onClick={() => { }}>Save</Button>
+                <Button variant="secondary" onClick={() => {}}>
+                  Add
+                </Button>
+                <Button variant="secondary" onClick={() => {}} disabled>
+                  Remove
+                </Button>
+                <Button variant="secondary" onClick={() => {}}>
+                  Load
+                </Button>
+                <Button variant="secondary" onClick={() => {}}>
+                  Save
+                </Button>
               </div>
             </Section>
 
@@ -526,8 +652,11 @@ export function ProcessingPage() {
                     Sample YAML
                   </label>
                   <div className="flex items-center gap-2">
-                    <Input placeholder="Select sample YAML file" className="flex-1" />
-                    <FilePicker onFileSelect={() => { }} buttonText="Browse" />
+                    <Input
+                      placeholder="Select sample YAML file"
+                      className="flex-1"
+                    />
+                    <FilePicker onFileSelect={() => {}} buttonText="Browse" />
                   </div>
                 </div>
 
@@ -537,7 +666,7 @@ export function ProcessingPage() {
                   </label>
                   <div className="flex items-center gap-2">
                     <Input placeholder="Select folder" className="flex-1" />
-                    <FilePicker onFileSelect={() => { }} buttonText="Browse" />
+                    <FilePicker onFileSelect={() => {}} buttonText="Browse" />
                   </div>
                 </div>
 
@@ -546,13 +675,20 @@ export function ProcessingPage() {
                     Output folder
                   </label>
                   <div className="flex items-center gap-2">
-                    <Input placeholder="Select output folder" className="flex-1" />
-                    <FilePicker onFileSelect={() => { }} buttonText="Browse" />
+                    <Input
+                      placeholder="Select output folder"
+                      className="flex-1"
+                    />
+                    <FilePicker onFileSelect={() => {}} buttonText="Browse" />
                   </div>
                 </div>
 
                 <div className="mt-4">
-                  <Button variant="default" className="w-full" onClick={() => { }}>
+                  <Button
+                    variant="default"
+                    className="w-full"
+                    onClick={() => {}}
+                  >
                     Merge
                   </Button>
                 </div>

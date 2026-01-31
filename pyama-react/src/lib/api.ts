@@ -2,11 +2,16 @@
  * API client for pyama-core FastAPI server
  */
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = "http://localhost:8000";
 
 // Types matching FastAPI Pydantic schemas
 
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type TaskStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 export interface MicroscopyMetadata {
   file_path: string;
@@ -65,13 +70,15 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...options?.headers,
     },
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    const error = await response
+      .json()
+      .catch(() => ({ detail: response.statusText }));
     throw new Error(error.detail || `HTTP ${response.status}`);
   }
 
@@ -84,7 +91,7 @@ export const api = {
    */
   async loadMicroscopy(filePath: string): Promise<MicroscopyMetadata> {
     return fetchJson(`${API_BASE}/data/microscopy`, {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify({ file_path: filePath }),
     });
   },
@@ -103,10 +110,10 @@ export const api = {
   async createTask(
     filePath: string,
     config: Record<string, unknown>,
-    fake: boolean = false
+    fake: boolean = false,
   ): Promise<TaskResponse> {
     return fetchJson(`${API_BASE}/processing/tasks`, {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify({ file_path: filePath, config, fake }),
     });
   },
@@ -130,7 +137,7 @@ export const api = {
    */
   async cancelTask(taskId: string): Promise<TaskResponse> {
     return fetchJson(`${API_BASE}/processing/tasks/${taskId}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   },
 };

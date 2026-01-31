@@ -1,9 +1,9 @@
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import { App } from './app.tsx'
-import { initializeTheme } from './lib/theme'
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import { App } from "./app.tsx";
+import { initializeTheme } from "./lib/theme";
 
 // Initialize theme before render to prevent flash
-initializeTheme()
+initializeTheme();
 
-createRoot(document.getElementById('app')!).render(<App />)
+createRoot(document.getElementById("app")!).render(<App />);

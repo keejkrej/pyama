@@ -1,11 +1,14 @@
-import { cn } from '../../lib/utils';
+import { cn } from "../../lib/utils";
 
 interface SelectOption {
   value: string | number;
   label: string;
 }
 
-export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'value' | 'onChange'> {
+export interface SelectProps extends Omit<
+  React.SelectHTMLAttributes<HTMLSelectElement>,
+  "value" | "onChange"
+> {
   label?: string;
   options: SelectOption[];
   error?: string;
@@ -13,7 +16,15 @@ export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectE
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
 }
 
-export function Select({ label, options, error, className, value, onChange, ...props }: SelectProps) {
+export function Select({
+  label,
+  options,
+  error,
+  className,
+  value,
+  onChange,
+  ...props
+}: SelectProps) {
   return (
     <div className="w-full">
       {label && (
@@ -24,9 +35,9 @@ export function Select({ label, options, error, className, value, onChange, ...p
       <div className="relative">
         <select
           className={cn(
-            'flex h-8 w-full items-center justify-between rounded-md border border-border bg-[var(--color-input)] px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-foreground/50 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 appearance-none pr-7 hover:border-foreground/30',
-            error && 'border-destructive focus:ring-destructive',
-            className
+            "flex h-8 w-full items-center justify-between rounded-md border border-border bg-[var(--color-input)] px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-foreground/50 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 appearance-none pr-7 hover:border-foreground/30",
+            error && "border-destructive focus:ring-destructive",
+            className,
           )}
           value={value}
           onChange={onChange}

@@ -1,8 +1,8 @@
-import { NavLink as RouterNavLink } from 'react-router-dom';
-import type { ReactNode } from 'react';
-import { Settings, Eye, BarChart3, MessageCircle } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { ThemeToggle } from '../ui/theme-toggle';
+import { NavLink as RouterNavLink } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Settings, Eye, BarChart3, MessageCircle } from "lucide-react";
+import { cn } from "../../lib/utils";
+import { ThemeToggle } from "../ui/theme-toggle";
 
 interface NavLinkProps {
   to: string;
@@ -18,13 +18,11 @@ function NavLink({ to, icon, children }: NavLinkProps) {
         cn(
           "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
           "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-          isActive && "bg-accent text-accent-foreground"
+          isActive && "bg-accent text-accent-foreground",
         )
       }
     >
-      <span className="w-3.5 h-3.5 flex-shrink-0">
-        {icon}
-      </span>
+      <span className="w-3.5 h-3.5 flex-shrink-0">{icon}</span>
       <span>{children}</span>
     </RouterNavLink>
   );
@@ -46,10 +44,16 @@ export function Navbar() {
             <NavLink to="/visualization" icon={<Eye className="w-3.5 h-3.5" />}>
               Visualization
             </NavLink>
-            <NavLink to="/analysis" icon={<BarChart3 className="w-3.5 h-3.5" />}>
+            <NavLink
+              to="/analysis"
+              icon={<BarChart3 className="w-3.5 h-3.5" />}
+            >
               Analysis
             </NavLink>
-            <NavLink to="/chat" icon={<MessageCircle className="w-3.5 h-3.5" />}>
+            <NavLink
+              to="/chat"
+              icon={<MessageCircle className="w-3.5 h-3.5" />}
+            >
               Chat
             </NavLink>
           </div>

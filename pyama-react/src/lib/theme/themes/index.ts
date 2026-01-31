@@ -1,6 +1,6 @@
-import type { Theme } from '../types';
-import { darkTheme } from './dark';
-import { lightTheme } from './light';
+import type { Theme } from "../types";
+import { darkTheme } from "./dark";
+import { lightTheme } from "./light";
 
 /** Built-in themes */
 export const builtInThemes: Record<string, Theme> = {
@@ -23,7 +23,7 @@ export function registerTheme(theme: Theme): void {
   themeRegistry.set(theme.id, theme);
 }
 
-export function getThemesByType(type: 'dark' | 'light'): Theme[] {
+export function getThemesByType(type: "dark" | "light"): Theme[] {
   return getAllThemes().filter((t) => t.type === type);
 }
 

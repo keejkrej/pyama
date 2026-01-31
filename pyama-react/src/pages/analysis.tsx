@@ -1,24 +1,39 @@
-import { useState } from 'react';
-import { Card, Button, NumberInput, FilePicker, Section, Input } from '../components/ui';
-import { AnalysisWindow } from '../components/popups/analysis-window';
+import { useState } from "react";
+import {
+  Card,
+  Button,
+  NumberInput,
+  FilePicker,
+  Section,
+  Input,
+} from "../components/ui";
+import { AnalysisWindow } from "../components/popups/analysis-window";
 
 export function AnalysisPage() {
   const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
-  const [dataFolder, setDataFolder] = useState('');
+  const [dataFolder, setDataFolder] = useState("");
   const [frameInterval, setFrameInterval] = useState(10);
-  const [timeMapping] = useState<string>('none');
+  const [timeMapping] = useState<string>("none");
   const [samples] = useState<string[]>([]);
 
   return (
     <div className="p-5">
       <div className="mb-5">
-        <h1 className="text-lg font-semibold mb-1.5 text-foreground-bright">Analysis</h1>
-        <p className="text-xs text-muted-foreground">Load samples and perform statistical analysis</p>
+        <h1 className="text-lg font-semibold mb-1.5 text-foreground-bright">
+          Analysis
+        </h1>
+        <p className="text-xs text-muted-foreground">
+          Load samples and perform statistical analysis
+        </p>
       </div>
 
       <div className="grid grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Load Data */}
-        <Card title="Load Data" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
+        <Card
+          title="Load Data"
+          className="h-full flex flex-col"
+          bodyClassName="flex-1 flex flex-col"
+        >
           <div className="flex-1 flex flex-col">
             <Section title="Data Folder">
               <div className="space-y-2">
@@ -33,9 +48,12 @@ export function AnalysisPage() {
                   <FilePicker
                     onFileSelect={(files) => {
                       if (files && files.length > 0) {
-                        const path = (files[0] as any).webkitRelativePath || files[0].name;
-                        const dirPath = path.substring(0, path.lastIndexOf('/')) || files[0].name;
-                        setDataFolder(dirPath || 'Selected');
+                        const path =
+                          (files[0] as any).webkitRelativePath || files[0].name;
+                        const dirPath =
+                          path.substring(0, path.lastIndexOf("/")) ||
+                          files[0].name;
+                        setDataFolder(dirPath || "Selected");
                       }
                     }}
                     directory
@@ -43,7 +61,9 @@ export function AnalysisPage() {
                   />
                 </div>
                 <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
-                  <p className="text-xs text-muted-foreground">Data Folder Metadata</p>
+                  <p className="text-xs text-muted-foreground">
+                    Data Folder Metadata
+                  </p>
                 </div>
               </div>
             </Section>
@@ -75,7 +95,9 @@ export function AnalysisPage() {
                   </label>
                   <div className="p-3 bg-card rounded-lg border border-dashed border-border">
                     <p className="text-xs text-muted-foreground">
-                      {timeMapping === 'none' ? 'No time mapping file' : timeMapping}
+                      {timeMapping === "none"
+                        ? "No time mapping file"
+                        : timeMapping}
                     </p>
                   </div>
                 </div>
@@ -85,10 +107,10 @@ export function AnalysisPage() {
             <div className="my-4 border-t border-border"></div>
 
             <div className="mt-4 flex gap-2">
-              <Button variant="default" className="flex-1" onClick={() => { }}>
+              <Button variant="default" className="flex-1" onClick={() => {}}>
                 Load
               </Button>
-              <Button variant="secondary" className="flex-1" onClick={() => { }}>
+              <Button variant="secondary" className="flex-1" onClick={() => {}}>
                 Clear
               </Button>
             </div>
@@ -96,7 +118,11 @@ export function AnalysisPage() {
         </Card>
 
         {/* Middle Column: Samples */}
-        <Card title="Samples" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
+        <Card
+          title="Samples"
+          className="h-full flex flex-col"
+          bodyClassName="flex-1 flex flex-col"
+        >
           <div className="flex-1 flex flex-col">
             <Section title="Loaded Samples">
               <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[180px] flex flex-col">
@@ -143,10 +169,20 @@ export function AnalysisPage() {
 
             <Section title="Actions">
               <div className="space-y-2">
-                <Button variant="secondary" className="w-full" onClick={() => { }} disabled={samples.length === 0}>
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => {}}
+                  disabled={samples.length === 0}
+                >
                   Select All
                 </Button>
-                <Button variant="secondary" className="w-full" onClick={() => { }} disabled={samples.length === 0}>
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => {}}
+                  disabled={samples.length === 0}
+                >
                   Deselect All
                 </Button>
               </div>
@@ -155,7 +191,11 @@ export function AnalysisPage() {
         </Card>
 
         {/* Right Column: Comparison */}
-        <Card title="Comparison" className="h-full flex flex-col" bodyClassName="flex-1 flex flex-col">
+        <Card
+          title="Comparison"
+          className="h-full flex flex-col"
+          bodyClassName="flex-1 flex flex-col"
+        >
           <div className="flex-1 flex flex-col">
             <Section title="Analysis">
               <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
@@ -192,10 +232,20 @@ export function AnalysisPage() {
                 >
                   Open Analysis
                 </Button>
-                <Button variant="secondary" className="w-full" onClick={() => { }} disabled={samples.length === 0}>
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => {}}
+                  disabled={samples.length === 0}
+                >
                   Export Results
                 </Button>
-                <Button variant="secondary" className="w-full" onClick={() => { }} disabled={samples.length === 0}>
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => {}}
+                  disabled={samples.length === 0}
+                >
                   Compare Samples
                 </Button>
               </div>
@@ -205,7 +255,10 @@ export function AnalysisPage() {
       </div>
 
       {/* Analysis Window Popup */}
-      <AnalysisWindow isOpen={isAnalysisOpen} onClose={() => setIsAnalysisOpen(false)} />
+      <AnalysisWindow
+        isOpen={isAnalysisOpen}
+        onClose={() => setIsAnalysisOpen(false)}
+      />
     </div>
   );
 }

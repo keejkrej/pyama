@@ -1,6 +1,6 @@
 params:
-  segmentation_method: cellpose
-  tracking_method: btrack
+  segmentation_method: logstd
+  tracking_method: iou
   background_weight: 1.0
   fov_list:
   - 0

@@ -1,7 +1,12 @@
-import { HashRouter, Routes, Route } from 'react-router-dom';
-import { Navbar } from './components/layout/navbar';
-import { ProcessingPage, VisualizationPage, AnalysisPage, ChatPage } from './pages';
-import { ChatProvider } from './contexts';
+import { HashRouter, Routes, Route } from "react-router-dom";
+import { Navbar } from "./components/layout/navbar";
+import {
+  ProcessingPage,
+  VisualizationPage,
+  AnalysisPage,
+  ChatPage,
+} from "./pages";
+import { ChatProvider } from "./contexts";
 
 export function App() {
   return (

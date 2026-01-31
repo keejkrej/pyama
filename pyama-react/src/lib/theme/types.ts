@@ -7,25 +7,25 @@ export interface ThemeColors {
   background: string;
   sidebar: string;
   foreground: string;
-  'foreground-bright': string;
+  "foreground-bright": string;
 
   // Cards & Popovers
   card: string;
-  'card-foreground': string;
+  "card-foreground": string;
   popover: string;
-  'popover-foreground': string;
+  "popover-foreground": string;
 
   // Semantic colors
   primary: string;
-  'primary-foreground': string;
+  "primary-foreground": string;
   secondary: string;
-  'secondary-foreground': string;
+  "secondary-foreground": string;
   muted: string;
-  'muted-foreground': string;
+  "muted-foreground": string;
   accent: string;
-  'accent-foreground': string;
+  "accent-foreground": string;
   destructive: string;
-  'destructive-foreground': string;
+  "destructive-foreground": string;
 
   // Interactive elements
   border: string;
@@ -34,11 +34,11 @@ export interface ThemeColors {
 
   // Status colors
   success: string;
-  'success-foreground': string;
+  "success-foreground": string;
   warning: string;
-  'warning-foreground': string;
+  "warning-foreground": string;
   info: string;
-  'info-foreground': string;
+  "info-foreground": string;
 }
 
 /**
@@ -52,7 +52,7 @@ export interface Theme {
   name: string;
 
   /** Theme type for system preference matching */
-  type: 'dark' | 'light';
+  type: "dark" | "light";
 
   /** Color definitions */
   colors: ThemeColors;
@@ -67,7 +67,7 @@ export interface Theme {
 /**
  * Theme preference options.
  */
-export type ThemePreference = 'light' | 'dark' | 'system';
+export type ThemePreference = "light" | "dark" | "system";
 
 /**
  * Theme state for the hook.
@@ -80,5 +80,5 @@ export interface ThemeState {
   preference: ThemePreference;
 
   /** Resolved theme type (actual dark/light after system resolution) */
-  resolvedType: 'dark' | 'light';
+  resolvedType: "dark" | "light";
 }

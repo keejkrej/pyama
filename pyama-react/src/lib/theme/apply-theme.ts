@@ -1,8 +1,8 @@
-import type { Theme } from './types';
+import type { Theme } from "./types";
 
-const COLOR_PROPERTY_PREFIX = '--color-';
-const STORAGE_KEY = 'pyama-theme';
-const STORAGE_PREFERENCE_KEY = 'pyama-theme-preference';
+const COLOR_PROPERTY_PREFIX = "--color-";
+const STORAGE_KEY = "pyama-theme";
+const STORAGE_PREFERENCE_KEY = "pyama-theme-preference";
 
 /**
  * Apply a theme to the document by setting CSS custom properties.
@@ -11,7 +11,7 @@ export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
 
   // Set color-scheme for native element styling (scrollbars, etc.)
-  root.style.setProperty('color-scheme', theme.type);
+  root.style.setProperty("color-scheme", theme.type);
 
   // Apply all color variables
   for (const [key, value] of Object.entries(theme.colors)) {
@@ -30,10 +30,10 @@ export function applyTheme(theme: Theme): void {
   }
 
   // Update class for Tailwind dark mode selector
-  if (theme.type === 'dark') {
-    root.classList.add('dark');
+  if (theme.type === "dark") {
+    root.classList.add("dark");
   } else {
-    root.classList.remove('dark');
+    root.classList.remove("dark");
   }
 
   // Store the applied theme ID
@@ -80,26 +80,26 @@ export function getStoredThemeId(): string | null {
 /**
  * Detect system color scheme preference.
  */
-export function getSystemPreference(): 'dark' | 'light' {
-  if (typeof window === 'undefined') return 'dark';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? 'dark'
-    : 'light';
+export function getSystemPreference(): "dark" | "light" {
+  if (typeof window === "undefined") return "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 /**
  * Subscribe to system color scheme changes.
  */
 export function onSystemPreferenceChange(
-  callback: (preference: 'dark' | 'light') => void
+  callback: (preference: "dark" | "light") => void,
 ): () => void {
-  if (typeof window === 'undefined') return () => {};
+  if (typeof window === "undefined") return () => {};
 
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const handler = (e: MediaQueryListEvent) => {
-    callback(e.matches ? 'dark' : 'light');
+    callback(e.matches ? "dark" : "light");
   };
 
-  mediaQuery.addEventListener('change', handler);
-  return () => mediaQuery.removeEventListener('change', handler);
+  mediaQuery.addEventListener("change", handler);
+  return () => mediaQuery.removeEventListener("change", handler);
 }

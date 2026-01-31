@@ -24,7 +24,9 @@ export interface AgentMessage {
  * Runs a query through the Claude Agent SDK with isolated MCP configuration.
  * Only connects to pyama MCP server - ignores user's ~/.claude/ config.
  */
-export async function* agentQuery(prompt: string): AsyncGenerator<AgentMessage> {
+export async function* agentQuery(
+  prompt: string,
+): AsyncGenerator<AgentMessage> {
   try {
     for await (const message of query({
       prompt,
@@ -38,7 +40,7 @@ export async function* agentQuery(prompt: string): AsyncGenerator<AgentMessage> 
         },
         // Only allow pyama MCP tools - no filesystem access (Read, Write, Bash, etc.)
         allowedTools: ["mcp__pyama__*"],
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-haiku-4-5",
         systemPrompt: PYAMA_SYSTEM_PROMPT,
       },
     })) {
@@ -48,7 +50,8 @@ export async function* agentQuery(prompt: string): AsyncGenerator<AgentMessage> 
   } catch (error) {
     yield {
       type: "error",
-      content: error instanceof Error ? error.message : "Unknown error occurred",
+      content:
+        error instanceof Error ? error.message : "Unknown error occurred",
       isError: true,
     };
   }
@@ -57,15 +60,23 @@ export async function* agentQuery(prompt: string): AsyncGenerator<AgentMessage> 
 function* processMessage(message: SDKMessage): Generator<AgentMessage> {
   if (message.type === "assistant") {
     // SDKAssistantMessage has a `message` property containing the API response
-    const assistantMsg = message as { type: "assistant"; message: { content: unknown } };
+    const assistantMsg = message as {
+      type: "assistant";
+      message: { content: unknown };
+    };
     const content = assistantMsg.message?.content;
-    
+
     if (typeof content === "string") {
       yield { type: "assistant", content };
     } else if (Array.isArray(content)) {
       for (const block of content) {
         if (typeof block === "object" && block !== null) {
-          const typedBlock = block as { type: string; text?: string; name?: string; input?: unknown };
+          const typedBlock = block as {
+            type: string;
+            text?: string;
+            name?: string;
+            input?: unknown;
+          };
           if (typedBlock.type === "text" && typedBlock.text) {
             yield { type: "assistant", content: typedBlock.text };
           } else if (typedBlock.type === "tool_use" && typedBlock.name) {
@@ -80,7 +91,12 @@ function* processMessage(message: SDKMessage): Generator<AgentMessage> {
     }
   } else if (message.type === "result") {
     // SDKResultMessage - final result
-    const resultMsg = message as { type: "result"; subtype: string; result?: string; is_error?: boolean };
+    const resultMsg = message as {
+      type: "result";
+      subtype: string;
+      result?: string;
+      is_error?: boolean;
+    };
     yield {
       type: "result",
       content: resultMsg.result || "Query completed",

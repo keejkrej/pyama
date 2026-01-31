@@ -1,6 +1,6 @@
-import { useRef, useEffect } from 'react';
-import type { ReactNode } from 'react';
-import { cn } from '../../lib/utils';
+import { useRef, useEffect } from "react";
+import type { ReactNode } from "react";
+import { cn } from "../../lib/utils";
 
 interface ChatContainerProps {
   children: ReactNode;
@@ -23,7 +23,9 @@ export function ChatContainer({ children, className }: ChatContainerProps) {
   const handleScroll = () => {
     const container = containerRef.current;
     if (container) {
-      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+      const isAtBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight <
+        50;
       shouldAutoScroll.current = isAtBottom;
     }
   };
@@ -32,10 +34,7 @@ export function ChatContainer({ children, className }: ChatContainerProps) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className={cn(
-        'flex-1 overflow-y-auto p-4 space-y-3',
-        className
-      )}
+      className={cn("flex-1 overflow-y-auto p-4 space-y-3", className)}
     >
       {children}
     </div>

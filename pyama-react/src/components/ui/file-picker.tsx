@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { Button } from './button';
+import { useRef } from "react";
+import { Button } from "./button";
 
 interface FilePickerProps {
   label?: string;
@@ -17,8 +17,8 @@ export function FilePicker({
   multiple = false,
   directory = false,
   onFileSelect,
-  buttonText = 'Browse...',
-  className = ''
+  buttonText = "Browse...",
+  className = "",
 }: FilePickerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -45,7 +45,7 @@ export function FilePicker({
           type="file"
           accept={accept}
           multiple={multiple}
-          {...(directory ? { webkitdirectory: '', directory: '' } : {})}
+          {...(directory ? { webkitdirectory: "", directory: "" } : {})}
           onChange={handleFileChange}
           className="hidden"
         />

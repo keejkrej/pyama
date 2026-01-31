@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Theme, ThemePreference, ThemeState } from './types';
+import { useState, useEffect, useCallback, useMemo } from "react";
+import type { Theme, ThemePreference, ThemeState } from "./types";
 import {
   applyTheme,
   getStoredPreference,
@@ -7,13 +7,8 @@ import {
   getStoredThemeId,
   getSystemPreference,
   onSystemPreferenceChange,
-} from './apply-theme';
-import {
-  getTheme,
-  getAllThemes,
-  darkTheme,
-  lightTheme,
-} from './themes';
+} from "./apply-theme";
+import { getTheme, getAllThemes, darkTheme, lightTheme } from "./themes";
 
 interface UseThemeOptions {
   /** Default preference if none stored */
@@ -38,9 +33,9 @@ interface UseThemeReturn extends ThemeState {
 }
 
 const DEFAULT_OPTIONS: Required<UseThemeOptions> = {
-  defaultPreference: 'dark',
-  defaultDarkTheme: 'dark',
-  defaultLightTheme: 'light',
+  defaultPreference: "dark",
+  defaultDarkTheme: "dark",
+  defaultLightTheme: "light",
 };
 
 export function useTheme(options: UseThemeOptions = {}): UseThemeReturn {
@@ -49,14 +44,14 @@ export function useTheme(options: UseThemeOptions = {}): UseThemeReturn {
   // Initialize from storage or defaults
   const [preference, setPreferenceState] = useState<ThemePreference>(() => {
     const stored = getStoredPreference();
-    if (stored === 'light' || stored === 'dark' || stored === 'system') {
+    if (stored === "light" || stored === "dark" || stored === "system") {
       return stored;
     }
     return opts.defaultPreference;
   });
 
-  const [systemPreference, setSystemPreference] = useState<'dark' | 'light'>(
-    getSystemPreference
+  const [systemPreference, setSystemPreference] = useState<"dark" | "light">(
+    getSystemPreference,
   );
 
   const [currentThemeId, setCurrentThemeId] = useState<string>(() => {
@@ -64,12 +59,14 @@ export function useTheme(options: UseThemeOptions = {}): UseThemeReturn {
     if (stored && getTheme(stored)) {
       return stored;
     }
-    return preference === 'light' ? opts.defaultLightTheme : opts.defaultDarkTheme;
+    return preference === "light"
+      ? opts.defaultLightTheme
+      : opts.defaultDarkTheme;
   });
 
   // Resolve the actual theme type
-  const resolvedType = useMemo((): 'dark' | 'light' => {
-    if (preference === 'system') {
+  const resolvedType = useMemo((): "dark" | "light" => {
+    if (preference === "system") {
       return systemPreference;
     }
     return preference;
@@ -81,11 +78,16 @@ export function useTheme(options: UseThemeOptions = {}): UseThemeReturn {
     if (current && current.type === resolvedType) return current;
 
     // Fallback if theme type doesn't match preference
-    if (resolvedType === 'light') {
+    if (resolvedType === "light") {
       return getTheme(opts.defaultLightTheme) ?? lightTheme;
     }
     return getTheme(opts.defaultDarkTheme) ?? darkTheme;
-  }, [currentThemeId, resolvedType, opts.defaultDarkTheme, opts.defaultLightTheme]);
+  }, [
+    currentThemeId,
+    resolvedType,
+    opts.defaultDarkTheme,
+    opts.defaultLightTheme,
+  ]);
 
   // Apply theme on change
   useEffect(() => {
@@ -99,9 +101,11 @@ export function useTheme(options: UseThemeOptions = {}): UseThemeReturn {
 
   // When preference changes to system, auto-select matching theme
   useEffect(() => {
-    if (preference === 'system') {
+    if (preference === "system") {
       const matchingTheme =
-        resolvedType === 'light' ? opts.defaultLightTheme : opts.defaultDarkTheme;
+        resolvedType === "light"
+          ? opts.defaultLightTheme
+          : opts.defaultDarkTheme;
       setCurrentThemeId(matchingTheme);
     }
   }, [preference, resolvedType, opts.defaultDarkTheme, opts.defaultLightTheme]);
@@ -111,14 +115,16 @@ export function useTheme(options: UseThemeOptions = {}): UseThemeReturn {
       setPreferenceState(newPreference);
       storePreference(newPreference);
 
-      if (newPreference !== 'system') {
+      if (newPreference !== "system") {
         // Auto-select default theme for the preference
         const defaultThemeId =
-          newPreference === 'light' ? opts.defaultLightTheme : opts.defaultDarkTheme;
+          newPreference === "light"
+            ? opts.defaultLightTheme
+            : opts.defaultDarkTheme;
         setCurrentThemeId(defaultThemeId);
       }
     },
-    [opts.defaultDarkTheme, opts.defaultLightTheme]
+    [opts.defaultDarkTheme, opts.defaultLightTheme],
   );
 
   const setTheme = useCallback(
@@ -127,17 +133,17 @@ export function useTheme(options: UseThemeOptions = {}): UseThemeReturn {
       if (newTheme) {
         setCurrentThemeId(themeId);
         // Update preference to match theme type (exit system mode)
-        if (preference === 'system') {
+        if (preference === "system") {
           setPreferenceState(newTheme.type);
           storePreference(newTheme.type);
         }
       }
     },
-    [preference]
+    [preference],
   );
 
   const toggle = useCallback(() => {
-    const newPreference = resolvedType === 'dark' ? 'light' : 'dark';
+    const newPreference = resolvedType === "dark" ? "light" : "dark";
     setPreference(newPreference);
   }, [resolvedType, setPreference]);
 
@@ -145,7 +151,7 @@ export function useTheme(options: UseThemeOptions = {}): UseThemeReturn {
 
   const isActive = useCallback(
     (themeId: string) => theme.id === themeId,
-    [theme.id]
+    [theme.id],
   );
 
   return {

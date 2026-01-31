@@ -1,10 +1,5 @@
 // Types
-export type {
-  Theme,
-  ThemeColors,
-  ThemePreference,
-  ThemeState,
-} from './types';
+export type { Theme, ThemeColors, ThemePreference, ThemeState } from "./types";
 
 // Themes
 export {
@@ -15,7 +10,7 @@ export {
   getAllThemes,
   registerTheme,
   getThemesByType,
-} from './themes';
+} from "./themes";
 
 // Application
 export {
@@ -25,10 +20,10 @@ export {
   getStoredThemeId,
   getSystemPreference,
   onSystemPreferenceChange,
-} from './apply-theme';
+} from "./apply-theme";
 
 // Hook
-export { useTheme } from './use-theme';
+export { useTheme } from "./use-theme";
 
 // Initialization
-export { initializeTheme } from './initialize';
+export { initializeTheme } from "./initialize";

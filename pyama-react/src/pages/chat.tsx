@@ -1,9 +1,14 @@
-import { ChatContainer, ChatInput, MessageBubble, ToolCallDisplay } from '../components/chat';
-import { useChatContext } from '../contexts';
+import {
+  ChatContainer,
+  ChatInput,
+  MessageBubble,
+  ToolCallDisplay,
+} from "../components/chat";
+import { useChatContext } from "../contexts";
 
 interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
 }
 
@@ -17,7 +22,8 @@ interface ToolCall {
 }
 
 export function ChatPage() {
-  const { items, isProcessing, error, sendMessage, cancelQuery } = useChatContext();
+  const { items, isProcessing, error, sendMessage, cancelQuery } =
+    useChatContext();
 
   return (
     <div className="h-full flex flex-col">
@@ -44,13 +50,14 @@ export function ChatPage() {
               <div className="text-center space-y-2">
                 <p>No messages yet</p>
                 <p className="text-muted-foreground/70">
-                  Try: "What tools do you have access to?" or "Load /path/to/file.nd2"
+                  Try: "What tools do you have access to?" or "Load
+                  /path/to/file.nd2"
                 </p>
               </div>
             </div>
           ) : (
             items.map((item) =>
-              item.type === 'message' ? (
+              item.type === "message" ? (
                 <MessageBubble
                   key={(item.data as ChatMessage).id}
                   role={(item.data as ChatMessage).role}
@@ -65,24 +72,28 @@ export function ChatPage() {
                   isError={(item.data as ToolCall).isError}
                   isComplete={(item.data as ToolCall).isComplete}
                 />
-              )
+              ),
             )
           )}
 
           {/* Typing indicator */}
-          {isProcessing && items.length > 0 && (() => {
-            const lastItem = items[items.length - 1];
-            const isLastToolComplete = lastItem?.type === 'tool' && (lastItem.data as ToolCall).isComplete;
-            const isLastMessage = lastItem?.type === 'message';
-            // Show indicator only if we're waiting for more content
-            if (!isLastMessage && !isLastToolComplete) return null;
-            return (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse" />
-                <span className="text-xs">Thinking...</span>
-              </div>
-            );
-          })()}
+          {isProcessing &&
+            items.length > 0 &&
+            (() => {
+              const lastItem = items[items.length - 1];
+              const isLastToolComplete =
+                lastItem?.type === "tool" &&
+                (lastItem.data as ToolCall).isComplete;
+              const isLastMessage = lastItem?.type === "message";
+              // Show indicator only if we're waiting for more content
+              if (!isLastMessage && !isLastToolComplete) return null;
+              return (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse" />
+                  <span className="text-xs">Thinking...</span>
+                </div>
+              );
+            })()}
         </ChatContainer>
 
         <ChatInput

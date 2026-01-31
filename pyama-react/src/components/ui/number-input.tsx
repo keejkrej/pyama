@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
-import { cn } from '../../lib/utils';
+import { useState, useEffect } from "react";
+import { cn } from "../../lib/utils";
 
-interface NumberInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> {
+interface NumberInputProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "type" | "value" | "onChange"
+> {
   label?: string;
   value: number;
   onChange?: (value: number) => void;
@@ -25,7 +28,7 @@ export function NumberInput({
   // Format value based on step
   const formatValue = (val: number): string => {
     if (step < 1) {
-      const stepDecimals = step.toString().split('.')[1]?.length || 0;
+      const stepDecimals = step.toString().split(".")[1]?.length || 0;
       return val.toFixed(stepDecimals);
     }
     return val.toString();
@@ -77,7 +80,7 @@ export function NumberInput({
   }, [value, step]);
 
   return (
-    <div className={cn(className || 'w-full', 'min-w-0')}>
+    <div className={cn(className || "w-full", "min-w-0")}>
       {label && (
         <label className="text-xs font-medium leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-1.5 block text-foreground-bright">
           {label}
@@ -93,9 +96,9 @@ export function NumberInput({
           max={max}
           step={step}
           className={cn(
-            'flex h-8 flex-1 bg-transparent px-3 py-1.5 pr-10 text-xs text-foreground placeholder:text-muted-foreground transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50',
-            '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
-            error && 'border-destructive focus-visible:ring-destructive'
+            "flex h-8 flex-1 bg-transparent px-3 py-1.5 pr-10 text-xs text-foreground placeholder:text-muted-foreground transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+            "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+            error && "border-destructive focus-visible:ring-destructive",
           )}
           {...props}
         />
@@ -105,8 +108,8 @@ export function NumberInput({
             onClick={increment}
             disabled={max !== undefined && value >= max}
             className={cn(
-              'flex-1 px-1.5 text-[10px] bg-[var(--color-input)] hover:bg-accent hover:text-accent-foreground text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center border-b border-border',
-              'focus-visible:outline-none'
+              "flex-1 px-1.5 text-[10px] bg-[var(--color-input)] hover:bg-accent hover:text-accent-foreground text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center border-b border-border",
+              "focus-visible:outline-none",
             )}
           >
             ▲
@@ -116,8 +119,8 @@ export function NumberInput({
             onClick={decrement}
             disabled={min !== undefined && value <= min}
             className={cn(
-              'flex-1 px-1.5 text-[10px] bg-[var(--color-input)] hover:bg-accent hover:text-accent-foreground text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center',
-              'focus-visible:outline-none'
+              "flex-1 px-1.5 text-[10px] bg-[var(--color-input)] hover:bg-accent hover:text-accent-foreground text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center",
+              "focus-visible:outline-none",
             )}
           >
             ▼

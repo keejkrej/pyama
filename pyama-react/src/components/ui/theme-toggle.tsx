@@ -1,6 +1,6 @@
-import { Moon, Sun, Monitor } from 'lucide-react';
-import { useTheme } from '../../lib/theme';
-import { cn } from '../../lib/utils';
+import { Moon, Sun, Monitor } from "lucide-react";
+import { useTheme } from "../../lib/theme";
+import { cn } from "../../lib/utils";
 
 export function ThemeToggle() {
   const { preference, setPreference } = useTheme();
@@ -9,12 +9,12 @@ export function ThemeToggle() {
     <div className="flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5">
       <button
         type="button"
-        onClick={() => setPreference('light')}
+        onClick={() => setPreference("light")}
         className={cn(
-          'flex h-6 w-6 items-center justify-center rounded transition-all duration-200',
-          preference === 'light'
-            ? 'bg-accent text-accent-foreground'
-            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+          "flex h-6 w-6 items-center justify-center rounded transition-all duration-200",
+          preference === "light"
+            ? "bg-accent text-accent-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
         )}
         title="Light mode"
       >
@@ -22,12 +22,12 @@ export function ThemeToggle() {
       </button>
       <button
         type="button"
-        onClick={() => setPreference('dark')}
+        onClick={() => setPreference("dark")}
         className={cn(
-          'flex h-6 w-6 items-center justify-center rounded transition-all duration-200',
-          preference === 'dark'
-            ? 'bg-accent text-accent-foreground'
-            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+          "flex h-6 w-6 items-center justify-center rounded transition-all duration-200",
+          preference === "dark"
+            ? "bg-accent text-accent-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
         )}
         title="Dark mode"
       >
@@ -35,12 +35,12 @@ export function ThemeToggle() {
       </button>
       <button
         type="button"
-        onClick={() => setPreference('system')}
+        onClick={() => setPreference("system")}
         className={cn(
-          'flex h-6 w-6 items-center justify-center rounded transition-all duration-200',
-          preference === 'system'
-            ? 'bg-accent text-accent-foreground'
-            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+          "flex h-6 w-6 items-center justify-center rounded transition-all duration-200",
+          preference === "system"
+            ? "bg-accent text-accent-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
         )}
         title="Follow system"
       >
