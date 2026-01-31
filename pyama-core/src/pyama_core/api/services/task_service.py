@@ -184,41 +184,20 @@ class TaskService:
             output_path = Path(output_dir) / task_id
             output_path.mkdir(parents=True, exist_ok=True)
 
-            # Parse FOV selection from config
-            from pyama_core.processing.merge.run import parse_fov_range
-
-            fovs_param = config.params.fovs
-            if fovs_param:
-                fov_list = parse_fov_range(fovs_param)
-                invalid = [f for f in fov_list if f < 0 or f >= metadata.n_fovs]
-                if invalid:
-                    raise ValueError(
-                        f"Invalid FOV indices: {invalid} (valid: 0-{metadata.n_fovs - 1})"
-                    )
-            else:
-                fov_list = list(range(metadata.n_fovs))
             self.db.update_task_status(
                 task_id,
                 TaskStatus.RUNNING,
                 phase="processing",
-                total_fovs=len(fov_list),
                 current_fov=0,
                 progress_percent=0,
-                progress_message=f"Processing {len(fov_list)} FOVs...",
+                progress_message=f"Processing FOVs: {config.params.fovs}...",
             )
-
-            # Read processing parallelism from config params
-            batch_size = config.params.batch_size or min(10, len(fov_list))
-            n_workers = config.params.n_workers or 4
 
             # Create worker and run in thread
             worker = WorkflowWorker(
                 metadata=metadata,
                 config=config,
                 output_dir=output_path,
-                fov_list=fov_list,
-                batch_size=batch_size,
-                n_workers=n_workers,
             )
 
             # Run synchronous workflow in thread pool

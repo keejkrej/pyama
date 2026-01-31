@@ -2,7 +2,7 @@
  * API client for pyama-core FastAPI server
  */
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "http://localhost:8765/api";
 
 // Types matching FastAPI Pydantic schemas
 
@@ -15,15 +15,16 @@ export type TaskStatus =
 
 export interface MicroscopyMetadata {
   file_path: string;
-  file_name: string;
-  file_size_mb: number;
-  num_fovs: number;
-  num_timepoints: number;
-  num_channels: number;
+  base_name: string;
+  file_type: string;
+  height: number;
+  width: number;
+  n_frames: number;
+  n_fovs: number;
+  n_channels: number;
+  timepoints: number[];
   channel_names: string[];
-  dimensions: Record<string, number>;
-  pixel_size_um: number | null;
-  time_interval_ms: number | null;
+  dtype: string;
 }
 
 export interface ProcessingConfigSchema {
@@ -31,6 +32,11 @@ export interface ProcessingConfigSchema {
   type: string;
   properties: Record<string, unknown>;
   required?: string[];
+}
+
+export interface AvailableFeatures {
+  phase: string[];
+  fluorescence: string[];
 }
 
 export interface TaskProgress {
@@ -101,6 +107,13 @@ export const api = {
    */
   async getConfigSchema(): Promise<ProcessingConfigSchema> {
     return fetchJson(`${API_BASE}/processing/config`);
+  },
+
+  /**
+   * Get available feature extractors for phase contrast and fluorescence channels
+   */
+  async getFeatures(): Promise<AvailableFeatures> {
+    return fetchJson(`${API_BASE}/processing/config/features`);
   },
 
   /**

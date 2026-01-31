@@ -552,33 +552,23 @@ class WorkflowPanel(QWidget):
                     values[param_name] = next(iter(fields.values()))
 
             # Update internal model from UI (one-way: UI→model)
-            # Convert integer parameters to int (may come as float from coercion)
+            self._fovs = str(values.get("fovs", "all")).strip() or "all"
             try:
-                self._fov_start = int(values.get("fov_start", 0))
+                self._batch_size = int(values.get("batch_size", 1))
             except (ValueError, TypeError):
-                self._fov_start = 0
+                self._batch_size = 1
             try:
-                self._fov_end = int(values.get("fov_end", -1))
+                self._n_workers = int(values.get("n_workers", 1))
             except (ValueError, TypeError):
-                self._fov_end = -1
+                self._n_workers = 1
             try:
-                self._batch_size = int(values.get("batch_size", 2))
-            except (ValueError, TypeError):
-                self._batch_size = 2
-            try:
-                self._n_workers = int(values.get("n_workers", 2))
-            except (ValueError, TypeError):
-                self._n_workers = 2
-            background_weight = values.get("background_weight", 1.0)
-            try:
-                self._background_weight = float(background_weight)
+                self._background_weight = float(values.get("background_weight", 1.0))
             except (ValueError, TypeError):
                 self._background_weight = 1.0
 
             logger.debug(
-                "Workflow parameters updated from UI - fov_start=%d, fov_end=%d, batch_size=%d, n_workers=%d, background_weight=%.2f",
-                self._fov_start,
-                self._fov_end,
+                "Workflow parameters updated from UI - fovs=%s, batch_size=%d, n_workers=%d, background_weight=%.2f",
+                self._fovs,
                 self._batch_size,
                 self._n_workers,
                 self._background_weight,
@@ -830,10 +820,9 @@ class WorkflowPanel(QWidget):
         self._phase_channel = None
         self._fl_features = {}
         self._pc_features = []
-        self._fov_start = 0
-        self._fov_end = -1
-        self._batch_size = 2
-        self._n_workers = 2
+        self._fovs = "all"
+        self._batch_size = 1
+        self._n_workers = 1
         self._background_weight = 1.0
         self._metadata = None
         self._microscopy_loader = None
@@ -847,10 +836,9 @@ class WorkflowPanel(QWidget):
 
         # Reset parameter table to defaults
         defaults_data = {
-            "fov_start": {"value": 0},
-            "fov_end": {"value": -1},
-            "batch_size": {"value": 2},
-            "n_workers": {"value": 2},
+            "fovs": {"value": "all"},
+            "batch_size": {"value": 1},
+            "n_workers": {"value": 1},
             "background_weight": {"value": 1.0},
         }
         self._param_panel.set_parameters(defaults_data)
@@ -880,27 +868,20 @@ class WorkflowPanel(QWidget):
         self._available_fl_features = []
         self._available_pc_features = []
 
-    def _update_fov_parameters(self, fov_start: int, fov_end: int) -> None:
-        """Update FOV parameters in the parameter table (one-way binding: model→UI display only).
+    def _update_parameters_display(self) -> None:
+        """Update parameter table display (one-way binding: model→UI display only).
 
-        This updates the UI display to reflect the actual FOV range from the loaded metadata,
+        This updates the UI display to reflect the current model state,
         while maintaining one-way binding (user input still updates model via _on_parameters_changed).
-
-        Args:
-            fov_start: Starting FOV index
-            fov_end: Ending FOV index
         """
-        defaults_data = {
-            "fov_start": {"value": fov_start},
-            "fov_end": {"value": fov_end},
+        params_data = {
+            "fovs": {"value": self._fovs},
             "batch_size": {"value": self._batch_size},
             "n_workers": {"value": self._n_workers},
             "background_weight": {"value": self._background_weight},
         }
-        self._param_panel.set_parameters(defaults_data)
-        logger.debug(
-            "Updated FOV parameters in UI: fov_start=%d, fov_end=%d", fov_start, fov_end
-        )
+        self._param_panel.set_parameters(params_data)
+        logger.debug("Updated parameters in UI: fovs=%s", self._fovs)
 
     # ------------------------------------------------------------------------
     # WORKER MANAGEMENT
@@ -969,12 +950,10 @@ class WorkflowPanel(QWidget):
             self._metadata = metadata
             self.load_microscopy_metadata(metadata)
 
-            # Set internal FOV values based on metadata (one-way binding)
+            # Reset to "all" FOVs when new metadata is loaded
             if metadata and metadata.n_fovs > 0:
-                self._fov_start = 0
-                self._fov_end = metadata.n_fovs - 1
-                # Update UI to reflect actual FOV range from metadata
-                self._update_fov_parameters(self._fov_start, self._fov_end)
+                self._fovs = "all"
+                self._update_parameters_display()
 
             filename = (
                 self._microscopy_path.name if self._microscopy_path else "ND2 file"
@@ -1034,46 +1013,30 @@ class WorkflowPanel(QWidget):
             for channel, features in sorted(self._fl_features.items())
         ]
 
-        # Get background_weight from parameter table or use default
-        background_weight = self._background_weight
-
         config = ProcessingConfig(
             channels=Channels(pc=pc_selection, fl=fl_selections),
-            params=ProcessingParams(background_weight=background_weight),
+            params=ProcessingParams(
+                fovs=self._fovs,
+                batch_size=self._batch_size,
+                n_workers=self._n_workers,
+                background_weight=self._background_weight,
+            ),
         )
 
         logger.debug("ProcessingConfig built from user input: %s", config)
-        resolved_fov_end = (
-            getattr(self._metadata, "n_fovs", 0) - 1
-            if self._fov_end == -1 and self._metadata
-            else self._fov_end
-        )
-        logger.debug(
-            "Workflow parameters: FOV range=%d-%d, batch_size=%d, n_workers=%d",
-            self._fov_start,
-            resolved_fov_end,
-            self._batch_size,
-            self._n_workers,
-        )
         logger.info(
-            "Starting workflow for %s -> %s (fovs=%d-%d, batch_size=%d, workers=%d)",
+            "Starting workflow for %s -> %s (fovs=%s, batch_size=%d, workers=%d)",
             getattr(self._microscopy_path, "name", "selected file"),
             self._output_dir,
-            self._fov_start,
-            resolved_fov_end,
+            self._fovs,
             self._batch_size,
             self._n_workers,
         )
 
-        # Convert fov_start/fov_end to list for the new API
-        fov_list = list(range(self._fov_start, resolved_fov_end + 1))
         worker = ProcessingWorkflowWorker(
             metadata=self._metadata,
             config=config,
             output_dir=self._output_dir,
-            fov_list=fov_list,
-            batch_size=self._batch_size,
-            n_workers=self._n_workers,
         )
         worker.finished.connect(self._on_workflow_finished)
 
@@ -1094,21 +1057,12 @@ class WorkflowPanel(QWidget):
         Returns:
             bool: True if parameters are valid, False otherwise
         """
-        if not self._metadata:
-            return True  # Skip validation if no metadata
-
-        n_fovs = getattr(self._metadata, "n_fovs", 0)
-        effective_fov_end = n_fovs - 1 if self._fov_end == -1 else self._fov_end
-
-        if self._fov_start < 0:
-            return False
-        if effective_fov_end < self._fov_start:
-            return False
-        if effective_fov_end >= n_fovs:
-            return False
+        # Basic parameter validation (FOV validation happens in workflow)
         if self._batch_size <= 0:
             return False
         if self._n_workers <= 0:
+            return False
+        if not self._fovs:
             return False
 
         return True
@@ -1215,6 +1169,8 @@ class ProcessingWorkflowWorker(QObject):
     This worker executes the complete image processing workflow
     in a separate thread to prevent UI blocking during long
     processing operations.
+
+    All workflow parameters (fovs, batch_size, n_workers) are read from config.params.
     """
 
     # ------------------------------------------------------------------------
@@ -1231,42 +1187,26 @@ class ProcessingWorkflowWorker(QObject):
         metadata: MicroscopyMetadata,
         config: ProcessingConfig,
         output_dir: Path,
-        fov_list: list[int],
-        batch_size: int,
-        n_workers: int,
     ) -> None:
         """Initialize the workflow runner.
 
         Args:
             metadata: Microscopy metadata for the input file
             config: Processing config with channel and parameter configuration
+                - params.fovs: FOV selection ("all" or range like "0-5, 7")
+                - params.batch_size: Number of FOVs per batch
+                - params.n_workers: Number of parallel workers
             output_dir: Directory to write outputs
-            fov_list: List of FOV indices to process
-            batch_size: Number of FOVs to process in each batch
-            n_workers: Number of parallel worker threads
         """
         super().__init__()
         self._metadata = metadata
         self._config = ensure_config(config)
         self._output_dir = output_dir
-        self._fov_list = fov_list
-        self._batch_size = batch_size
-        self._n_workers = n_workers
         self._cancel_event = threading.Event()
 
     # ------------------------------------------------------------------------
     # WORKER EXECUTION
     # ------------------------------------------------------------------------
-    def _format_fov_list(self) -> str:
-        """Format FOV list for logging (compact representation)."""
-        if not self._fov_list:
-            return "(none)"
-        if len(self._fov_list) == 1:
-            return str(self._fov_list[0])
-        if len(self._fov_list) <= 5:
-            return ", ".join(str(f) for f in self._fov_list)
-        return f"{self._fov_list[0]}...{self._fov_list[-1]} ({len(self._fov_list)} FOVs)"
-
     def run(self) -> None:
         """Execute the processing workflow.
 
@@ -1274,19 +1214,18 @@ class ProcessingWorkflowWorker(QObject):
         with the result. Handles exceptions and cancellation
         gracefully.
         """
-        fov_desc = self._format_fov_list()
         try:
             # Check for cancellation before starting
             if self._cancel_event.is_set():
-                logger.info("Workflow cancelled before execution (fovs=%s)", fov_desc)
+                logger.info("Workflow cancelled before execution")
                 self.finished.emit(False, "Workflow cancelled")
                 return
 
             logger.info(
                 "Workflow execution started (fovs=%s, batch_size=%d, workers=%d, output_dir=%s)",
-                fov_desc,
-                self._batch_size,
-                self._n_workers,
+                self._config.params.fovs,
+                self._config.params.batch_size,
+                self._config.params.n_workers,
                 self._output_dir,
             )
 
@@ -1294,15 +1233,12 @@ class ProcessingWorkflowWorker(QObject):
                 self._metadata,
                 self._config,
                 self._output_dir,
-                fov_list=self._fov_list,
-                batch_size=self._batch_size,
-                n_workers=self._n_workers,
                 cancel_event=self._cancel_event,
             )
 
             # Check for cancellation after workflow completion
             if self._cancel_event.is_set():
-                logger.info("Workflow was cancelled during execution (fovs=%s)", fov_desc)
+                logger.info("Workflow was cancelled during execution")
                 self.finished.emit(False, "Workflow cancelled")
                 return
 
@@ -1326,8 +1262,7 @@ class ProcessingWorkflowWorker(QObject):
         termination of processing.
         """
         logger.info(
-            "Cancelling workflow execution (fovs=%s, output_dir=%s)",
-            self._format_fov_list(),
+            "Cancelling workflow execution (output_dir=%s)",
             self._output_dir,
         )
         self._cancel_event.set()

@@ -1,22 +1,40 @@
 import { useState } from "react";
 import {
   Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
   Button,
   NumberInput,
   Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   FilePicker,
   Section,
   Input,
+  Label,
 } from "../components/ui";
 import { ImageViewer } from "../components/popups/image-viewer";
+import { useVisualizationStore } from "../stores";
 
 export function VisualizationPage() {
+  // Persisted state from zustand store
+  const {
+    dataFolder,
+    setDataFolder,
+    fov,
+    setFov,
+    selectedFeature,
+    setSelectedFeature,
+    currentPage,
+    setCurrentPage,
+  } = useVisualizationStore();
+
+  // Local state
   const [isViewerOpen, setIsViewerOpen] = useState(false);
-  const [dataFolder, setDataFolder] = useState("");
-  const [fov, setFov] = useState(0);
   const [totalFovs] = useState(0);
-  const [selectedFeature, setSelectedFeature] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages] = useState(1);
 
   const features = [
@@ -38,12 +56,11 @@ export function VisualizationPage() {
 
       <div className="grid grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Load Data Folder */}
-        <Card
-          title="Load Data Folder"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Load Data Folder</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Data Folder">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -55,14 +72,9 @@ export function VisualizationPage() {
                     readOnly
                   />
                   <FilePicker
-                    onFileSelect={(files) => {
-                      if (files && files.length > 0) {
-                        const path =
-                          (files[0] as any).webkitRelativePath || files[0].name;
-                        const dirPath =
-                          path.substring(0, path.lastIndexOf("/")) ||
-                          files[0].name;
-                        setDataFolder(dirPath || "Selected");
+                    onFileSelect={(paths) => {
+                      if (paths.length > 0) {
+                        setDataFolder(paths[0]);
                       }
                     }}
                     directory
@@ -81,10 +93,8 @@ export function VisualizationPage() {
 
             <Section title="Visualization">
               <div className="space-y-2.5">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-foreground">
-                    FOV
-                  </label>
+                <div className="space-y-1">
+                  <Label>FOV</Label>
                   <div className="flex items-center gap-2">
                     <NumberInput
                       value={fov}
@@ -110,27 +120,33 @@ export function VisualizationPage() {
                 </Button>
               </div>
             </Section>
-          </div>
+          </CardContent>
         </Card>
 
         {/* Middle Column: Trace Plot */}
-        <Card
-          title="Trace Plot"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Trace Plot</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Feature Selection">
-              <div>
-                <label className="block text-xs font-medium mb-1.5 text-foreground">
-                  Feature
-                </label>
+              <div className="space-y-1">
+                <Label>Feature</Label>
                 <Select
-                  options={features}
                   value={selectedFeature}
-                  onChange={(e) => setSelectedFeature(e.currentTarget.value)}
-                  className="w-full"
-                />
+                  onValueChange={setSelectedFeature}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select feature" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {features.map((f) => (
+                      <SelectItem key={f.value} value={f.value}>
+                        {f.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </Section>
 
@@ -158,16 +174,15 @@ export function VisualizationPage() {
                 </div>
               </div>
             </Section>
-          </div>
+          </CardContent>
         </Card>
 
         {/* Right Column: Trace Selection */}
-        <Card
-          title="Trace Selection"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Trace Selection</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Traces">
               <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
                 <p className="text-xs text-muted-foreground">
@@ -215,7 +230,7 @@ export function VisualizationPage() {
                 </div>
               </div>
             </Section>
-          </div>
+          </CardContent>
         </Card>
       </div>
 

@@ -12,3 +12,9 @@ pyama-qt = { workspace = true }
 [dependency-groups]
 dev = ["ty", "ruff", "pyinstaller", "ipykernel"]
 docs = ["sphinx>=7.0", "myst-parser>=2.0", "sphinx-rtd-theme>=2.0", "sphinx-copybutton"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # Ignore Pydantic v2 deprecation warnings from dependencies
+    "ignore:`json_encoders` is deprecated:pydantic.warnings.PydanticDeprecatedSince20",
+]

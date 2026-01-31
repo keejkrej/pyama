@@ -199,7 +199,7 @@ class TestFakeTask:
         assert data["config"]["channels"] is None
         # ProcessingParams has typed defaults, not empty dict
         assert "batch_size" in data["config"]["params"]
-        assert data["config"]["params"]["batch_size"] == 2
+        assert data["config"]["params"]["batch_size"] == 1
 
     def test_fake_default_is_false(self, client: TestClient):
         """Task without fake flag should default to false (real task).

@@ -89,30 +89,13 @@ class CroppingService(BaseProcessingService):
                 logger.info("FOV %d: Loading background for channel %d...", fov, fl_ch)
                 backgrounds[f"fl_ch_{fl_ch}"] = np.load(bg_path, mmap_mode="r")
 
-        # Get cropping parameters from config
-        padding = config.params.crop_padding
-        mask_margin = config.params.mask_margin
-        min_frames = config.params.min_frames
-        border_margin = config.params.border_margin
-
-        logger.info(
-            "FOV %d: Cropping cells (padding=%d, mask_margin=%d, min_frames=%d, border_margin=%d)...",
-            fov,
-            padding,
-            mask_margin,
-            min_frames,
-            border_margin,
-        )
+        logger.info("FOV %d: Cropping cells...", fov)
 
         # Extract crops
         cell_crops = crop_cells(
             labeled=seg_tracked_data,
             channels=channels,
             backgrounds=backgrounds,
-            padding=padding,
-            mask_margin=mask_margin,
-            min_frames=min_frames,
-            border_margin=border_margin,
             progress_callback=partial(self.progress_callback, fov),
             cancel_event=cancel_event,
         )

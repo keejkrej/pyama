@@ -33,19 +33,12 @@ class Channels(BaseModel):
 class ProcessingParams(BaseModel):
     """Typed processing parameters for the pipeline."""
 
-    fovs: str = ""
-    batch_size: int = Field(default=2, ge=1)
-    n_workers: int = Field(default=2, ge=1)
+    fovs: str = Field(default="all", description="FOV selection: 'all' or range (e.g., '0-5, 7, 10-15')")
+    batch_size: int = Field(default=1, ge=1)
+    n_workers: int = Field(default=1, ge=1)
     background_weight: float = Field(default=1.0, ge=0)
     segmentation_method: str = "logstd"
     tracking_method: str = "iou"
-    crop_padding: int = Field(default=5, ge=0)
-    mask_margin: int = Field(default=0, ge=0)
-    min_frames: int = Field(default=30, ge=1)
-    border_margin: int = Field(default=50, ge=0)
-    fov_list: list[int] | None = None
-    fov_start: int = Field(default=0, ge=0)
-    fov_end: int | None = None
 
 
 class ProcessingConfig(BaseModel):

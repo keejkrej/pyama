@@ -1,29 +1,39 @@
+import { useEffect } from "react";
 import {
   ChatContainer,
   ChatInput,
   MessageBubble,
   ToolCallDisplay,
 } from "../components/chat";
-import { useChatContext } from "../contexts";
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-}
-
-interface ToolCall {
-  id: string;
-  toolName: string;
-  input?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  isComplete: boolean;
-}
+import {
+  useChatStore,
+  type ChatMessage,
+  type ToolCall,
+} from "../stores";
 
 export function ChatPage() {
-  const { items, isProcessing, error, sendMessage, cancelQuery } =
-    useChatContext();
+  const {
+    items,
+    isProcessing,
+    error,
+    sendMessage,
+    cancelQuery,
+    handleAgentMessage,
+    setIsProcessing,
+  } = useChatStore();
+
+  // Set up agent message listeners
+  useEffect(() => {
+    if (!window.agentAPI) return;
+
+    const cleanupMessage = window.agentAPI.onMessage(handleAgentMessage);
+    const cleanupDone = window.agentAPI.onDone(() => setIsProcessing(false));
+
+    return () => {
+      cleanupMessage();
+      cleanupDone();
+    };
+  }, [handleAgentMessage, setIsProcessing]);
 
   return (
     <div className="h-full flex flex-col">

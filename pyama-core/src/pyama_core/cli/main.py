@@ -426,15 +426,6 @@ def workflow(
             )
             raise typer.Exit(code=1) from exc
 
-        # Extract workflow parameters from config
-        if config.params.fov_list is not None:
-            fov_list = list(config.params.fov_list)
-        else:
-            fov_end = config.params.fov_end if config.params.fov_end is not None else metadata.n_fovs - 1
-            fov_list = list(range(config.params.fov_start, fov_end + 1))
-        batch_size = config.params.batch_size
-        n_workers = config.params.n_workers
-
         # Validate config
         if config.channels is None:
             typer.secho(
@@ -467,9 +458,9 @@ def workflow(
         typer.echo(f"  Tracking method: {config.params.tracking_method}")
         typer.echo(f"  Background weight: {config.params.background_weight}")
         typer.echo(f"\nWorkflow Parameters:")
-        typer.echo(f"  FOVs: {_format_fov_list(fov_list)}")
-        typer.echo(f"  Batch size: {batch_size}")
-        typer.echo(f"  Number of workers: {n_workers}")
+        typer.echo(f"  FOVs: {config.params.fovs}")
+        typer.echo(f"  Batch size: {config.params.batch_size}")
+        typer.echo(f"  Number of workers: {config.params.n_workers}")
         typer.echo(f"\nOutput Directory: {output_dir}")
         typer.echo("=" * 60)
 
@@ -480,9 +471,6 @@ def workflow(
             metadata=metadata,
             config=config,
             output_dir=output_dir,
-            fov_list=fov_list,
-            batch_size=batch_size,
-            n_workers=n_workers,
         )
 
         try:
@@ -677,7 +665,7 @@ def workflow(
     typer.echo("=" * 60)
 
     fov_list = _prompt_fov_list(max_fov)
-    batch_size = _prompt_int("Batch size", 2, minimum=1)
+    batch_size = _prompt_int("Batch size", 1, minimum=1)
     n_workers = _prompt_int("Number of workers", 1, minimum=1)
 
     # Create ProcessingConfig with all collected parameters
@@ -1062,7 +1050,7 @@ def plot(
 @app.command()
 def serve(
     host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind to"),
-    port: int = typer.Option(8000, "--port", "-p", help="Port to bind to"),
+    port: int = typer.Option(8765, "--port", "-p", help="Port to bind to"),
     reload: bool = typer.Option(
         False, "--reload", "-r", help="Enable auto-reload for development"
     ),
@@ -1075,7 +1063,7 @@ def serve(
     - Creating and managing processing tasks
 
     Example:
-        pyama-core serve --port 8000 --reload
+        pyama-core serve --port 8765 --reload
     """
     import uvicorn
 

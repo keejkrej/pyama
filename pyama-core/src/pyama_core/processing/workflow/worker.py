@@ -25,13 +25,12 @@ class WorkflowWorker:
     by both CLI and GUI applications. It handles cancellation, error handling,
     and provides a consistent interface for workflow execution.
 
+    All workflow parameters (fovs, batch_size, n_workers) are read from config.params.
+
     Attributes:
         metadata: Microscopy metadata for the input file
         config: Processing config with channel and parameter configuration
         output_dir: Directory to write outputs
-        fov_list: List of FOV indices to process
-        batch_size: Number of FOVs to process in each batch
-        n_workers: Number of parallel worker threads
         cancel_event: Threading event for cancellation support
     """
 
@@ -41,37 +40,21 @@ class WorkflowWorker:
         metadata: MicroscopyMetadata,
         config: ProcessingConfig,
         output_dir: Path,
-        fov_list: list[int],
-        batch_size: int,
-        n_workers: int,
     ) -> None:
         """Initialize the workflow worker.
 
         Args:
             metadata: Microscopy metadata for the input file
             config: Processing config with channel and parameter configuration
+                - params.fovs: FOV selection ("all" or range like "0-5, 7")
+                - params.batch_size: Number of FOVs per batch
+                - params.n_workers: Number of parallel workers
             output_dir: Directory to write outputs
-            fov_list: List of FOV indices to process
-            batch_size: Number of FOVs to process in each batch
-            n_workers: Number of parallel worker threads
         """
         self._metadata = metadata
         self._config = ensure_config(config)
         self._output_dir = output_dir
-        self._fov_list = fov_list
-        self._batch_size = batch_size
-        self._n_workers = n_workers
         self._cancel_event = threading.Event()
-
-    def _format_fov_list(self) -> str:
-        """Format FOV list for logging (compact representation)."""
-        if not self._fov_list:
-            return "(none)"
-        if len(self._fov_list) == 1:
-            return str(self._fov_list[0])
-        if len(self._fov_list) <= 5:
-            return ", ".join(str(f) for f in self._fov_list)
-        return f"{self._fov_list[0]}...{self._fov_list[-1]} ({len(self._fov_list)} FOVs)"
 
     def run(self) -> tuple[bool, str]:
         """Execute the processing workflow.
@@ -82,18 +65,17 @@ class WorkflowWorker:
         Returns:
             Tuple of (success: bool, message: str) indicating workflow result.
         """
-        fov_desc = self._format_fov_list()
         try:
             # Check for cancellation before starting
             if self._cancel_event.is_set():
-                logger.info("Workflow cancelled before execution (fovs=%s)", fov_desc)
+                logger.info("Workflow cancelled before execution")
                 return (False, "Workflow cancelled")
 
             logger.info(
                 "Workflow execution started (fovs=%s, batch_size=%d, workers=%d, output_dir=%s)",
-                fov_desc,
-                self._batch_size,
-                self._n_workers,
+                self._config.params.fovs,
+                self._config.params.batch_size,
+                self._config.params.n_workers,
                 self._output_dir,
             )
 
@@ -101,15 +83,12 @@ class WorkflowWorker:
                 self._metadata,
                 self._config,
                 self._output_dir,
-                fov_list=self._fov_list,
-                batch_size=self._batch_size,
-                n_workers=self._n_workers,
                 cancel_event=self._cancel_event,
             )
 
             # Check for cancellation after workflow completion
             if self._cancel_event.is_set():
-                logger.info("Workflow was cancelled during execution (fovs=%s)", fov_desc)
+                logger.info("Workflow was cancelled during execution")
                 return (False, "Workflow cancelled")
 
             if success:
@@ -130,8 +109,7 @@ class WorkflowWorker:
         termination of processing.
         """
         logger.info(
-            "Cancelling workflow execution (fovs=%s, output_dir=%s)",
-            self._format_fov_list(),
+            "Cancelling workflow execution (output_dir=%s)",
             self._output_dir,
         )
         self._cancel_event.set()

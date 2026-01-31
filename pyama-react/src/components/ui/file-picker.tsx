@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { Button } from "./button";
 
 interface FilePickerProps {
@@ -6,9 +5,20 @@ interface FilePickerProps {
   accept?: string;
   multiple?: boolean;
   directory?: boolean;
-  onFileSelect?: (files: FileList | null) => void;
+  onFileSelect?: (paths: string[]) => void;
   buttonText?: string;
   className?: string;
+}
+
+// Access Electron API from preload
+declare global {
+  interface Window {
+    electronAPI?: {
+      showOpenDialog: (
+        options: Electron.OpenDialogOptions,
+      ) => Promise<Electron.OpenDialogReturnValue>;
+    };
+  }
 }
 
 export function FilePicker({
@@ -20,15 +30,31 @@ export function FilePicker({
   buttonText = "Browse...",
   className = "",
 }: FilePickerProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleButtonClick = async () => {
+    if (!window.electronAPI) {
+      console.warn("Electron API not available");
+      return;
+    }
 
-  const handleButtonClick = () => {
-    fileInputRef.current?.click();
-  };
+    // Convert accept string (e.g., ".nd2") to Electron filter format
+    const filters: Electron.FileFilter[] = [];
+    if (accept && !directory) {
+      const extensions = accept
+        .split(",")
+        .map((ext) => ext.trim().replace(/^\./, ""));
+      filters.push({ name: "Files", extensions });
+    }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (onFileSelect) {
-      onFileSelect(e.currentTarget.files);
+    const result = await window.electronAPI.showOpenDialog({
+      properties: [
+        directory ? "openDirectory" : "openFile",
+        ...(multiple ? ["multiSelections" as const] : []),
+      ],
+      filters: filters.length > 0 ? filters : undefined,
+    });
+
+    if (!result.canceled && result.filePaths.length > 0 && onFileSelect) {
+      onFileSelect(result.filePaths);
     }
   };
 
@@ -40,15 +66,6 @@ export function FilePicker({
         </label>
       )}
       <div className="flex items-center gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={accept}
-          multiple={multiple}
-          {...(directory ? { webkitdirectory: "", directory: "" } : {})}
-          onChange={handleFileChange}
-          className="hidden"
-        />
         <Button onClick={handleButtonClick} variant="outline">
           {buttonText}
         </Button>

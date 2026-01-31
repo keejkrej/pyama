@@ -1,18 +1,26 @@
 import { useState } from "react";
 import {
   Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
   Button,
   NumberInput,
   FilePicker,
   Section,
   Input,
+  Label,
 } from "../components/ui";
 import { AnalysisWindow } from "../components/popups/analysis-window";
+import { useAnalysisStore } from "../stores";
 
 export function AnalysisPage() {
+  // Persisted state from zustand store
+  const { dataFolder, setDataFolder, frameInterval, setFrameInterval } =
+    useAnalysisStore();
+
+  // Local state
   const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
-  const [dataFolder, setDataFolder] = useState("");
-  const [frameInterval, setFrameInterval] = useState(10);
   const [timeMapping] = useState<string>("none");
   const [samples] = useState<string[]>([]);
 
@@ -29,12 +37,11 @@ export function AnalysisPage() {
 
       <div className="grid grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Load Data */}
-        <Card
-          title="Load Data"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Load Data</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Data Folder">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -46,14 +53,9 @@ export function AnalysisPage() {
                     readOnly
                   />
                   <FilePicker
-                    onFileSelect={(files) => {
-                      if (files && files.length > 0) {
-                        const path =
-                          (files[0] as any).webkitRelativePath || files[0].name;
-                        const dirPath =
-                          path.substring(0, path.lastIndexOf("/")) ||
-                          files[0].name;
-                        setDataFolder(dirPath || "Selected");
+                    onFileSelect={(paths) => {
+                      if (paths.length > 0) {
+                        setDataFolder(paths[0]);
                       }
                     }}
                     directory
@@ -72,10 +74,8 @@ export function AnalysisPage() {
 
             <Section title="Time Configuration">
               <div className="space-y-2.5">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-foreground">
-                    Frame interval
-                  </label>
+                <div className="space-y-1">
+                  <Label>Frame interval</Label>
                   <div className="flex items-center gap-2">
                     <NumberInput
                       value={frameInterval}
@@ -89,10 +89,8 @@ export function AnalysisPage() {
                     </span>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-foreground">
-                    Time mapping
-                  </label>
+                <div className="space-y-1">
+                  <Label>Time mapping</Label>
                   <div className="p-3 bg-card rounded-lg border border-dashed border-border">
                     <p className="text-xs text-muted-foreground">
                       {timeMapping === "none"
@@ -114,16 +112,15 @@ export function AnalysisPage() {
                 Clear
               </Button>
             </div>
-          </div>
+          </CardContent>
         </Card>
 
         {/* Middle Column: Samples */}
-        <Card
-          title="Samples"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Samples</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Loaded Samples">
               <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[180px] flex flex-col">
                 {samples.length === 0 ? (
@@ -187,16 +184,15 @@ export function AnalysisPage() {
                 </Button>
               </div>
             </Section>
-          </div>
+          </CardContent>
         </Card>
 
         {/* Right Column: Comparison */}
-        <Card
-          title="Comparison"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Comparison</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Analysis">
               <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
                 <div className="text-center">
@@ -250,7 +246,7 @@ export function AnalysisPage() {
                 </Button>
               </div>
             </Section>
-          </div>
+          </CardContent>
         </Card>
       </div>
 

@@ -179,9 +179,6 @@ def run_complete_workflow(
     metadata: MicroscopyMetadata,
     config: ProcessingConfig,
     output_dir: Path,
-    fov_list: list[int] | None = None,
-    batch_size: int = 2,
-    n_workers: int = 2,
     cancel_event: threading.Event | None = None,
 ) -> bool:
     """Run the complete processing workflow.
@@ -203,16 +200,17 @@ def run_complete_workflow(
     Args:
         metadata: Microscopy file metadata.
         config: Processing configuration (channels and params).
+            - params.fovs: FOV selection ("all" or range like "0-5, 7")
+            - params.batch_size: Number of FOVs per batch
+            - params.n_workers: Number of parallel workers
         output_dir: Directory to write outputs.
-        fov_list: List of FOV indices to process (default: all FOVs).
-            Use range syntax when calling CLI: "0-5, 7, 10-15"
-        batch_size: Number of FOVs to copy before parallel processing.
-        n_workers: Number of parallel workers for processing.
         cancel_event: Optional event to signal cancellation.
 
     Returns:
         True if all FOVs processed successfully, False otherwise.
     """
+    from pyama_core.processing.merge.run import parse_fov_range
+
     config = ensure_config(config)
     overall_success = False
 
@@ -221,23 +219,18 @@ def run_complete_workflow(
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        n_fov = metadata.n_fovs
-
-        # Default to all FOVs if not specified
-        if fov_list is None:
-            fov_indices = list(range(n_fov))
+        # Resolve FOVs from config
+        fovs = config.params.fovs
+        n_fovs = metadata.n_fovs
+        if not fovs or fovs.lower() == "all":
+            fov_indices = list(range(n_fovs))
         else:
-            # Validate FOV indices
-            invalid_fovs = [f for f in fov_list if f < 0 or f >= n_fov]
-            if invalid_fovs:
-                logger.error(
-                    "Invalid FOV indices: %s (file has %d FOVs, valid range: 0-%d)",
-                    invalid_fovs,
-                    n_fov,
-                    n_fov - 1,
-                )
-                return False
-            fov_indices = sorted(set(fov_list))  # Remove duplicates and sort
+            fov_indices = parse_fov_range(fovs)
+            invalid = [f for f in fov_indices if f < 0 or f >= n_fovs]
+            if invalid:
+                raise ValueError(f"Invalid FOV indices: {invalid} (valid: 0-{n_fovs - 1})")
+        batch_size = config.params.batch_size
+        n_workers = config.params.n_workers
 
         total_fovs = len(fov_indices)
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, shell, ipcMain, dialog, session } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { agentQuery, type AgentMessage } from "./agent";
@@ -103,4 +103,9 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+// Clear localStorage on app quit so session state doesn't persist
+app.on("before-quit", () => {
+  session.defaultSession.clearStorageData({ storages: ["localstorage"] });
 });

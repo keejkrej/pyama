@@ -1,14 +1,24 @@
 import { useState, useRef, useEffect } from "react";
 import {
   Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
   Button,
   Input,
+  Label,
   NumberInput,
   Checkbox,
   Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableHeader,
+  TableBody,
   TableRow,
+  TableHead,
   TableCell,
   FilePicker,
   Section,
@@ -16,32 +26,36 @@ import {
 } from "../components/ui";
 import { api } from "../lib/api";
 import type { TaskResponse } from "../lib/api";
-
-interface FlChannelEntry {
-  channel: number;
-  feature: string;
-}
-
-interface SchemaProperty {
-  type: string;
-  default?: unknown;
-  description?: string;
-}
+import { useProcessingStore, type SchemaProperty } from "../stores";
 
 export function ProcessingPage() {
-  const [microscopyFile, setMicroscopyFile] = useState("");
-  const [phaseContrastChannel, setPhaseContrastChannel] = useState(0);
-  const [flEntries, setFlEntries] = useState<FlChannelEntry[]>([
-    { channel: 1, feature: "intensity_total" },
-  ]);
-  const [outputDir, setOutputDir] = useState("");
-  const [manualParams, setManualParams] = useState(true);
-  const [paramsSchema, setParamsSchema] = useState<Record<
-    string,
-    SchemaProperty
-  > | null>(null);
-  const [schemaLoading, setSchemaLoading] = useState(true);
-  const [params, setParams] = useState<Record<string, unknown>>({});
+  // Get persisted state from zustand store
+  const {
+    microscopyFile,
+    setMicroscopyFile,
+    microscopyMetadata,
+    setMicroscopyMetadata,
+    metadataLoading,
+    setMetadataLoading,
+    pcEntries,
+    setPcEntries,
+    flEntries,
+    setFlEntries,
+    availableFeatures,
+    featuresLoading,
+    outputDir,
+    setOutputDir,
+    manualParams,
+    setManualParams,
+    params,
+    setParams,
+    paramsSchema,
+    schemaLoading,
+    fetchFeatures,
+    fetchSchema,
+  } = useProcessingStore();
+
+  // Local state (not persisted across tab changes)
   const tooltipRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<SVGSVGElement>(null);
 
@@ -84,35 +98,26 @@ export function ProcessingPage() {
     }
   }, []);
 
-  // Fetch config schema on mount
+  // Fetch features and schema on mount (cached in store)
   useEffect(() => {
-    api
-      .getConfigSchema()
-      .then((schema) => {
-        const schemaAny = schema as any;
-        // Handle $ref - Pydantic uses $defs for nested models
-        let paramsProps = schemaAny?.properties?.params?.properties;
-        if (!paramsProps && schemaAny?.properties?.params?.$ref) {
-          // Dereference: "$ref": "#/$defs/ProcessingParamsSchema"
-          const refPath = schemaAny.properties.params.$ref;
-          const refName = refPath.split("/").pop();
-          paramsProps = schemaAny?.$defs?.[refName]?.properties;
-        }
-        if (paramsProps) {
-          setParamsSchema(paramsProps);
-          // Initialize params with schema defaults
-          const defaults: Record<string, unknown> = {};
-          for (const [key, prop] of Object.entries(paramsProps)) {
-            if ((prop as SchemaProperty).default !== undefined) {
-              defaults[key] = (prop as SchemaProperty).default;
-            }
-          }
-          setParams(defaults);
-        }
-      })
-      .catch((err) => console.warn("Failed to fetch config schema:", err))
-      .finally(() => setSchemaLoading(false));
+    fetchFeatures();
+    fetchSchema();
   }, []);
+
+  // Fetch microscopy metadata when file changes (skip if already cached)
+  useEffect(() => {
+    if (!microscopyFile) {
+      setMicroscopyMetadata(null);
+      return;
+    }
+    if (microscopyMetadata) return; // Already have cached metadata
+    setMetadataLoading(true);
+    api
+      .loadMicroscopy(microscopyFile)
+      .then((metadata) => setMicroscopyMetadata(metadata))
+      .catch((err) => console.warn("Failed to load microscopy metadata:", err))
+      .finally(() => setMetadataLoading(false));
+  }, [microscopyFile, microscopyMetadata]);
 
   // Poll for task updates
   useEffect(() => {
@@ -146,7 +151,9 @@ export function ProcessingPage() {
       // Build config from current state
       const config = {
         channels: {
-          pc: { [phaseContrastChannel]: ["area"] },
+          pc: Object.fromEntries(
+            pcEntries.map((entry) => [entry.channel, [entry.feature]]),
+          ),
           fl: Object.fromEntries(
             flEntries.map((entry) => [entry.channel, [entry.feature]]),
           ),
@@ -176,14 +183,24 @@ export function ProcessingPage() {
     }
   };
 
-  const handleAddFluorescence = () => {
-    setFlEntries([...flEntries, { channel: 0, feature: "intensity_total" }]);
+  const handleAddPhaseContrast = () => {
+    const defaultFeature = availableFeatures?.phase[0];
+    if (!defaultFeature) return;
+    setPcEntries([...pcEntries, { channel: 0, feature: defaultFeature }]);
   };
 
-  const handleRemoveFluorescence = () => {
-    if (flEntries.length > 0) {
-      setFlEntries(flEntries.slice(0, -1));
-    }
+  const handleRemovePhaseContrast = (idx: number) => {
+    setPcEntries(pcEntries.filter((_, i) => i !== idx));
+  };
+
+  const handleAddFluorescence = () => {
+    const defaultFeature = availableFeatures?.fluorescence[0];
+    if (!defaultFeature) return;
+    setFlEntries([...flEntries, { channel: 0, feature: defaultFeature }]);
+  };
+
+  const handleRemoveFluorescence = (idx: number) => {
+    setFlEntries(flEntries.filter((_, i) => i !== idx));
   };
 
   const renderParamInput = (
@@ -223,12 +240,11 @@ export function ProcessingPage() {
 
       <div className="grid grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Input */}
-        <Card
-          title="Input"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Input</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Microscopy">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -239,19 +255,58 @@ export function ProcessingPage() {
                     className="flex-1"
                   />
                   <FilePicker
-                    onFileSelect={(files) => {
-                      if (files && files.length > 0) {
-                        setMicroscopyFile(files[0].name);
+                    onFileSelect={(paths) => {
+                      if (paths.length > 0) {
+                        setMicroscopyFile(paths[0]);
                       }
                     }}
                     accept=".nd2"
                     buttonText="Browse"
                   />
                 </div>
-                <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
-                  <p className="text-xs text-muted-foreground">
-                    Microscopy Metadata
-                  </p>
+                <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px]">
+                  {metadataLoading ? (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Loading metadata...
+                    </p>
+                  ) : microscopyMetadata ? (
+                    <div className="text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">File:</span>
+                        <span className="text-foreground font-medium truncate ml-2">
+                          {microscopyMetadata.base_name}.{microscopyMetadata.file_type}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Dimensions:</span>
+                        <span className="text-foreground">
+                          {microscopyMetadata.width} × {microscopyMetadata.height}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">FOVs:</span>
+                        <span className="text-foreground">
+                          {microscopyMetadata.n_fovs}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Timepoints:</span>
+                        <span className="text-foreground">
+                          {microscopyMetadata.n_frames}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Channels:</span>
+                        <span className="text-foreground">
+                          {microscopyMetadata.n_channels}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Microscopy Metadata
+                    </p>
+                  )}
                 </div>
               </div>
             </Section>
@@ -259,94 +314,205 @@ export function ProcessingPage() {
             <div className="my-4 border-t border-border"></div>
 
             <Section title="Channels">
-              <div className="space-y-2.5">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-foreground">
-                    Phase Contrast
-                  </label>
-                  <NumberInput
-                    value={phaseContrastChannel}
-                    onChange={setPhaseContrastChannel}
-                    min={0}
-                    className="w-full"
-                  />
-                  <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
-                    <p className="text-xs text-muted-foreground">
-                      Phase Contrast Features
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-foreground">
-                    Fluorescence
-                  </label>
-                  <div className="space-y-2 mb-2">
-                    {flEntries.map((entry, idx) => (
-                      <div key={idx} className="flex gap-2">
-                        <NumberInput
-                          value={entry.channel}
-                          onChange={(v) => {
-                            const updated = [...flEntries];
-                            updated[idx] = { ...entry, channel: v };
-                            setFlEntries(updated);
-                          }}
-                          min={0}
-                          className="w-20"
-                        />
+              <div className="space-y-3">
+                {/* Phase Contrast Cards */}
+                {pcEntries.map((entry, idx) => (
+                  <div
+                    key={`pc-${idx}`}
+                    className="p-3 bg-card rounded-lg border border-border"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-foreground">
+                        Phase Contrast
+                      </span>
+                      <button
+                        onClick={() => handleRemovePhaseContrast(idx)}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <Label className="block text-xs text-muted-foreground mb-1">Channel</Label>
+                        {microscopyMetadata?.channel_names?.length ? (
+                          <Select
+                            value={String(entry.channel)}
+                            onValueChange={(value) => {
+                              const updated = [...pcEntries];
+                              updated[idx] = { ...entry, channel: Number(value) };
+                              setPcEntries(updated);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {microscopyMetadata.channel_names.map((name, i) => (
+                                <SelectItem key={i} value={String(i)}>
+                                  {name || `Channel ${i}`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <NumberInput
+                            value={entry.channel}
+                            onChange={(v) => {
+                              const updated = [...pcEntries];
+                              updated[idx] = { ...entry, channel: v };
+                              setPcEntries(updated);
+                            }}
+                            min={0}
+                            className="w-full"
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <Label className="block text-xs text-muted-foreground mb-1">Feature</Label>
                         <Select
                           value={entry.feature}
-                          onChange={(e) => {
+                          onValueChange={(value) => {
+                            const updated = [...pcEntries];
+                            updated[idx] = { ...entry, feature: value };
+                            setPcEntries(updated);
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableFeatures?.phase.map((f) => (
+                              <SelectItem key={f} value={f}>
+                                {f.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Fluorescence Cards */}
+                {flEntries.map((entry, idx) => (
+                  <div
+                    key={`fl-${idx}`}
+                    className="p-3 bg-card rounded-lg border border-border"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-foreground">
+                        Fluorescence
+                      </span>
+                      <button
+                        onClick={() => handleRemoveFluorescence(idx)}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <Label className="block text-xs text-muted-foreground mb-1">Channel</Label>
+                        {microscopyMetadata?.channel_names?.length ? (
+                          <Select
+                            value={String(entry.channel)}
+                            onValueChange={(value) => {
+                              const updated = [...flEntries];
+                              updated[idx] = { ...entry, channel: Number(value) };
+                              setFlEntries(updated);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {microscopyMetadata.channel_names.map((name, i) => (
+                                <SelectItem key={i} value={String(i)}>
+                                  {name || `Channel ${i}`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <NumberInput
+                            value={entry.channel}
+                            onChange={(v) => {
+                              const updated = [...flEntries];
+                              updated[idx] = { ...entry, channel: v };
+                              setFlEntries(updated);
+                            }}
+                            min={0}
+                            className="w-full"
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <Label className="block text-xs text-muted-foreground mb-1">Feature</Label>
+                        <Select
+                          value={entry.feature}
+                          onValueChange={(value) => {
                             const updated = [...flEntries];
-                            updated[idx] = {
-                              ...entry,
-                              feature: e.currentTarget.value,
-                            };
+                            updated[idx] = { ...entry, feature: value };
                             setFlEntries(updated);
                           }}
-                          options={[
-                            {
-                              value: "intensity_total",
-                              label: "Intensity Total",
-                            },
-                            { value: "particle_num", label: "Particle Num" },
-                          ]}
-                          className="flex-1"
-                        />
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableFeatures?.fluorescence.map((f) => (
+                              <SelectItem key={f} value={f}>
+                                {f.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                  <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
+                ))}
+
+                {/* Empty state */}
+                {pcEntries.length === 0 && flEntries.length === 0 && (
+                  <div className="p-4 bg-card rounded-lg border border-dashed border-border text-center">
                     <p className="text-xs text-muted-foreground">
-                      Fluorescence Features
+                      No channels configured. Add a channel to get started.
                     </p>
                   </div>
-                </div>
+                )}
               </div>
             </Section>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <Button onClick={handleAddFluorescence} variant="secondary">
-                Add
+              <Button
+                onClick={handleAddPhaseContrast}
+                variant="secondary"
+                disabled={featuresLoading || !availableFeatures?.phase.length}
+              >
+                Add PC
               </Button>
               <Button
+                onClick={handleAddFluorescence}
                 variant="secondary"
-                onClick={handleRemoveFluorescence}
-                disabled={flEntries.length === 0}
+                disabled={featuresLoading || !availableFeatures?.fluorescence.length}
               >
-                Remove
+                Add FL
               </Button>
             </div>
-          </div>
+          </CardContent>
         </Card>
 
         {/* Middle Column: Output */}
-        <Card
-          title="Output"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Output</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Save Directory">
               <div className="flex items-center gap-2">
                 <Input
@@ -357,13 +523,9 @@ export function ProcessingPage() {
                   readOnly
                 />
                 <FilePicker
-                  onFileSelect={(files) => {
-                    if (files && files.length > 0) {
-                      // Extract directory path from file path
-                      const path =
-                        (files[0] as any).webkitRelativePath || files[0].name;
-                      const dirPath = path.substring(0, path.lastIndexOf("/"));
-                      setOutputDir(dirPath || "Selected");
+                  onFileSelect={(paths) => {
+                    if (paths.length > 0) {
+                      setOutputDir(paths[0]);
                     }
                   }}
                   directory
@@ -375,26 +537,27 @@ export function ProcessingPage() {
             <div className="my-4 border-t border-border"></div>
 
             <Section title="Parameters">
-              <div className="mb-3">
+              <div className="mb-3 flex items-center gap-2">
                 <Checkbox
-                  label="Set parameters manually"
+                  id="manual-params"
                   checked={manualParams}
-                  onChange={(e) => setManualParams(e.currentTarget.checked)}
+                  onCheckedChange={(checked) => setManualParams(checked === true)}
                 />
+                <Label htmlFor="manual-params">Set parameters manually</Label>
               </div>
 
               <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableCell header className="border-r border-border w-1/2">
+                    <TableHead className="border-r border-border w-1/2">
                       Name
-                    </TableCell>
-                    <TableCell header className="w-1/2">
+                    </TableHead>
+                    <TableHead className="w-1/2">
                       Value
-                    </TableCell>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
-                <tbody>
+                <TableBody>
                   {!manualParams ? (
                     <TableRow>
                       <TableCell
@@ -434,7 +597,7 @@ export function ProcessingPage() {
                       </TableRow>
                     ))
                   )}
-                </tbody>
+                </TableBody>
               </Table>
             </Section>
 
@@ -524,28 +687,24 @@ export function ProcessingPage() {
                 Cancel
               </Button>
             </div>
-          </div>
+          </CardContent>
         </Card>
 
         {/* Right Column: Samples */}
-        <Card
-          title="Samples"
-          className="h-full flex flex-col"
-          bodyClassName="flex-1 flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
+        <Card className="h-full flex flex-col">
+          <CardHeader>
+            <CardTitle>Samples</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col">
             <Section title="Assign FOVs">
               <div className="relative">
                 <Table className="table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableCell
-                        header
-                        className="border-r border-border w-1/2"
-                      >
+                      <TableHead className="border-r border-border w-1/2">
                         Name
-                      </TableCell>
-                      <TableCell header className="w-1/2">
+                      </TableHead>
+                      <TableHead className="w-1/2">
                         <div className="flex items-center gap-1.5">
                           <span>FOV</span>
                           <div className="relative group">
@@ -595,10 +754,10 @@ export function ProcessingPage() {
                             </svg>
                           </div>
                         </div>
-                      </TableCell>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
-                  <tbody>
+                  <TableBody>
                     <TableRow>
                       <TableCell
                         colSpan={2}
@@ -607,7 +766,7 @@ export function ProcessingPage() {
                         No samples assigned
                       </TableCell>
                     </TableRow>
-                  </tbody>
+                  </TableBody>
                 </Table>
                 {/* Tooltip positioned outside table overflow using fixed positioning */}
                 <div
@@ -647,10 +806,8 @@ export function ProcessingPage() {
 
             <Section title="Merge Samples">
               <div className="space-y-2.5">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-foreground">
-                    Sample YAML
-                  </label>
+                <div className="space-y-1">
+                  <Label>Sample YAML</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       placeholder="Select sample YAML file"
@@ -660,20 +817,16 @@ export function ProcessingPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-foreground">
-                    Folder of processed FOVs
-                  </label>
+                <div className="space-y-1">
+                  <Label>Folder of processed FOVs</Label>
                   <div className="flex items-center gap-2">
                     <Input placeholder="Select folder" className="flex-1" />
                     <FilePicker onFileSelect={() => {}} buttonText="Browse" />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-foreground">
-                    Output folder
-                  </label>
+                <div className="space-y-1">
+                  <Label>Output folder</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       placeholder="Select output folder"
@@ -694,7 +847,7 @@ export function ProcessingPage() {
                 </div>
               </div>
             </Section>
-          </div>
+          </CardContent>
         </Card>
       </div>
     </div>
