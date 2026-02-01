@@ -104,20 +104,30 @@ export function ProcessingPage() {
     fetchSchema();
   }, []);
 
-  // Fetch microscopy metadata when file changes (skip if already cached)
+  // Clear metadata when file path changes (but don't auto-load)
   useEffect(() => {
-    if (!microscopyFile) {
+    if (microscopyMetadata && microscopyMetadata.file_path !== microscopyFile) {
       setMicroscopyMetadata(null);
+    }
+  }, [microscopyFile, microscopyMetadata]);
+
+  // Handle manual loading of microscopy metadata
+  const handleLoadMicroscopy = async () => {
+    if (!microscopyFile) {
       return;
     }
-    if (microscopyMetadata) return; // Already have cached metadata
     setMetadataLoading(true);
-    api
-      .loadMicroscopy(microscopyFile)
-      .then((metadata) => setMicroscopyMetadata(metadata))
-      .catch((err) => console.warn("Failed to load microscopy metadata:", err))
-      .finally(() => setMetadataLoading(false));
-  }, [microscopyFile, microscopyMetadata]);
+    setMicroscopyMetadata(null); // Clear previous metadata
+    try {
+      const metadata = await api.loadMicroscopy(microscopyFile);
+      setMicroscopyMetadata(metadata);
+    } catch (err) {
+      console.warn("Failed to load microscopy metadata:", err);
+      setMicroscopyMetadata(null);
+    } finally {
+      setMetadataLoading(false);
+    }
+  };
 
   // Poll for task updates
   useEffect(() => {
@@ -263,6 +273,13 @@ export function ProcessingPage() {
                     accept=".nd2"
                     buttonText="Browse"
                   />
+                  <Button
+                    onClick={handleLoadMicroscopy}
+                    disabled={!microscopyFile || metadataLoading}
+                    variant="default"
+                  >
+                    {metadataLoading ? "Loading..." : "Load"}
+                  </Button>
                 </div>
                 <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px]">
                   {metadataLoading ? (
