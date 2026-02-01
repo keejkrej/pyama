@@ -9,13 +9,23 @@ import {
   CardTitle,
   CardContent,
 } from "../ui";
+import type { ProjectData } from "../../lib/api";
 
 interface ImageViewerProps {
   isOpen: boolean;
   onClose: () => void;
+  projectData?: ProjectData | null;
+  fov?: number;
+  selectedChannels?: string[];
 }
 
-export function ImageViewer({ isOpen, onClose }: ImageViewerProps) {
+export function ImageViewer({
+  isOpen,
+  onClose,
+  projectData,
+  fov,
+  selectedChannels = [],
+}: ImageViewerProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent fullScreen>
@@ -26,6 +36,11 @@ export function ImageViewer({ isOpen, onClose }: ImageViewerProps) {
           <Card className="h-full">
             <CardHeader>
               <CardTitle>Image Panel</CardTitle>
+              {projectData && fov !== undefined && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  FOV {fov} • {selectedChannels.length} channel(s) selected
+                </p>
+              )}
             </CardHeader>
             <CardContent className="h-full">
               <div className="flex items-center justify-center h-full min-h-[400px] text-muted-foreground">
@@ -46,10 +61,24 @@ export function ImageViewer({ isOpen, onClose }: ImageViewerProps) {
                   <p className="mb-2 font-medium text-foreground">
                     Image Viewer Placeholder
                   </p>
-                  <p className="text-sm">
+                  <p className="text-sm mb-4">
                     View microscopy images, navigate FOVs and time points, overlay
                     cell masks.
                   </p>
+                  {projectData && fov !== undefined && (
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>
+                        Project: {projectData.base_name || projectData.project_path}
+                      </p>
+                      <p>FOV: {fov}</p>
+                      {selectedChannels.length > 0 && (
+                        <p>Channels: {selectedChannels.join(", ")}</p>
+                      )}
+                      <p className="mt-2 text-xs">
+                        Image loading via API will be implemented in a future update.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>

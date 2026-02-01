@@ -3,8 +3,8 @@
 import os
 from pathlib import Path
 
-# Default directory for file dialogs
+# Default folder for file dialogs
 DEFAULT_DIR = os.path.expanduser("~")
 
-# Ensure the default directory exists
+# Ensure the default folder exists
 Path(DEFAULT_DIR).mkdir(parents=True, exist_ok=True)

@@ -2,17 +2,26 @@
  * Storage utilities for managing persisted state.
  */
 
+// Import stores for reset functionality
+// These imports are safe because stores don't import from this module
+import { useProcessingStore } from "../stores/processing";
+import { useVisualizationStore } from "../stores/visualization";
+import { useAnalysisStore } from "../stores/analysis";
+import { useChatStore } from "../stores/chat";
+import { useThemeStore } from "../stores/theme";
+
 /**
  * Clear all PyAMA-related localStorage data.
  * Use this to reset the app to a clean state.
  */
 export function clearAllStorage(): void {
   const keys = [
+    // All Zustand stores (all state is managed by Zustand)
     "pyama:processing",
     "pyama:analysis",
     "pyama:visualization",
     "pyama:chat",
-    "pyama_current_task_id",
+    "pyama:theme",
   ];
 
   keys.forEach((key) => {
@@ -85,15 +94,28 @@ export function clearFileData(): void {
       localStorage.removeItem("pyama:visualization");
     }
   }
-
-  // Clear task ID
-  localStorage.removeItem("pyama_current_task_id");
 }
 
 /**
  * Initialize storage on app start.
  * Clears all persisted state to ensure a clean startup.
+ * Also resets all Zustand stores to their initial state.
+ * 
+ * IMPORTANT: This must be called BEFORE any stores are accessed to prevent
+ * Zustand's persist middleware from restoring old state from localStorage.
  */
 export function initializeStorage(): void {
+  // Clear localStorage first
   clearAllStorage();
+  
+  // Reset stores synchronously after clearing localStorage
+  // This ensures stores don't restore old state when they're first accessed
+  // Note: Stores are created when imported, but persist middleware only
+  // restores state when the store is first accessed via getState() or in a component.
+  // By resetting here, we ensure the in-memory state matches the cleared localStorage.
+  useProcessingStore.getState().resetProcessing();
+  useVisualizationStore.getState().reset();
+  useAnalysisStore.getState().reset();
+  useChatStore.getState().clearChat();
+  useThemeStore.getState().reset();
 }

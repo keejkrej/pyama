@@ -39,7 +39,7 @@ class ParameterPanel(QWidget):
     results_loaded = Signal(
         object
     )  # Emitted when results are loaded from file (pd.DataFrame)
-    plot_saved = Signal(str, str)  # Emitted when a plot is saved (filename, directory)
+    plot_saved = Signal(str, str)  # Emitted when a plot is saved (filename, folder)
 
     # ------------------------------------------------------------------------
     # INITIALIZATION

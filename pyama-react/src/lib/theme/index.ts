@@ -15,9 +15,6 @@ export {
 // Application
 export {
   applyTheme,
-  getStoredPreference,
-  storePreference,
-  getStoredThemeId,
   getSystemPreference,
   onSystemPreferenceChange,
 } from "./apply-theme";

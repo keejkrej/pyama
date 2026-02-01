@@ -22,10 +22,8 @@ import {
   TableCell,
   FilePicker,
   Section,
-  Badge,
 } from "../components/ui";
 import { api } from "../lib/api";
-import type { TaskResponse } from "../lib/api";
 import { useProcessingStore, type SchemaProperty } from "../stores";
 
 export function ProcessingPage() {
@@ -58,45 +56,7 @@ export function ProcessingPage() {
   // Local state (not persisted across tab changes)
   const tooltipRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<SVGSVGElement>(null);
-
-  // Task state - restore from localStorage on mount
-  const [taskId, setTaskId] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("pyama_current_task_id");
-    }
-    return null;
-  });
-  const [taskStatus, setTaskStatus] = useState<TaskResponse | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Persist taskId to localStorage
-  useEffect(() => {
-    if (taskId) {
-      localStorage.setItem("pyama_current_task_id", taskId);
-    } else {
-      localStorage.removeItem("pyama_current_task_id");
-    }
-  }, [taskId]);
-
-  // On mount, check if we have a task to resume
-  useEffect(() => {
-    if (taskId && !taskStatus) {
-      // Fetch current status and resume polling if still running
-      api
-        .getTask(taskId)
-        .then((task) => {
-          setTaskStatus(task);
-          if (task.status === "pending" || task.status === "running") {
-            setIsPolling(true);
-          }
-        })
-        .catch(() => {
-          // Task not found, clear it
-          setTaskId(null);
-        });
-    }
-  }, []);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Fetch features and schema on mount (cached in store)
   useEffect(() => {
@@ -110,6 +70,16 @@ export function ProcessingPage() {
       setMicroscopyMetadata(null);
     }
   }, [microscopyFile, microscopyMetadata]);
+
+  // Auto-clear success message after 5 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   // Handle manual loading of microscopy metadata
   const handleLoadMicroscopy = async () => {
@@ -129,34 +99,8 @@ export function ProcessingPage() {
     }
   };
 
-  // Poll for task updates
-  useEffect(() => {
-    if (!isPolling || !taskId) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const task = await api.getTask(taskId);
-        setTaskStatus(task);
-        if (
-          task.status === "completed" ||
-          task.status === "failed" ||
-          task.status === "cancelled"
-        ) {
-          setIsPolling(false);
-        }
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch task status",
-        );
-        setIsPolling(false);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isPolling, taskId]);
-
   const handleStart = async () => {
-    setError(null);
+    setSuccessMessage(null);
     try {
       // Build config from current state
       const config = {
@@ -172,24 +116,12 @@ export function ProcessingPage() {
       };
 
       // Create fake task for testing (set to true for 60-second simulation)
-      const task = await api.createTask(microscopyFile, config, true);
-      setTaskId(task.id);
-      setTaskStatus(task);
-      setIsPolling(true);
+      await api.createTask(microscopyFile, config, true);
+      setSuccessMessage("Task created successfully! Check the Dashboard to monitor progress.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create task");
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!taskId) return;
-    try {
-      await api.cancelTask(taskId);
-      setIsPolling(false);
-      setTaskId(null);
-      setTaskStatus(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to cancel task");
+      setSuccessMessage(
+        `Failed to create task: ${err instanceof Error ? err.message : "Unknown error"}`,
+      );
     }
   };
 
@@ -530,10 +462,10 @@ export function ProcessingPage() {
             <CardTitle>Output</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col">
-            <Section title="Save Directory">
+            <Section title="Save Folder">
               <div className="flex items-center gap-2">
                 <Input
-                  placeholder="Select output directory"
+                  placeholder="Select folder"
                   value={outputDir}
                   onChange={(e) => setOutputDir(e.currentTarget.value)}
                   className="flex-1"
@@ -545,7 +477,7 @@ export function ProcessingPage() {
                       setOutputDir(paths[0]);
                     }
                   }}
-                  directory
+                  folder
                   buttonText="Browse"
                 />
               </div>
@@ -620,88 +552,33 @@ export function ProcessingPage() {
 
             <div className="my-4 border-t border-border"></div>
 
-            {/* Task Status Display */}
-            {(taskStatus || error) && (
+            {/* Success Message */}
+            {successMessage && (
               <Section title="Status">
-                <div className="space-y-2">
-                  {error && (
-                    <div className="p-2 bg-destructive/10 border border-destructive rounded text-sm text-destructive">
-                      {error}
-                    </div>
-                  )}
-                  {taskStatus && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          Status:
-                        </span>
-                        <Badge
-                          variant={
-                            taskStatus.status === "completed"
-                              ? "success"
-                              : taskStatus.status === "failed"
-                                ? "destructive"
-                                : taskStatus.status === "running"
-                                  ? "info"
-                                  : "muted"
-                          }
-                        >
-                          {taskStatus.status}
-                        </Badge>
-                      </div>
-                      {taskStatus.progress && (
-                        <>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full transition-all duration-300"
-                              style={{
-                                width: `${taskStatus.progress.percent || 0}%`,
-                              }}
-                            />
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {taskStatus.progress.message ||
-                              `${taskStatus.progress.percent?.toFixed(0) || 0}%`}
-                          </p>
-                        </>
-                      )}
-                      {taskStatus.error_message && (
-                        <p className="text-xs text-destructive">
-                          {taskStatus.error_message}
-                        </p>
-                      )}
-                      {taskStatus.status === "completed" &&
-                        taskStatus.result && (
-                          <p className="text-xs text-success">
-                            Output: {taskStatus.result.output_dir}
-                          </p>
-                        )}
-                    </div>
-                  )}
+                <div
+                  className={`p-3 rounded text-sm ${
+                    successMessage.startsWith("Failed")
+                      ? "bg-destructive/10 border border-destructive text-destructive"
+                      : "bg-success/10 border border-success text-success"
+                  }`}
+                >
+                  {successMessage}
                 </div>
               </Section>
             )}
 
-            {(taskStatus || error) && (
+            {successMessage && (
               <div className="my-4 border-t border-border"></div>
             )}
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4">
               <Button
                 variant="default"
-                className="flex-1"
+                className="w-full"
                 onClick={handleStart}
-                disabled={isPolling || !microscopyFile}
+                disabled={!microscopyFile}
               >
-                {isPolling ? "Processing..." : "Start"}
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={handleCancel}
-                disabled={!isPolling}
-              >
-                Cancel
+                Start
               </Button>
             </div>
           </CardContent>
@@ -827,7 +704,7 @@ export function ProcessingPage() {
                   <Label>Sample YAML</Label>
                   <div className="flex items-center gap-2">
                     <Input
-                      placeholder="Select sample YAML file"
+                      placeholder="Select file"
                       className="flex-1"
                     />
                     <FilePicker onFileSelect={() => {}} buttonText="Browse" />
@@ -846,7 +723,7 @@ export function ProcessingPage() {
                   <Label>Output folder</Label>
                   <div className="flex items-center gap-2">
                     <Input
-                      placeholder="Select output folder"
+                      placeholder="Select folder"
                       className="flex-1"
                     />
                     <FilePicker onFileSelect={() => {}} buttonText="Browse" />

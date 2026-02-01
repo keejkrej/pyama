@@ -5,6 +5,7 @@ import {
   VisualizationPage,
   AnalysisPage,
   ChatPage,
+  DashboardPage,
 } from "./pages";
 
 export function App() {
@@ -15,6 +16,7 @@ export function App() {
         <main className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<ProcessingPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/visualization" element={<VisualizationPage />} />
             <Route path="/analysis" element={<AnalysisPage />} />
             <Route path="/chat" element={<ChatPage />} />

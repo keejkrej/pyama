@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardHeader,
@@ -17,10 +17,11 @@ import {
   Label,
 } from "../components/ui";
 import { ImageViewer } from "../components/popups/image-viewer";
+import { TracePlot } from "../components/visualization/trace-plot";
+import { TraceList } from "../components/visualization/trace-list";
 import { useVisualizationStore } from "../stores";
 
 export function VisualizationPage() {
-  // Persisted state from zustand store
   const {
     dataFolder,
     setDataFolder,
@@ -30,18 +31,83 @@ export function VisualizationPage() {
     setSelectedFeature,
     currentPage,
     setCurrentPage,
+    projectData,
+    traces,
+    totalTraces,
+    availableFeatures,
+    loading,
+    error,
+    loadProject,
+    loadTraces,
+    toggleTraceQuality,
+    saveQualityUpdates,
+    clear,
   } = useVisualizationStore();
 
-  // Local state
   const [isViewerOpen, setIsViewerOpen] = useState(false);
-  const [totalFovs] = useState(0);
-  const [totalPages] = useState(1);
+  const [activeTraceId, setActiveTraceId] = useState<string | null>(null);
+  const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
 
-  const features = [
-    { value: "intensity_total", label: "Intensity Total" },
-    { value: "area", label: "Area" },
-    { value: "circularity", label: "Circularity" },
-  ];
+  // Calculate pagination
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(totalTraces / pageSize));
+
+  // Load project when dataFolder changes (if different from current project)
+  useEffect(() => {
+    if (dataFolder && (!projectData || projectData.project_path !== dataFolder)) {
+      loadProject(dataFolder).catch(console.error);
+    }
+  }, [dataFolder]);
+
+  // Load traces when FOV or page changes
+  useEffect(() => {
+    if (projectData) {
+      loadTraces(currentPage).catch(console.error);
+    }
+  }, [projectData, fov, currentPage]);
+
+  // Extract available channels from project data
+  const availableChannels = projectData
+    ? Object.keys(projectData.fov_data[fov] || {}).filter(
+        (k) => !k.startsWith("traces")
+      )
+    : [];
+
+  const handleLoadFolder = (paths: string[]) => {
+    if (paths.length > 0) {
+      clear();
+      setDataFolder(paths[0]);
+    }
+  };
+
+  const handleStartVisualization = () => {
+    if (!projectData || selectedChannels.length === 0) {
+      return;
+    }
+    setIsViewerOpen(true);
+  };
+
+  const handleTraceSelect = (cellId: string) => {
+    setActiveTraceId(cellId === activeTraceId ? null : cellId);
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 0) {
+      setCurrentPage(currentPage - 1);
+      setActiveTraceId(null);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages - 1) {
+      setCurrentPage(currentPage + 1);
+      setActiveTraceId(null);
+    }
+  };
+
+  const handleSave = async () => {
+    await saveQualityUpdates();
+  };
 
   return (
     <div className="p-5">
@@ -53,6 +119,12 @@ export function VisualizationPage() {
           Load and visualize processed microscopy data
         </p>
       </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded text-destructive text-xs">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4 items-stretch">
         {/* Left Column: Load Data Folder */}
@@ -72,20 +144,31 @@ export function VisualizationPage() {
                     readOnly
                   />
                   <FilePicker
-                    onFileSelect={(paths) => {
-                      if (paths.length > 0) {
-                        setDataFolder(paths[0]);
-                      }
-                    }}
-                    directory
+                    onFileSelect={handleLoadFolder}
+                    folder
                     buttonText="Browse"
                   />
                 </div>
-                <div className="mt-1.5 p-3 bg-card rounded-lg border border-dashed border-border min-h-[50px] flex items-center justify-center">
-                  <p className="text-xs text-muted-foreground">
-                    Data Folder Metadata
-                  </p>
-                </div>
+                {projectData && (
+                  <div className="mt-1.5 p-3 bg-card rounded-lg border border-border text-xs">
+                    <div className="space-y-1">
+                      <p>
+                        <span className="font-medium">Project:</span>{" "}
+                        {projectData.base_name || "Unknown"}
+                      </p>
+                      <p>
+                        <span className="font-medium">FOVs:</span>{" "}
+                        {projectData.n_fov}
+                      </p>
+                      {projectData.channels && (
+                        <p>
+                          <span className="font-medium">Channels:</span>{" "}
+                          {Object.keys(projectData.channels).length}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </Section>
 
@@ -100,23 +183,55 @@ export function VisualizationPage() {
                       value={fov}
                       onChange={setFov}
                       min={0}
-                      max={Math.max(0, totalFovs - 1)}
+                      max={Math.max(0, (projectData?.n_fov || 1) - 1)}
                       className="flex-1"
+                      disabled={!projectData}
                     />
-                    {totalFovs > 0 && (
+                    {projectData && projectData.n_fov > 0 && (
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        / {totalFovs}
+                        / {projectData.n_fov - 1}
                       </span>
                     )}
                   </div>
                 </div>
+
+                {availableChannels.length > 0 && (
+                  <div className="space-y-1">
+                    <Label>Channels</Label>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {availableChannels.map((channel) => (
+                        <label
+                          key={channel}
+                          className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent p-1 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedChannels.includes(channel)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedChannels([...selectedChannels, channel]);
+                              } else {
+                                setSelectedChannels(
+                                  selectedChannels.filter((c) => c !== channel)
+                                );
+                              }
+                            }}
+                            className="w-3 h-3"
+                          />
+                          <span>{channel}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <Button
                   variant="default"
                   className="w-full"
-                  disabled={totalFovs === 0}
-                  onClick={() => setIsViewerOpen(true)}
+                  disabled={!projectData || selectedChannels.length === 0 || loading}
+                  onClick={handleStartVisualization}
                 >
-                  Start
+                  {loading ? "Loading..." : "Start Visualization"}
                 </Button>
               </div>
             </Section>
@@ -135,14 +250,15 @@ export function VisualizationPage() {
                 <Select
                   value={selectedFeature}
                   onValueChange={setSelectedFeature}
+                  disabled={availableFeatures.length === 0}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select feature" />
                   </SelectTrigger>
                   <SelectContent>
-                    {features.map((f) => (
-                      <SelectItem key={f.value} value={f.value}>
-                        {f.label}
+                    {availableFeatures.map((feature) => (
+                      <SelectItem key={feature} value={feature}>
+                        {feature}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -152,26 +268,13 @@ export function VisualizationPage() {
 
             <div className="my-4 border-t border-border"></div>
 
-            <Section title="Plot">
-              <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[120px] flex items-center justify-center">
-                <div className="text-center">
-                  <svg
-                    className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                    />
-                  </svg>
-                  <p className="text-xs text-muted-foreground">
-                    Trace plot will appear here
-                  </p>
-                </div>
+            <Section title="Plot" className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 min-h-0">
+                <TracePlot
+                  traces={traces}
+                  selectedFeature={selectedFeature}
+                  activeTraceId={activeTraceId}
+                />
               </div>
             </Section>
           </CardContent>
@@ -183,11 +286,14 @@ export function VisualizationPage() {
             <CardTitle>Trace Selection</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col">
-            <Section title="Traces">
-              <div className="p-4 bg-card rounded-lg border border-dashed border-border min-h-[100px] flex items-center justify-center">
-                <p className="text-xs text-muted-foreground">
-                  No traces selected
-                </p>
+            <Section title="Traces" className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 min-h-0">
+                <TraceList
+                  traces={traces}
+                  activeTraceId={activeTraceId}
+                  onTraceSelect={handleTraceSelect}
+                  onQualityToggle={toggleTraceQuality}
+                />
               </div>
             </Section>
 
@@ -195,39 +301,38 @@ export function VisualizationPage() {
 
             <Section title="Navigation">
               <div className="space-y-2.5">
-                <div className="p-3 bg-card rounded-lg border border-dashed border-border min-h-[40px] flex items-center justify-center">
-                  <p className="text-xs text-muted-foreground">
-                    Navigation content
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    Page {currentPage} of {totalPages}
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    Page {currentPage + 1} of {totalPages}
                   </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() =>
-                        setCurrentPage(Math.max(1, currentPage - 1))
-                      }
-                      disabled={currentPage <= 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() =>
-                        setCurrentPage(Math.min(totalPages, currentPage + 1))
-                      }
-                      disabled={currentPage >= totalPages}
-                    >
-                      Next
-                    </Button>
-                    <Button variant="secondary" disabled>
-                      Save
-                    </Button>
-                  </div>
+                  <span>{totalTraces} total traces</span>
                 </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={handlePreviousPage}
+                    disabled={currentPage <= 0 || loading}
+                    className="flex-1"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={handleNextPage}
+                    disabled={currentPage >= totalPages - 1 || loading}
+                    className="flex-1"
+                  >
+                    Next
+                  </Button>
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="w-full"
+                >
+                  Save Inspected CSV
+                </Button>
               </div>
             </Section>
           </CardContent>
@@ -238,6 +343,9 @@ export function VisualizationPage() {
       <ImageViewer
         isOpen={isViewerOpen}
         onClose={() => setIsViewerOpen(false)}
+        projectData={projectData}
+        fov={fov}
+        selectedChannels={selectedChannels}
       />
     </div>
   );

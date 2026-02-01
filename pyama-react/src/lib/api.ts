@@ -70,6 +70,34 @@ export interface TaskListResponse {
   total: number;
 }
 
+// Visualization types
+export interface ProjectData {
+  project_path: string;
+  n_fov: number;
+  fov_data: Record<number, Record<string, string>>;
+  channels: Record<string, unknown> | null;
+  base_name: string;
+}
+
+export interface TraceData {
+  cell_id: string;
+  quality: boolean;
+  features: Record<string, number[]>;
+  positions: {
+    frames: number[];
+    xc: number[];
+    yc: number[];
+  };
+}
+
+export interface TracesResponse {
+  traces: TraceData[];
+  total: number;
+  page: number;
+  page_size: number;
+  features: string[];
+}
+
 // API client
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -151,6 +179,66 @@ export const api = {
   async cancelTask(taskId: string): Promise<TaskResponse> {
     return fetchJson(`${API_BASE}/processing/tasks/${taskId}`, {
       method: "DELETE",
+    });
+  },
+
+  /**
+   * Load visualization project data
+   */
+  async loadVisualizationProject(projectPath: string): Promise<ProjectData> {
+    return fetchJson(`${API_BASE}/visualization/project/load`, {
+      method: "POST",
+      body: JSON.stringify({ project_path: projectPath }),
+    });
+  },
+
+  /**
+   * Get paginated trace data for a FOV
+   */
+  async getTraces(
+    projectPath: string,
+    fov: number,
+    page: number = 0,
+    pageSize: number = 10,
+  ): Promise<TracesResponse> {
+    const params = new URLSearchParams({
+      project_path: projectPath,
+      fov: fov.toString(),
+      page: page.toString(),
+      page_size: pageSize.toString(),
+    });
+    return fetchJson(`${API_BASE}/visualization/traces?${params}`);
+  },
+
+  /**
+   * Get available feature columns from traces CSV
+   */
+  async getTraceFeatures(
+    projectPath: string,
+    fov: number,
+  ): Promise<{ features: string[] }> {
+    const params = new URLSearchParams({
+      project_path: projectPath,
+      fov: fov.toString(),
+    });
+    return fetchJson(`${API_BASE}/visualization/traces/features?${params}`);
+  },
+
+  /**
+   * Update trace quality flags
+   */
+  async updateTraceQuality(
+    projectPath: string,
+    fov: number,
+    updates: Record<string, boolean>,
+  ): Promise<{ success: boolean; saved_path: string }> {
+    return fetchJson(`${API_BASE}/visualization/traces/quality`, {
+      method: "POST",
+      body: JSON.stringify({
+        project_path: projectPath,
+        fov,
+        updates,
+      }),
     });
   },
 };

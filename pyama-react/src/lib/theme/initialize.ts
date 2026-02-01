@@ -1,11 +1,10 @@
 import type { Theme, ThemePreference } from "./types";
 import {
   applyTheme,
-  getStoredPreference,
-  getStoredThemeId,
   getSystemPreference,
 } from "./apply-theme";
 import { getTheme, darkTheme, lightTheme } from "./themes";
+import { useThemeStore } from "../../stores/theme";
 
 interface InitOptions {
   defaultPreference?: ThemePreference;
@@ -16,6 +15,9 @@ interface InitOptions {
 /**
  * Initialize theme on app startup (call before render).
  * This prevents flash of wrong theme.
+ * 
+ * Note: Since we clear localStorage on startup, this uses defaults.
+ * The Zustand store will be initialized with defaults as well.
  */
 export function initializeTheme(options: InitOptions = {}): Theme {
   const {
@@ -24,9 +26,9 @@ export function initializeTheme(options: InitOptions = {}): Theme {
     defaultLightTheme = "light",
   } = options;
 
-  // Determine preference
-  const storedPreference = getStoredPreference() as ThemePreference | null;
-  const preference = storedPreference ?? defaultPreference;
+  // Get preference from Zustand store (will be default since localStorage is cleared)
+  const store = useThemeStore.getState();
+  const preference = store.preference || defaultPreference;
 
   // Resolve to dark or light
   let resolvedType: "dark" | "light";
@@ -36,12 +38,11 @@ export function initializeTheme(options: InitOptions = {}): Theme {
     resolvedType = preference;
   }
 
-  // Get theme
-  const storedThemeId = getStoredThemeId();
+  // Get theme from store or use default
   let theme: Theme | undefined;
 
-  if (storedThemeId) {
-    theme = getTheme(storedThemeId);
+  if (store.themeId) {
+    theme = getTheme(store.themeId);
     // Validate theme type matches resolved preference
     if (theme && theme.type !== resolvedType) {
       theme = undefined; // Reset to default

@@ -407,7 +407,7 @@ class MergePanel(QWidget):
         self.sample_edit = QLineEdit()
         layout.addWidget(self.sample_edit)
 
-        # Input directory selector (processed FOV folders)
+        # Input folder selector (processed FOV folders)
         input_dir_row = QHBoxLayout()
         input_dir_row.addWidget(QLabel("Folder of processed FOVs:"))
         input_dir_row.addStretch()
@@ -644,13 +644,13 @@ class MergePanel(QWidget):
 
     @Slot()
     def _choose_input_dir(self) -> None:
-        """Handle input directory browse button click.
+        """Handle input folder browse button click.
 
-        Opens a directory dialog to select the input directory containing
+        Opens a folder dialog to select the input folder containing
         processed FOV folders.
         """
         logger.debug(
-            "UI Click: Browse input directory button (start_dir=%s)",
+            "UI Click: Browse input folder button (start_dir=%s)",
             DEFAULT_DIR,
         )
         path = QFileDialog.getExistingDirectory(
@@ -660,18 +660,18 @@ class MergePanel(QWidget):
             options=QFileDialog.Option.DontUseNativeDialog,
         )
         if path:
-            logger.debug("UI Action: Set input directory - %s", path)
+            logger.debug("UI Action: Set input folder - %s", path)
             self.input_dir_edit.setText(path)
 
     @Slot()
     def _choose_output_dir(self) -> None:
-        """Handle output directory browse button click.
+        """Handle output folder browse button click.
 
-        Opens a directory dialog to select the output location
+        Opens a folder dialog to select the output location
         for merged results.
         """
         logger.debug(
-            "UI Click: Browse output directory button (start_dir=%s)", DEFAULT_DIR
+            "UI Click: Browse output folder button (start_dir=%s)", DEFAULT_DIR
         )
         path = QFileDialog.getExistingDirectory(
             self,
@@ -680,7 +680,7 @@ class MergePanel(QWidget):
             options=QFileDialog.Option.DontUseNativeDialog,
         )
         if path:
-            logger.debug("UI Action: Set output directory - %s", path)
+            logger.debug("UI Action: Set output folder - %s", path)
             self.output_edit.setText(path)
 
     # ------------------------------------------------------------------------
@@ -715,17 +715,17 @@ class MergePanel(QWidget):
         self.sample_edit.setText(str(path))
 
     def set_input_dir(self, path: Path | str) -> None:
-        """Set the input directory path in the UI.
+        """Set the input folder path in the UI.
 
         Args:
-            path: Path to the input directory containing processed FOVs
+            path: Path to the input folder containing processed FOVs
         """
         self.input_dir_edit.setText(str(path))
 
-    def set_output_directory(self, path: Path | str) -> None:
-        """Set the output directory path in the UI.
+    def set_output_folder(self, path: Path | str) -> None:
+        """Set the output folder path in the UI.
 
         Args:
-            path: Path to the output directory
+            path: Path to the output folder
         """
         self.output_edit.setText(str(path))

@@ -125,7 +125,7 @@ class WorkflowPanel(QWidget):
         Sets up all the signal/slot connections for user interactions,
         including file selection, channel configuration, and workflow control.
         """
-        # File/directory selection
+        # File/folder selection
         self._nd2_button.clicked.connect(self._on_microscopy_clicked)
         self._output_button.clicked.connect(self._on_output_clicked)
 
@@ -253,7 +253,7 @@ class WorkflowPanel(QWidget):
     def _build_output_group(self) -> QGroupBox:
         """Build the output configuration group.
 
-        Creates the output section containing directory selection,
+        Creates the output section containing folder selection,
         parameter configuration, and workflow control buttons.
 
         Returns:
@@ -262,9 +262,9 @@ class WorkflowPanel(QWidget):
         group = QGroupBox("Output")
         layout = QVBoxLayout(group)
 
-        # Output directory selection
+        # Output folder selection
         header = QHBoxLayout()
-        header.addWidget(QLabel("Save Directory:"))
+        header.addWidget(QLabel("Save Folder:"))
         header.addStretch()
         self._output_button = QPushButton("Browse")
         header.addWidget(self._output_button)
@@ -340,28 +340,28 @@ class WorkflowPanel(QWidget):
 
     @Slot()
     def _on_output_clicked(self) -> None:
-        """Handle output directory button click.
+        """Handle output folder button click.
 
-        Opens a directory dialog to select the output location
+        Opens a folder dialog to select the output location
         for processing results.
         """
         logger.debug(
-            "UI Click: Output directory browse button (start_dir=%s)", DEFAULT_DIR
+            "UI Click: Output folder browse button (start_dir=%s)", DEFAULT_DIR
         )
-        directory = QFileDialog.getExistingDirectory(
+        folder = QFileDialog.getExistingDirectory(
             self,
-            "Select Output Directory",
+            "Select Output Folder",
             DEFAULT_DIR,
             options=QFileDialog.Option.DontUseNativeDialog,
         )
-        if directory:
+        if folder:
             logger.info(
-                "Output directory chosen: %s (exists=%s)",
-                directory,
-                Path(directory).exists(),
+                "Output folder chosen: %s (exists=%s)",
+                folder,
+                Path(folder).exists(),
             )
-            self._output_dir = Path(directory)
-            self.display_output_directory(self._output_dir)
+            self._output_dir = Path(folder)
+            self.display_output_folder(self._output_dir)
 
     @Slot()
     def _on_add_channel_feature(self) -> None:
@@ -625,11 +625,11 @@ class WorkflowPanel(QWidget):
         else:
             self._microscopy_path_field.setText("No microscopy file selected")
 
-    def display_output_directory(self, path: Path | None) -> None:
-        """Show the chosen output directory in the UI.
+    def display_output_folder(self, path: Path | None) -> None:
+        """Show the chosen output folder in the UI.
 
         Args:
-            path: Path to the selected output directory, or None
+            path: Path to the selected output folder, or None
         """
         self._output_dir_field.setText(str(path or ""))
 
@@ -805,7 +805,7 @@ class WorkflowPanel(QWidget):
     def _initialize_state(self) -> None:
         """Initialize all state to initial values as when app first opened.
 
-        Clears all user selections, output directory, processing parameters,
+        Clears all user selections, output folder, processing parameters,
         channel configurations, and metadata. This is called on startup and
         when a new ND2 file is loaded to restore a clean initial state.
         """
@@ -831,7 +831,7 @@ class WorkflowPanel(QWidget):
         self._available_pc_features = []
 
         # Clear UI displays
-        self.display_output_directory(None)
+        self.display_output_folder(None)
         self.display_microscopy_path(None)
 
         # Reset parameter table to defaults
@@ -1122,7 +1122,7 @@ class MicroscopyLoaderWorker(QObject):
 
         Args:
             path: Path to the microscopy file to load
-            split_mode: Whether to aggregate split scene files in the same directory
+            split_mode: Whether to aggregate split scene files in the same folder
         """
         super().__init__()
         self._path = path
@@ -1196,7 +1196,7 @@ class ProcessingWorkflowWorker(QObject):
                 - params.fovs: FOV selection ("all" or range like "0-5, 7")
                 - params.batch_size: Number of FOVs per batch
                 - params.n_workers: Number of parallel workers
-            output_dir: Directory to write outputs
+            output_dir: Folder to write outputs
         """
         super().__init__()
         self._metadata = metadata

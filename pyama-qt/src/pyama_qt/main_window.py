@@ -283,7 +283,7 @@ class MainWindow(QMainWindow):
                 )
                 return
 
-            # Determine destination directory based on plugin type
+            # Determine destination folder based on plugin type
             plugin_data = temp_scanner.plugins[plugin_file.stem]
             plugin_type = plugin_data["type"]
 

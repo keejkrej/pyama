@@ -58,7 +58,7 @@ export function AnalysisPage() {
                         setDataFolder(paths[0]);
                       }
                     }}
-                    directory
+                    folder
                     buttonText="Browse"
                   />
                 </div>

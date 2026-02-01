@@ -91,7 +91,7 @@ class DataPanel(QWidget):
     data_loading_finished = Signal(
         bool, str
     )  # Emitted when data loading finishes (success, message)
-    file_saved = Signal(str, str)  # Emitted when a file is saved (filename, directory)
+    file_saved = Signal(str, str)  # Emitted when a file is saved (filename, folder)
     time_mapping_loaded = Signal(bool, str)  # Emitted when time mapping is loaded (success, message)
 
     # ------------------------------------------------------------------------
@@ -150,7 +150,7 @@ class DataPanel(QWidget):
         self._worker: WorkerHandle | None = None
         self._saved_files: list[
             tuple[str, str]
-        ] = []  # List of (filename, directory) tuples (unused; kept for compatibility)
+        ] = []  # List of (filename, folder) tuples (unused; kept for compatibility)
 
     # ------------------------------------------------------------------------
     # UI CONSTRUCTION
@@ -866,7 +866,7 @@ class AnalysisFittingWorker(QObject):
 
     This class handles fitting of trace data in a separate thread to prevent
     blocking the UI during long fitting operations. It processes all CSV
-    files in the specified directory. Progress updates are logged directly
+    files in the specified folder. Progress updates are logged directly
     using logger.info(). Completion signals are emitted for UI coordination.
     """
 

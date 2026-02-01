@@ -201,19 +201,19 @@ class LoadPanel(QWidget):
     def _on_load_folder_clicked(self) -> None:
         """Handle folder load button click.
 
-        Opens a directory dialog to select a data folder and initiates
+        Opens a folder dialog to select a data folder and initiates
         project loading from the selected path.
         """
         logger.debug("UI Click: Load project folder button (start_dir=%s)", DEFAULT_DIR)
-        directory = QFileDialog.getExistingDirectory(
+        folder = QFileDialog.getExistingDirectory(
             self,
             "Select Data Folder",
             str(DEFAULT_DIR),
             options=QFileDialog.Option.DontUseNativeDialog,
         )
-        if directory:
-            logger.debug("UI Action: Loading project from - %s", directory)
-            self._load_project(Path(directory))
+        if folder:
+            logger.debug("UI Action: Loading project from - %s", folder)
+            self._load_project(Path(folder))
 
     @Slot()
     def _on_visualize_clicked(self) -> None:
@@ -263,14 +263,14 @@ class LoadPanel(QWidget):
         """Load project data from the given path.
 
         Args:
-            project_path: Path to the project directory
+            project_path: Path to the project folder
         """
         logger.info("Loading project from %s", project_path)
         self.set_loading(True)
         self.project_loading_started.emit()
 
         try:
-            # Discover FOVs from directory structure
+            # Discover FOVs from folder structure
             fovs = naming.discover_fovs(project_path)
             if not fovs:
                 raise FileNotFoundError(
@@ -288,7 +288,7 @@ class LoadPanel(QWidget):
                 except Exception as e:
                     logger.warning("Failed to load config: %s", e)
 
-            # Build fov_data by discovering files in each FOV directory
+            # Build fov_data by discovering files in each FOV folder
             fov_data: dict[int, dict[str, Path]] = {}
             for fov in fovs:
                 fov_dir = naming.fov_dir(project_path, fov)
@@ -450,7 +450,7 @@ class LoadPanel(QWidget):
         """Format project error messages for user display.
 
         Args:
-            project_path: Path to the project directory
+            project_path: Path to the project folder
             exc: Exception that occurred
 
         Returns:

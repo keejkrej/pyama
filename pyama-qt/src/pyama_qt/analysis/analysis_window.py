@@ -210,9 +210,9 @@ class AnalysisWindow(QMainWindow):
             self._status_manager.show_message(f"Failed to load data: {message}")
 
     @Slot(str, str)
-    def _on_plot_saved(self, filename: str, directory: str) -> None:
+    def _on_plot_saved(self, filename: str, folder: str) -> None:
         """Handle plot saved event."""
-        self._status_manager.show_message(f"{filename} saved to {directory}")
+        self._status_manager.show_message(f"{filename} saved to {folder}")
 
     def closeEvent(self, event) -> None:
         """Handle window close event."""

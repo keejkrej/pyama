@@ -1,6 +1,12 @@
 import { NavLink as RouterNavLink } from "react-router-dom";
 import type { ReactNode } from "react";
-import { Settings, Eye, BarChart3, MessageCircle } from "lucide-react";
+import {
+  Settings,
+  Eye,
+  BarChart3,
+  MessageCircle,
+  LayoutDashboard,
+} from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ThemeToggle } from "../ui/theme-toggle";
 
@@ -55,6 +61,12 @@ export function Navbar() {
               icon={<MessageCircle className="w-3.5 h-3.5" />}
             >
               Chat
+            </NavLink>
+            <NavLink
+              to="/dashboard"
+              icon={<LayoutDashboard className="w-3.5 h-3.5" />}
+            >
+              Dashboard
             </NavLink>
           </div>
         </div>

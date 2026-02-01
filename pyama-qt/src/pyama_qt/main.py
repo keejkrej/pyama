@@ -70,7 +70,7 @@ def main() -> None:
     # ------------------------------------------------------------------------
     # PLUGIN DISCOVERY
     # ------------------------------------------------------------------------
-    # Load plugins from user's home directory
+    # Load plugins from user's home folder
     try:
         plugin_dir = Path.home() / ".pyama" / "plugins"
         logger.info("Loading plugins from %s", plugin_dir)

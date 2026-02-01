@@ -4,7 +4,7 @@ interface FilePickerProps {
   label?: string;
   accept?: string;
   multiple?: boolean;
-  directory?: boolean;
+  folder?: boolean;
   onFileSelect?: (paths: string[]) => void;
   buttonText?: string;
   className?: string;
@@ -25,7 +25,7 @@ export function FilePicker({
   label,
   accept,
   multiple = false,
-  directory = false,
+  folder = false,
   onFileSelect,
   buttonText = "Browse...",
   className = "",
@@ -38,7 +38,7 @@ export function FilePicker({
 
     // Convert accept string (e.g., ".nd2") to Electron filter format
     const filters: Electron.FileFilter[] = [];
-    if (accept && !directory) {
+    if (accept && !folder) {
       const extensions = accept
         .split(",")
         .map((ext) => ext.trim().replace(/^\./, ""));
@@ -47,7 +47,7 @@ export function FilePicker({
 
     const result = await window.electronAPI.showOpenDialog({
       properties: [
-        directory ? "openDirectory" : "openFile",
+        folder ? "openDirectory" : "openFile",
         ...(multiple ? ["multiSelections" as const] : []),
       ],
       filters: filters.length > 0 ? filters : undefined,

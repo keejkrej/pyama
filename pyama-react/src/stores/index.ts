@@ -12,3 +12,4 @@ export {
   type ToolCall,
   type ConversationItem,
 } from "./chat";
+export { useThemeStore } from "./theme";
