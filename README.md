@@ -1,6 +1,6 @@
 # PyAMA
 
-PyAMA is a modular Python application for microscopy image analysis. It consists of a core processing library, Qt-based graphical user interfaces, and command-line tools for workflow configuration and data processing.
+PyAMA is a modular Python application for microscopy image analysis. It consists of a core processing library and a Qt-based graphical user interface for workflow configuration, data processing, visualization, and analysis.
 
 ## Packages
 
@@ -8,10 +8,6 @@ This repository is a workspace containing the following packages:
 
 - `pyama-core`: Core processing library for PyAMA with analysis, processing workflows, and I/O utilities.
 - `pyama-pro`: Qt-based GUI for PyAMA with a tabbed interface for Processing, Analysis, and Visualization.
-- `pyama-air`: Interactive CLI and GUI wizards for configuring PyAMA workflows, merges, and analysis.
-- `pyama-backend`: FastAPI backend providing REST API endpoints for processing and analysis.
-- `pyama-frontend`: Next.js frontend application for web-based microscopy file browsing and metadata loading.
-- `pyama-acdc`: Cell-ACDC integration plugin for launching PyAMA workflows from within Cell-ACDC.
 
 ## Quick Start
 
@@ -24,7 +20,6 @@ uv sync --all-extras
 # Install packages in development mode
 uv pip install -e pyama-core/
 uv pip install -e pyama-pro/
-uv pip install -e pyama-air/
 ```
 
 ### Running the Application
@@ -32,10 +27,6 @@ uv pip install -e pyama-air/
 ```bash
 # Launch the Qt GUI
 uv run pyama-pro
-
-# Or use the guided workflow helpers
-pyama-air gui
-pyama-air cli
 ```
 
 ### Development
@@ -68,38 +59,14 @@ pyama/
 │       ├── processing/  # Workflow pipeline and services
 │       ├── types/       # Type definitions
 │       └── visualization/ # Visualization utilities
-├── pyama-pro/           # Qt-based GUI
-│   └── src/pyama_pro/
-│       ├── analysis/    # Analysis tab (models, fitting, quality)
-│       ├── components/  # Reusable UI components
-│       ├── processing/  # Processing tab (workflow, merge)
-│       ├── types/       # Type definitions
-│       ├── utils/       # Utility functions
-│       └── visualization/ # Visualization tab (image, trace)
-├── pyama-air/           # Interactive CLI and GUI wizards
-│   └── src/pyama_air/
-│       ├── analysis/    # Analysis wizard
-│       ├── components/  # UI components
-│       ├── convert/     # Convert wizard
-│       ├── merge/       # Merge wizard
-│       ├── types/       # Type definitions
-│       ├── utils/       # Utility functions
-│       └── workflow/    # Workflow wizard
-├── pyama-backend/       # FastAPI backend for web services
-│   └── src/pyama_backend/
-│       ├── api/         # REST API endpoints
-│       ├── jobs/        # Job management
-│       └── main.py      # Application entry point
-├── pyama-frontend/      # Next.js frontend application
-│   └── src/
-│       ├── app/         # Next.js app directory
-│       ├── components/  # React components
-│       ├── lib/         # Utility libraries
-│       └── types/       # TypeScript type definitions
-└── pyama-acdc/          # Cell-ACDC integration plugin
-    └── src/pyama_acdc/
-        ├── resources/   # Icons and logos
-        └── _run.py      # Integration entry point
+└── pyama-pro/           # Qt-based GUI
+    └── src/pyama_pro/
+        ├── analysis/    # Analysis tab (models, fitting, quality)
+        ├── components/  # Reusable UI components
+        ├── processing/  # Processing tab (workflow, merge)
+        ├── types/       # Type definitions
+        ├── utils/       # Utility functions
+        └── visualization/ # Visualization tab (image, trace)
 ```
 
 ## Processing Pipeline
@@ -119,11 +86,7 @@ The pipeline processes FOVs (fields of view) in batches with configurable parall
 ### Usage Guides
 
 - **[pyama-pro/README.md](pyama-pro/README.md)** - Complete guide for using the PyAMA-Pro GUI
-- **[pyama-air/README.md](pyama-air/README.md)** - Guide for using PyAMA-Air CLI and GUI wizards
 - **[pyama-core/README.md](pyama-core/README.md)** - API documentation and examples for PyAMA-Core
-- **[pyama-backend/README.md](pyama-backend/README.md)** - FastAPI backend documentation and API design
-- **[pyama-frontend/README.md](pyama-frontend/README.md)** - Next.js frontend application guide
-- **[pyama-acdc/README.md](pyama-acdc/README.md)** - Cell-ACDC integration plugin documentation
 
 ### Architecture Documentation
 
@@ -131,7 +94,6 @@ For detailed information about the Qt GUI architecture and data binding patterns
 
 - **[AGENTS.md](AGENTS.md)** - Repository guidelines for AI agents and Claude Code
 - **[pyama-core/WORKFLOW.md](pyama-core/WORKFLOW.md)** - Detailed processing workflow documentation
-- **[pyama-backend/API.md](pyama-backend/API.md)** - REST API endpoint specifications
 
 ## Quality Control and Filtering
 
@@ -151,10 +113,10 @@ PyAMA applies several quality control measures to ensure reliable results:
 
 ### Edge Exclusion
 
-- **Border filtering**: Cells within 10 pixels of image edges are automatically excluded
+- **Border filtering**: Cells within 50 pixels of image edges are automatically excluded
 - **Center-based filtering**: Entire cell traces removed if centroid touches border in any frame
 
 ### Background Correction
 
-- **Foreground expansion**: 10-pixel dilation for accurate foreground mask creation
+- **Foreground expansion**: 21-pixel dilation for accurate foreground mask creation
 - **Tile-based estimation**: 256x256 overlapping tiles for robust background computation

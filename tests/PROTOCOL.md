@@ -165,13 +165,13 @@ This document provides step-by-step testing protocols for validating PyAMA funct
 
 ##### Model Configuration
 
-- [ ] In "Fitting" section, verify model dropdown shows available models (trivial, maturation)
-- [ ] Select "Trivial" model from dropdown
-- [ ] Check parameter table updates with trivial model parameters
+- [ ] In "Fitting" section, verify model dropdown shows available models (maturation and any plugin models)
+- [ ] Select "maturation" model from dropdown
+- [ ] Check parameter table updates with maturation model parameters
 - [ ] Verify default parameter values are populated correctly
 - [ ] Test manual parameter mode by enabling manual editing
 - [ ] Modify parameter values and bounds in the table
-- [ ] Switch to "Maturation" model and verify parameters update
+- [ ] Switch to another model (if available) and verify parameters update
 
 #### Fitting Execution
 

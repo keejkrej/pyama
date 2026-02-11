@@ -67,10 +67,10 @@ The extraction features module uses explicit registration. To add a new feature,
 
 ### Quick Start
 
-Copy `aspect_ratio.py` (the example feature) and modify it:
+Copy an example feature (e.g. `aspect_ratio.py` from `examples/plugins/features/phase_contrast/`) and modify it:
 
 ```bash
-cp pyama-core/src/pyama_core/processing/extraction/features/aspect_ratio.py \
+cp examples/plugins/features/phase_contrast/aspect_ratio.py \
    pyama-core/src/pyama_core/processing/extraction/features/my_feature.py
 ```
 
@@ -172,89 +172,41 @@ The analysis models module uses an automatic plugin discovery system. To add a n
 
 #### Model Quick Start
 
-Copy `trivial.py` (the example model) and modify it:
+Copy `exponential_decay.py` (the example model) and modify it:
 
 ```bash
-cp pyama-core/src/pyama_core/analysis/models/trivial.py \
+cp examples/plugins/fitting/exponential_decay.py \
    pyama-core/src/pyama_core/analysis/models/my_model.py
 ```
 
 Edit the file:
 
-- Change `MODEL_NAME` to your model name
-- Implement your `fit` and `predict` methods
+- Add your model to `MODELS` in `pyama_core/analysis/models/__init__.py`, or use `register_plugin_model()` at runtime
+- Implement `Params`, `Bounds`, `DEFAULTS`, `BOUNDS`, and `eval`
 
-#### Model Manual Creation
-
-Create a new file: `my_model.py`
-
-```python
-"""My custom analysis model."""
-
-import numpy as np
-from typing import Dict, Any
-
-from pyama_core.analysis.models.base import BaseModel
-
-# Model metadata (required for auto-discovery)
-MODEL_NAME = "my_model"
-
-
-class MyModel(BaseModel):
-    """My custom analysis model."""
-    
-    def fit(self, data: np.ndarray, **kwargs) -> Dict[str, Any]:
-        """Fit the model to data."""
-        # Implement your fitting logic
-        return {"status": "success", "parameters": {}}
-    
-    def predict(self, data: np.ndarray, **kwargs) -> np.ndarray:
-        """Make predictions using the fitted model."""
-        # Implement your prediction logic
-        return np.zeros_like(data)
-```
-
-### Model Required Components
+#### Model Required Components
 
 Each model module must have:
 
-- **MODEL_NAME** (str): Unique identifier for the model (e.g., `"my_model"`)
+- **Params** (dataclass): Parameter container
+- **Bounds** (dataclass): Bounds for each parameter
+- **DEFAULTS**: Default parameter values
+- **BOUNDS**: Default bounds
+- **eval(t, params)**: Function that evaluates the model
 
-- **Model class**: A class that inherits from `BaseModel` and implements:
-  - `fit(data, **kwargs)`: Fit the model to data, return status and parameters
-  - `predict(data, **kwargs)`: Make predictions using the fitted model
-
-### BaseModel Interface
-
-The `BaseModel` class provides the interface that all models must implement:
-
-```python
-class BaseModel:
-    def fit(self, data: np.ndarray, **kwargs) -> Dict[str, Any]:
-        """Fit the model to data."""
-        raise NotImplementedError
-    
-    def predict(self, data: np.ndarray, **kwargs) -> np.ndarray:
-        """Make predictions using the fitted model."""
-        raise NotImplementedError
-```
-
-### Auto-Discovery
-
-Once you create the file with the required metadata, it will be automatically discovered and registered when the module is imported. No additional configuration needed!
+See `maturation.py` and `examples/plugins/fitting/exponential_decay.py` for the full interface.
 
 ### Testing Your Model
 
 ```python
 from pyama_core.analysis.models import (
     list_models,
-    get_model_class,
+    get_model,
 )
 
 # Check if your model is registered
 print(list_models())  # Should include "my_model"
 
-# Get the model class
-model_class = get_model_class("my_model")
-model = model_class()
+# Get the model module
+model_module = get_model("my_model")
 ```

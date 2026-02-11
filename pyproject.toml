@@ -2,16 +2,11 @@
 members = [
     "pyama-core",
     "pyama-pro",
-    "pyama-air",
-    "pyama-backend",
-    "pyama-acdc",
 ]
 
 [tool.uv.sources]
 pyama-core = { workspace = true }
 pyama-pro = { workspace = true }
-pyama-air = { workspace = true }
-pyama-backend = { workspace = true }
 
 [dependency-groups]
 dev = ["ty", "ruff", "black", "pyinstaller", "ipykernel"]

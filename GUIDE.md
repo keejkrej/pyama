@@ -44,7 +44,7 @@
 
 1. Load the merged or inspected CSV via Load CSV; the overview chart updates instantly.
 2. Optionally load fitted results to compare against prior work or resume analysis.
-3. Pick a model (trivial, maturation, etc.); defaults populate the parameter table.
+3. Pick a model (e.g., maturation or plugin models); defaults populate the parameter table.
 4. Enable manual parameters when you want to tweak bounds or initial guesses.
 5. Parameters display lower/upper limits plus current value; keep them physically meaningful.
 6. Use the Good Fits Only toggle in the quality panel to focus on R² > 0.9 data.

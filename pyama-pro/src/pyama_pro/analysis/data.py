@@ -664,7 +664,7 @@ class DataPanel(QWidget):
         try:
             return list_models()
         except Exception:
-            return ["trivial", "maturation"]
+            return ["maturation"]
 
 
 # =============================================================================

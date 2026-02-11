@@ -8,11 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PyAMA is a modular Python application for microscopy image analysis consisting of three main packages in a UV workspace:
+PyAMA is a modular Python application for microscopy image analysis consisting of two main packages in a UV workspace:
 
 - **pyama-core**: Core processing library with analysis, processing workflows, and I/O utilities
 - **pyama-pro**: Professional GUI with tabs for Processing, Analysis, and Visualization
-- **pyama-air**: Interactive CLI helpers and GUI for configuring PyAMA workflows and merges
 
 ## Development Commands
 
@@ -25,7 +24,6 @@ uv sync --all-extras
 # Install in development mode
 uv pip install -e pyama-core/
 uv pip install -e pyama-pro/
-uv pip install -e pyama-air/
 ```
 
 ### Testing
@@ -39,32 +37,6 @@ uv run python tests/test_workflow.py
 
 # Run visual algorithm testing script
 uv run python tests/test_algo.py
-```
-
-#### Frontend Testing Pages
-
-**IMPORTANT**: All test pages in `pyama-frontend/src/app/test/` must display what is being tested with bulleted lists and code tags:
-
-```tsx
-<div className="p-3 bg-muted rounded-lg border">
-  <div className="text-xs font-medium text-muted-foreground mb-2">
-    Testing Endpoints:
-  </div>
-  <div className="space-y-1 text-sm">
-    <div>
-      •{" "}
-      <code className="bg-background px-2 py-1 rounded border">
-        POST /api/v1/processing/merge
-      </code>
-    </div>
-    <div>
-      •{" "}
-      <code className="bg-background px-2 py-1 rounded border">
-        GET /api/v1/processing/features
-      </code>
-    </div>
-  </div>
-</div>
 ```
 
 ### Code Quality
@@ -94,7 +66,7 @@ uv run python pyama-pro/src/pyama_pro/main.py
 
 ### Core Processing Pipeline
 
-The application centers around a workflow pipeline (`pyama_core.processing.workflow.pipeline.run_complete_workflow`) that orchestrates microscopy image processing through these services:
+The application centers around a workflow pipeline (`pyama_core.processing.workflow.run_complete_workflow`) that orchestrates microscopy image processing through these services:
 
 1. **CopyingService**: Handles data loading and copying from ND2 files (runs sequentially per batch)
 2. **SegmentationService**: Cell segmentation using LOG-STD approach
@@ -126,7 +98,7 @@ The Qt GUI uses a simplified tab-based architecture without strict MVC separatio
 **Main Components:**
 
 - **ProcessingTab** (`pyama_pro.processing.main_tab`): Data processing workflows and parameter tuning
-- **AnalysisTab** (`pyama_pro.analysis.main_tab`): Analysis models and fitting (maturation, maturation-blocked, trivial models)
+- **AnalysisTab** (`pyama_pro.analysis.main_tab`): Analysis models and fitting (maturation and plugin models)
 - **VisualizationTab** (`pyama_pro.visualization.main_tab`): Data visualization and plotting
 
 **Component Classes:**

@@ -154,7 +154,7 @@ The visualization tab should be used before merging CSV files for quality contro
 
 ### Step 2: Select Model
 
-- In the **Fitting** section, select a **Model** from the dropdown (e.g., `trivial`, `maturation`)
+- In the **Fitting** section, select a **Model** from the dropdown (e.g., `maturation`, or plugin models if installed)
 - The parameter table will update automatically with default values for the selected model
 - Check **Set parameters manually** checkbox to enable manual editing
 - Adjust parameter values and bounds in the table as needed

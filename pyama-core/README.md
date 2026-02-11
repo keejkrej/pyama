@@ -1,6 +1,6 @@
 # How to Use PyAMA-Core
 
-PyAMA-Core is the core processing library that provides the underlying algorithms, data models, and utilities for microscopy image analysis. It's designed to be imported and used by higher-level applications like PyAMA-Pro and PyAMA-Air.
+PyAMA-Core is the core processing library that provides the underlying algorithms, data models, and utilities for microscopy image analysis. It's designed to be imported and used by higher-level applications like PyAMA-Pro.
 
 ## Installation
 
@@ -47,7 +47,7 @@ from pyama_core.types.processing import (
 )
 
 # Define channel selections
-pc_selection = ChannelSelection(channel=0, features=["area", "aspect_ratio"])
+pc_selection = ChannelSelection(channel=0, features=["area"])
 fl_selection = ChannelSelection(channel=1, features=["intensity_total"])
 
 channels = Channels(pc=pc_selection, fl=[fl_selection])
@@ -132,9 +132,9 @@ for param_name, param in result.fitted_params.items():
 
 **Available Models:**
 
-- `trivial`: Constant model
 - `maturation`: Exponential maturation model
-- `maturation_blocked`: Blocked maturation model
+
+Additional models (e.g. `trivial`, `exponential_decay`) can be added via plugins; see `examples/plugins/` and PLUGINS.md.
 
 ### Feature Extraction (`pyama_core.processing.extraction.features`)
 
@@ -147,14 +147,16 @@ from pyama_core.processing.extraction.features import (
 )
 
 # Get available features
-pc_features = list_phase_features()  # ['area', 'aspect_ratio']
+pc_features = list_phase_features()  # ['area']
 fl_features = list_fluorescence_features()  # ['intensity_total']
 ```
 
 **Built-in Features:**
 
-- **Phase contrast**: `area`, `aspect_ratio`
+- **Phase contrast**: `area`
 - **Fluorescence**: `intensity_total`
+
+Additional features (e.g. `aspect_ratio`, `circularity`) are available as plugins; see `examples/plugins/` and PLUGINS.md.
 
 ## Key Data Structures
 
@@ -196,7 +198,7 @@ Define channel and feature combinations:
 from pyama_core.types.processing import ChannelSelection
 
 # Phase contrast selection
-pc = ChannelSelection(channel=0, features=["area", "aspect_ratio"])
+pc = ChannelSelection(channel=0, features=["area"])
 
 # Fluorescence selection
 fl = ChannelSelection(channel=1, features=["intensity_total"])
@@ -206,48 +208,11 @@ fl = ChannelSelection(channel=1, features=["intensity_total"])
 
 ### Adding Custom Features
 
-Create a new feature file in `pyama_core/processing/extraction/features/`:
-
-```python
-from pyama_core.processing.extraction.features import FeatureExtractor
-
-@FeatureExtractor("my_feature")
-def extract_my_feature(image, mask, context):
-    """Extract custom feature from image and mask."""
-    # Your extraction logic here
-    return feature_value
-```
+Create a new feature file in `pyama_core/processing/extraction/features/` with an `extract_*` function that takes `ExtractionContext` and returns a numeric value. Register it in `__init__.py` (e.g. `PHASE_FEATURES["my_feature"] = my_feature.extract_my_feature`) or use `register_plugin_feature()` at runtime. See PLUGINS.md for the full interface.
 
 ### Adding Custom Models
 
-Create a new model file in `pyama_core/analysis/models/`:
-
-```python
-from pyama_core.analysis.models import BaseModel
-
-class MyModel(BaseModel):
-    """Custom model for analysis."""
-
-    def __init__(self):
-        super().__init__()
-        self.params = {"k": 0.1}
-        self.bounds = {"k": (0.01, 1.0)}
-
-    def __call__(self, t, **params):
-        # Your model function
-        return params["k"] * t
-```
-
-Register in `pyama_core/analysis/models/__init__.py`:
-
-```python
-from .my_model import MyModel
-
-MODELS = {
-    ...
-    "my_model": MyModel(),
-}
-```
+Create a new model module in `pyama_core/analysis/models/` with `Params`, `Bounds`, `DEFAULTS`, `BOUNDS`, and `eval` (see `maturation.py` and PLUGINS.md for the full interface). Register via `register_plugin_model()` at runtime, or add to the `MODELS` dict in `pyama_core/analysis/models/__init__.py` for built-in models.
 
 ## API Reference
 
@@ -303,4 +268,3 @@ PyAMA-Core is designed to be:
 For applications built on top of PyAMA-Core:
 
 - **PyAMA-Pro**: Full-featured Qt GUI with comprehensive visualization and analysis tools
-- **PyAMA-Air**: Guided workflow wizards (both CLI and GUI) for quick configuration and execution
