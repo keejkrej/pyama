@@ -16,7 +16,6 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
-import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import (
@@ -336,34 +335,28 @@ class DataPanel(QWidget):
         lines_data = []
         styles_data = []
 
-        # Get unique (fov, cell) combinations from MultiIndex
-        cell_ids = data.index.unique().tolist()
-
-        # Collect all values for mean calculation
-        all_values = []
+        grouped_cells = list(data.groupby(level=[0, 1], sort=False))
 
         # Plot all cells in gray
-        for fov, cell in cell_ids:
-            cell_data = data.loc[(fov, cell)]
-            time_values = cell_data["time"].values
-            trace_values = cell_data["value"].values
+        for _, cell_data in grouped_cells:
+            cell_data = cell_data.sort_values("time")
+            time_values = cell_data["time"].to_numpy()
+            trace_values = cell_data["value"].to_numpy()
             lines_data.append((time_values, trace_values))
             styles_data.append({"color": "gray", "alpha": 0.2, "linewidth": 0.5})
-            all_values.append(trace_values)
 
         # Plot mean line in red
-        if all_values:
-            # Compute mean across all traces (assuming same time points)
-            mean_values = np.mean(all_values, axis=0)
-            # Use time from first cell
-            first_cell = cell_ids[0]
-            time_values = data.loc[first_cell]["time"].values
+        if grouped_cells:
+            # Mean at each time point across all traces.
+            mean_by_time = data.groupby("time", sort=True)["value"].mean()
+            time_values = mean_by_time.index.to_numpy()
+            mean_values = mean_by_time.to_numpy()
             lines_data.append((time_values, mean_values))
             styles_data.append(
                 {
                     "color": "red",
                     "linewidth": 2,
-                    "label": f"Mean of {len(cell_ids)} traces",
+                    "label": f"Mean of {len(grouped_cells)} traces",
                 }
             )
 
