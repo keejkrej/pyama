@@ -6,8 +6,9 @@ Core processing library. Use via PyAMA-Pro or import in scripts. Install: `uv sy
 - **I/O**: `load_microscopy_file`, `get_microscopy_frame`, `load_analysis_csv`, `load_processing_results_yaml`
 - **Workflow**: `run_complete_workflow(metadata, context, fov_start, fov_end, batch_size, n_workers)` – `ProcessingContext`, `ChannelSelection`, `Channels` from `pyama_core.types.processing`
 - **Merge**: `run_merge(sample_yaml, processing_results_yaml, output_dir)`
-- **Analysis**: `fit_model`, `get_model`, `list_models` from `pyama_core.analysis`
-- **Features**: `list_phase_features`, `list_fluorescence_features` – built-in: `area`, `intensity_total`
+- **Modeling**: `fit_model`, `get_model`, `list_models` from `pyama_core.modeling`
+- **Statistics**: `discover_sample_pairs`, `run_folder_statistics` from `pyama_core.statistics`
+- **Features**: `list_phase_features`, `list_fluorescence_features` – built-in: `area`, `intensity`
 
 ## Workflow
 Copying → Segmentation (LOG-STD) → Correction → Tracking (IoU) → Extraction.
@@ -23,7 +24,9 @@ Copying → Segmentation (LOG-STD) → Correction → Tracking (IoU) → Extract
 Output: `processing_results.yaml` + `fov_XXX/` dirs. Copying sequential per batch; steps 2–5 parallel. Filtering: min 30 frames, 50px border.
 
 ## Extending
-- **Features**: `extract_*(ctx) -> float`; register in `__init__.py` or `register_plugin_feature()`
-- **Models**: `Params`, `Bounds`, `DEFAULTS`, `BOUNDS`, `eval`; register in `__init__.py` or `register_plugin_model()`
+- **Features**: `extract_*(ctx) -> float`; register built-ins in the package `__init__.py`
+- **Models**: `Params`, `Bounds`, `DEFAULTS`, `BOUNDS`, `eval`; register built-ins in the package `__init__.py`
 
-See [plugins.md](plugins.md), `tests/test_workflow.py`, `tests/test_merge.py`.
+See `tests/test_workflow.py`, `tests/test_merge.py`.
+
+

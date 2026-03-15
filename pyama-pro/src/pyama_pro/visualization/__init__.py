@@ -1,21 +1,21 @@
-"""Visualization module components for displaying microscopy images and traces.
+"""Lazy exports for visualization UI components."""
 
-This module provides the main visualization tab and its sub-components for
-loading, displaying, and interacting with microscopy images and trace data.
-"""
+from importlib import import_module
 
-# =============================================================================
-# IMPORTS
-# =============================================================================
+_EXPORTS = {
+    "VisualizationTab": ("pyama_pro.visualization.main_tab", "VisualizationTab"),
+    "ImagePanel": ("pyama_pro.visualization.image", "ImagePanel"),
+    "LoadPanel": ("pyama_pro.visualization.load", "LoadPanel"),
+    "TracePanel": ("pyama_pro.visualization.trace", "TracePanel"),
+}
 
-from pyama_pro.visualization.main_tab import VisualizationTab
-from pyama_pro.visualization.image import ImagePanel
-from pyama_pro.visualization.load import LoadPanel
-from pyama_pro.visualization.trace import TracePanel
+__all__ = list(_EXPORTS)
 
-__all__ = [
-    "VisualizationTab",
-    "ImagePanel",
-    "LoadPanel",
-    "TracePanel",
-]
+
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr_name = _EXPORTS[name]
+    value = getattr(import_module(module_name), attr_name)
+    globals()[name] = value
+    return value

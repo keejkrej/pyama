@@ -9,9 +9,8 @@ The table uses a dict-based backend for simple parameter management.
 
 import logging
 from typing import Any
-from PySide6.QtCore import Signal, Slot, Qt
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (
-    QCheckBox,
     QHeaderView,
     QSizePolicy,
     QTableWidget,
@@ -35,7 +34,7 @@ class ParameterTable(QWidget):
     - Use set_parameters(params) with a dict of defaults.
       Format: {param_name: {field_name: value, ...}, ...}
       Example: {"fov_start": {"value": 0}, "background_weight": {"value": 1.0}}
-    - Call get_values() to retrieve current values dict if manual mode is enabled.
+    - Call get_values() to retrieve the current values dict.
       Returns: {param_name: {field_name: value, ...}, ...}
     - For backward compatibility, set_parameters_df(df) accepts pandas DataFrame.
     """
@@ -73,24 +72,17 @@ class ParameterTable(QWidget):
         """Build the user interface layout."""
         layout = QVBoxLayout(self)
 
-        # Manual parameter checkbox (unchecked by default)
-        self._use_manual_params = QCheckBox("Set parameters manually")
-        self._use_manual_params.setChecked(False)  # Ensure unchecked by default
-        layout.addWidget(self._use_manual_params)
-
-        # Parameter table (initially hidden until parameters are set)
+        # Parameter table is always visible and editable.
         self._param_table = QTableWidget()
         self._param_table.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self._param_table.setVisible(False)  # Initially hidden
         layout.addWidget(self._param_table)
 
         # Configure table
         self._configure_table()
 
-        # Initialize table to non-editable state (manual params unchecked)
-        self._toggle_table_editability(False)
+        self._toggle_table_editability(True)
 
     def _configure_table(self) -> None:
         """Configure the parameter table appearance and behavior."""
@@ -100,7 +92,7 @@ class ParameterTable(QWidget):
         self._param_table.verticalHeader().setVisible(False)
 
     def _toggle_table_editability(self, enabled: bool) -> None:
-        """Toggle table editability based on manual parameter setting."""
+        """Toggle table editability."""
         self._param_table.blockSignals(True)
         try:
             for row in range(self._param_table.rowCount()):
@@ -121,25 +113,7 @@ class ParameterTable(QWidget):
     # ------------------------------------------------------------------------
     def _connect_signals(self) -> None:
         """Connect UI widget signals to handlers."""
-        self._use_manual_params.toggled.connect(self._on_manual_mode_toggled)
         self._param_table.itemChanged.connect(self._on_item_changed)
-
-    # ------------------------------------------------------------------------
-    # EVENT HANDLERS
-    # ------------------------------------------------------------------------
-    @Slot(bool)
-    def _on_manual_mode_toggled(self, checked: bool) -> None:
-        """Handle manual mode toggle changes."""
-        # Table visibility logic:
-        # - When manual mode is CHECKED: show table (so user can edit values)
-        # - When manual mode is UNCHECKED: hide table (so users see defaults, not an empty table)
-        should_show_table = checked
-
-        self._param_table.setVisible(should_show_table)
-
-        if should_show_table:
-            # Make table editable only if manual mode is enabled
-            self._toggle_table_editability(checked)
 
     # ---------------------------- Public API -------------------------------- #
 
@@ -218,19 +192,17 @@ class ParameterTable(QWidget):
         
         self.set_parameters(params)
 
-    def get_values(self) -> dict[str, dict[str, Any]] | None:
-        """Return the current table as a dict if manual mode is enabled; else None.
+    def get_values(self) -> dict[str, dict[str, Any]]:
+        """Return the current table as a dict.
         
         Returns:
             Dict mapping parameter names to field dicts.
             Format: {param_name: {field_name: value, ...}, ...}
         """
-        if not self._use_manual_params.isChecked():
-            return None
         return self._collect_table_to_dict()
 
     def get_values_df(self):
-        """Return the current table as a DataFrame if manual mode is enabled (backward compatibility)."""
+        """Return the current table as a DataFrame (backward compatibility)."""
         try:
             import pandas as pd
         except ImportError:
@@ -238,15 +210,13 @@ class ParameterTable(QWidget):
             return self.get_values()
         
         values_dict = self.get_values()
-        if values_dict is None:
-            return None
-        
+
         # Convert dict to DataFrame
         return pd.DataFrame.from_dict(values_dict, orient="index", columns=self._fields)  # noqa: F821
 
     def is_manual_mode(self) -> bool:
-        """Return whether manual parameter mode is enabled."""
-        return self._use_manual_params.isChecked()
+        """Compatibility shim for callers expecting manual-mode semantics."""
+        return True
 
     def _rebuild_table(self) -> None:
         """Rebuild the parameter table with current data."""
@@ -289,26 +259,20 @@ class ParameterTable(QWidget):
                     else:
                         text = str(val)
                     item = QTableWidgetItem(text)
-                    # Set editability: 'name' field is always read-only, others depend on manual mode
+                    # Set editability: 'name' field is always read-only, others editable.
                     if field == "name":
                         # Name field is always read-only (display label)
                         item.setFlags(
                             Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
                         )
-                    elif self._use_manual_params:
-                        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                     else:
-                        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                     self._param_table.setItem(r, c, item)
         finally:
             self._param_table.blockSignals(False)
 
     def _on_item_changed(self, item: QTableWidgetItem):
         """Handle table item changes."""
-        # Only emit signals if manual mode is enabled
-        if not self._use_manual_params:
-            return
-
         # Log the value change
         row = item.row()
         col = item.column()

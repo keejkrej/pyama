@@ -14,35 +14,14 @@ from pyama_core.io.results_yaml import (
     deserialize_from_dict,
     save_processing_results_yaml,
 )
-from pyama_core.processing.workflow.services import (
-    CopyingService,
-    SegmentationService,
-    BackgroundEstimationService,
-    TrackingService,
-    ExtractionService,
+from pyama_core.types.processing import (
+    Channels,
     ProcessingContext,
     ensure_context,
     ensure_results_entry,
 )
-from pyama_core.types.processing import Channels
 
 logger = logging.getLogger(__name__)
-
-
-def _compute_batches(fovs: list[int], batch_size: int) -> list[list[int]]:
-    """Split FOV indices into contiguous batches of size ``batch_size``.
-
-    Example:
-    fovs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    batch_size = 3
-    Returns [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9]]
-    """
-    batches: list[list[int]] = []
-    total_fovs = len(fovs)
-    for batch_start in range(0, total_fovs, batch_size):
-        batch_end = min(batch_start + batch_size, total_fovs)
-        batches.append(fovs[batch_start:batch_end])
-    return batches
 
 
 def _split_worker_ranges(fovs: list[int], n_workers: int) -> list[list[int]]:
@@ -143,6 +122,13 @@ def run_single_worker(
     successful_count = 0
 
     try:
+        from pyama_core.processing.workflow.services import (
+            BackgroundEstimationService,
+            ExtractionService,
+            SegmentationService,
+            TrackingService,
+        )
+
         context = ensure_context(context)
         segmentation = SegmentationService()
         background_estimation = BackgroundEstimationService()
@@ -287,10 +273,11 @@ def run_complete_workflow(
     context: ProcessingContext,
     fov_start: int | None = None,
     fov_end: int | None = None,
-    batch_size: int = 2,
     n_workers: int = 2,
     cancel_event: threading.Event | None = None,
 ) -> bool:
+    from pyama_core.processing.workflow.services import CopyingService
+
     context = ensure_context(context)
     overall_success = False
 
@@ -321,120 +308,90 @@ def run_complete_workflow(
         # logger.info(f"Initial context:\n{pformat(context)}")
 
         completed_fovs = 0
+        if cancel_event and cancel_event.is_set():
+            logger.info("Workflow cancelled before copying")
+            return False
 
-        batches = _compute_batches(fov_indices, batch_size)
-        precomputed_worker_ranges = [
-            _split_worker_ranges(batch_fovs, n_workers) for batch_fovs in batches
-        ]
+        logger.info("Extracting selected FOVs %d-%d", fov_start, fov_end)
+        try:
+            copy_service.process_all_fovs(
+                metadata=metadata,
+                context=context,
+                output_dir=output_dir,
+                fov_start=fov_start,
+                fov_end=fov_end,
+                cancel_event=cancel_event,
+            )
+        except Exception as e:
+            logger.error("Failed to extract FOVs %d-%d: %s", fov_start, fov_end, e)
+            return False
 
-        for batch_id, batch_fovs in enumerate(batches):
-            # Check for cancellation before starting batch
-            if cancel_event and cancel_event.is_set():
-                logger.info("Workflow cancelled before batch processing")
-                # Commented out cleanup to preserve partial results for debugging
-                # _cleanup_fov_folders(output_dir, fov_start, fov_end)
-                return False
+        if cancel_event and cancel_event.is_set():
+            logger.info("Workflow cancelled after copying, before parallel processing")
+            return False
 
-            logger.info("Extracting batch: FOVs %d-%d", batch_fovs[0], batch_fovs[-1])
-            try:
-                copy_service.process_all_fovs(
-                    metadata=metadata,
-                    context=context,
-                    output_dir=output_dir,
-                    fov_start=batch_fovs[0],
-                    fov_end=batch_fovs[-1],
-                    cancel_event=cancel_event,
-                )
-                # logger.info(f"After Copy context:\n{pformat(context)}")
-            except Exception as e:
-                logger.error(
-                    "Failed to extract batch starting at FOV %d: %s",
-                    batch_fovs[0],
-                    e,
-                )
-                return False
+        worker_ranges = _split_worker_ranges(fov_indices, n_workers)
+        worker_count = max(1, min(n_workers, len(worker_ranges)))
+        logger.info("Processing selected FOVs in parallel with %d workers", worker_count)
 
-            # Check for cancellation after copying
-            if cancel_event and cancel_event.is_set():
-                logger.info(
-                    "Workflow cancelled after copying, before parallel processing"
-                )
-                # Commented out cleanup to preserve partial results for debugging
-                # _cleanup_fov_folders(output_dir, fov_start, fov_end)
-                return False
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = {
+                executor.submit(
+                    run_single_worker,
+                    fov_range,
+                    metadata,
+                    context,
+                    cancel_event,
+                ): fov_range
+                for fov_range in worker_ranges
+                if fov_range
+            }
 
-            logger.info("Processing batch in parallel with %d workers", n_workers)
+            for future in as_completed(futures):
+                if cancel_event and cancel_event.is_set():
+                    logger.info("Workflow cancelled during parallel processing")
+                    for remaining_future in futures:
+                        if not remaining_future.done():
+                            remaining_future.cancel()
+                    return False
 
-            with ThreadPoolExecutor(max_workers=n_workers) as executor:
-                worker_ranges = precomputed_worker_ranges[batch_id]
-
-                futures = {
-                    executor.submit(
-                        run_single_worker,
-                        fov_range,
-                        metadata,
-                        context,
-                        cancel_event,
-                    ): fov_range
-                    for fov_range in worker_ranges
-                    if fov_range
-                }
-
-                # Process futures with cancellation support
-                # No timeout - let users cancel manually if needed
-                for future in as_completed(futures):
-                    # Check for cancellation after each future completes
-                    if cancel_event and cancel_event.is_set():
-                        logger.info("Workflow cancelled during parallel processing")
-                        # Cancel remaining futures
-                        for remaining_future in futures:
-                            if not remaining_future.done():
-                                remaining_future.cancel()
-                        # Commented out cleanup to preserve partial results for debugging
-                        # _cleanup_fov_folders(output_dir, fov_start, fov_end)
-                        return False
-
-                    fov_range = futures[future]
+                fov_range = futures[future]
+                try:
+                    fov_indices_res, successful, failed, message, worker_ctx = (
+                        future.result()
+                    )
+                    logger.debug(
+                        "Merged context from worker %d-%d",
+                        fov_indices_res[0],
+                        fov_indices_res[-1],
+                    )
                     try:
-                        fov_indices_res, successful, failed, message, worker_ctx = (
-                            future.result()
-                        )
-                        logger.debug(
-                            "Merged context from worker %d-%d",
+                        _merge_contexts(context, worker_ctx)
+                    except Exception:
+                        logger.warning(
+                            "Failed to merge context from worker %d-%d",
                             fov_indices_res[0],
                             fov_indices_res[-1],
                         )
-                        # Merge worker's context back into parent
-                        try:
-                            _merge_contexts(context, worker_ctx)
-                        except Exception:
-                            logger.warning(
-                                "Failed to merge context from worker %d-%d",
-                                fov_indices_res[0],
-                                fov_indices_res[-1],
-                            )
-                        completed_fovs += successful
-                        if failed > 0:
-                            logger.error(
-                                "%d FOVs failed in range %d-%d",
-                                failed,
-                                fov_indices_res[0],
-                                fov_indices_res[-1],
-                            )
-                    except Exception as e:
-                        error_msg = (
-                            f"Worker exception for FOVs {fov_range[0]}-{fov_range[-1]}: {str(e)}"
+                    completed_fovs += successful
+                    if failed > 0:
+                        logger.error(
+                            "%d FOVs failed in range %d-%d",
+                            failed,
+                            fov_indices_res[0],
+                            fov_indices_res[-1],
                         )
-                        logger.error(error_msg)
+                except Exception as e:
+                    error_msg = (
+                        f"Worker exception for FOVs {fov_range[0]}-{fov_range[-1]}: {str(e)}"
+                    )
+                    logger.error(error_msg)
 
-                    progress = int(completed_fovs / total_fovs * 100)
-                    logger.info("Progress: %d%%", progress)
+                progress = int(completed_fovs / total_fovs * 100)
+                logger.info("Progress: %d%%", progress)
 
-        # Final cancellation check after all batches
         if cancel_event and cancel_event.is_set():
-            logger.info("Workflow cancelled after batch processing")
-            # Commented out cleanup to preserve partial results for debugging
-            # _cleanup_fov_folders(output_dir, fov_start, fov_end)
+            logger.info("Workflow cancelled after parallel processing")
             return False
 
         overall_success = completed_fovs == total_fovs

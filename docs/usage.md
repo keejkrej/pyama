@@ -11,7 +11,13 @@
 2. Navigate frames; select traces; right-click to mark good/bad
 3. Save Inspected CSV before merging
 
-## Analysis
+## Modeling
 1. Load CSV (merged or inspected) → pick model (e.g. maturation) → Start Fitting
 2. Quality panel: R² color coding, trace pagination by FOV
 3. Parameter Analysis: histograms, scatter; Save All Plots
+
+## Statistics
+1. Load a `merge_output` folder containing matched `*_intensity_ch_1.csv` and `*_area_ch_0.csv` files
+2. Pick `AUC` or `Onset` and run statistics across all discovered samples
+3. Inspect per-sample normalized traces and compare sample distributions in the boxplot view
+

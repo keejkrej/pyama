@@ -143,6 +143,35 @@ def read_samples_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def normalize_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate and normalize an in-memory samples definition."""
+    if not isinstance(samples, list):
+        raise ValueError("Samples must be provided as a list")
+
+    normalized: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
+
+    for index, sample in enumerate(samples, start=1):
+        if not isinstance(sample, dict):
+            raise ValueError(f"Sample {index} must be a mapping")
+
+        name = str(sample.get("name", "")).strip()
+        if not name:
+            raise ValueError(f"Sample {index} is missing a name")
+        if name in seen_names:
+            raise ValueError(f"Duplicate sample name '{name}'")
+        seen_names.add(name)
+
+        normalized.append(
+            {
+                "name": name,
+                "fovs": parse_fovs_field(sample.get("fovs", [])),
+            }
+        )
+
+    return normalized
+
+
 # =============================================================================
 # FEATURE PROCESSING
 # =============================================================================
@@ -287,33 +316,40 @@ def write_feature_csv(
 
 
 def run_merge(
-    sample_yaml: Path,
-    processing_results: Path,
-    output_dir: Path,
+    samples: list[dict[str, Any]],
+    processing_results_dir: Path,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> str:
-    """Execute merge logic - return success message or raise error.
-    
+    """Execute merge logic from in-memory samples and a processing-results folder.
+
     Args:
-        sample_yaml: Path to samples YAML file
-        processing_results: Path to processing_results.yaml
-        output_dir: Directory to write merged CSV files
+        samples: In-memory sample definitions with ``name`` and ``fovs``
+        processing_results_dir: Folder containing ``processing_results.yaml``
         progress_callback: Optional callback(current, total, message) for progress updates
     """
-    config = read_samples_yaml(sample_yaml)
-    samples = config["samples"]
+    normalized_samples = normalize_samples(samples)
+    processing_results_dir = processing_results_dir.expanduser()
+    if not processing_results_dir.exists() or not processing_results_dir.is_dir():
+        raise FileNotFoundError(
+            f"Processing results folder does not exist: {processing_results_dir}"
+        )
 
+    processing_results = processing_results_dir / "processing_results.yaml"
+    if not processing_results.exists():
+        raise FileNotFoundError(
+            f"processing_results.yaml not found in {processing_results_dir}"
+        )
+
+    output_dir = processing_results_dir / "merge_output"
     proc_results = load_processing_results_yaml(processing_results)
     channel_feature_config = get_channel_feature_config(proc_results)
     time_units = get_time_units_from_yaml(proc_results)
 
-    # Use processing results directory as input directory
-    input_dir = processing_results.parent
+    input_dir = processing_results_dir
 
     all_fovs: set[int] = set()
-    for sample in samples:
-        fovs = parse_fovs_field(sample.get("fovs", []))
-        all_fovs.update(fovs)
+    for sample in normalized_samples:
+        all_fovs.update(sample["fovs"])
 
     feature_maps_by_fov_channel: dict[tuple[int, int], FeatureMaps] = {}
     traces_cache: dict[Path, pd.DataFrame] = {}
@@ -369,9 +405,9 @@ def run_merge(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     created_files: list[Path] = []
-    for sample in samples:
+    for sample in normalized_samples:
         sample_name = sample["name"]
-        sample_fovs = parse_fovs_field(sample.get("fovs", []))
+        sample_fovs = sample["fovs"]
         logger.info("Processing sample '%s' with FOVs: %s", sample_name, sample_fovs)
 
         for channel, features in channel_feature_config:

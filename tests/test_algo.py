@@ -15,8 +15,8 @@ from pyama_core.processing.segmentation import segment_cell
 from pyama_core.processing.background import estimate_background
 from pyama_core.processing.tracking import track_cell
 from pyama_core.processing.extraction import extract_trace
-from pyama_core.analysis.fitting import fit_model
-from pyama_core.analysis.models import get_model
+from pyama_core.modeling.fitting import fit_model
+from pyama_core.modeling.models import get_model
 
 
 def progress_callback(current, total, message):
@@ -55,8 +55,8 @@ def demonstrate_nd2_loading():
             return None, None, None
 
         print("Extracting time stacks for channels 0 and 1...")
-        phc_data = get_microscopy_time_stack(img, fov=0, channel=0).compute()
-        fluor_data = get_microscopy_time_stack(img, fov=0, channel=1).compute()
+        phc_data = get_microscopy_time_stack(img, fov=0, channel=0)
+        fluor_data = get_microscopy_time_stack(img, fov=0, channel=1)
 
         print(f"✓ Phase contrast shape: {phc_data.shape}")
         print(f"✓ Fluorescence shape: {fluor_data.shape}")
@@ -228,7 +228,14 @@ def demonstrate_feature_extraction(fluorescence_data, tracked_data, output_dir):
         times = np.arange(len(fluorescence_data)) / 6.0
         # Create zeros background for test (no background correction in demo)
         test_background = np.zeros_like(fluorescence_data, dtype=np.float32)
-        df = extract_trace(fluorescence_data, tracked_data, times, test_background, progress_callback, background_weight=0.0)
+        df = extract_trace(
+            fluorescence_data,
+            tracked_data,
+            times,
+            test_background,
+            progress_callback,
+            background_weight=0.0,
+        )
         df.to_csv(trace_path)
         print(f"✓ Feature extraction completed and saved to: {trace_path}")
 
@@ -249,21 +256,19 @@ def demonstrate_feature_extraction(fluorescence_data, tracked_data, output_dir):
         cell_data = df.loc[cell]
         print(
             f"  Cell {cell}: {len(cell_data)} timepoints, "
-            f"intensity range: {cell_data['intensity_total'].min():.1f} - {cell_data['intensity_total'].max():.1f}"
+            f"intensity range: {cell_data['intensity'].min():.1f} - {cell_data['intensity'].max():.1f}"
         )
 
     # Visualize features
     fig, axs = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
 
     for c in sample_cells:
-        df.loc[c].plot(
-            y="intensity_total", ax=axs[0], legend=False, color="green", alpha=0.5
-        )
+        df.loc[c].plot(y="intensity", ax=axs[0], legend=False, color="green", alpha=0.5)
         df.loc[c].plot(y="area", ax=axs[1], legend=False, color="blue", alpha=0.5)
 
     axs[0].set_title("Intensity Total (Sample Cells)")
     axs[0].set_xlabel("Time [h]")
-    axs[0].set_ylim(0, df["intensity_total"].max() * 1.1)
+    axs[0].set_ylim(0, df["intensity"].max() * 1.1)
     axs[1].set_title("Area (Sample Cells)")
     axs[1].set_ylim(0, df["area"].max() * 1.1)
     axs[1].set_xlabel("Time [h]")
@@ -285,7 +290,7 @@ def demonstrate_model_fitting(df, output_dir):
 
     print(f"Fitting maturation model to cell {cell_id}")
 
-    y = df.loc[cell_id]["intensity_total"]
+    y = df.loc[cell_id]["intensity"]
     t = df.loc[cell_id].index.values
 
     print(f"  Time range: {t.min():.1f} - {t.max():.1f} hours")
@@ -369,7 +374,7 @@ def main():
     # Step 7: Model fitting
     demonstrate_model_fitting(df, output_dir)
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("✓ All algorithm tests completed successfully!")
     print(f"Results saved to: {output_dir}")
     print(
@@ -381,3 +386,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

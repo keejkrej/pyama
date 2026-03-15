@@ -27,9 +27,8 @@ class ChannelSelectionPayload:
 class MergeRequest:
     """Data structure for merge operation requests."""
 
-    sample_yaml: Path
-    processing_results_yaml: Path
-    output_dir: Path
+    samples: list[dict[str, str]]
+    processing_results_dir: Path
 
 
 __all__ = [

@@ -1,8 +1,13 @@
 """Type definitions for pyama-pro."""
 
-from pyama_pro.types.analysis import FittingRequest
+from pyama_pro.types.modeling import FittingRequest
+from pyama_pro.types.processing import (
+    ChannelSelectionPayload,
+    FeatureMaps,
+    MergeRequest,
+)
+from pyama_pro.types.statistics import StatisticsRequest
 from pyama_pro.types.visualization import FeatureData, PositionData
-from pyama_pro.types.processing import ChannelSelectionPayload, MergeRequest, FeatureMaps
 
 __all__ = [
     "FittingRequest",
@@ -11,4 +16,7 @@ __all__ = [
     "ChannelSelectionPayload",
     "MergeRequest",
     "FeatureMaps",
+    "StatisticsRequest",
 ]
+
+

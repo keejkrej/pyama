@@ -23,7 +23,7 @@ def _write_processing_results(base_dir: Path, csv_path: Path) -> Path:
         {
             "channels": {
                 "pc": [0, ["area"]],
-                "fl": [[1, ["intensity_total"]]],
+                "fl": [[1, ["intensity"]]],
             },
             "time_units": "min",
             "results": {
@@ -46,7 +46,7 @@ def demonstrate_parse_fov_range():
         result = parse_fov_range(test_input)
         print(f"Input: '{test_input}' -> Output: {result}")
 
-    print("✓ FOV range parsing works correctly\n")
+    print("OK: FOV range parsing works correctly\n")
 
 
 def demonstrate_merge_functionality():
@@ -58,16 +58,10 @@ def demonstrate_merge_functionality():
     with TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
 
-        # Create sample YAML configuration
-        sample_yaml = tmp_path / "samples.yaml"
-        yaml.safe_dump(
-            {"samples": [{"name": "sample", "fovs": "0"}]},
-            sample_yaml.open("w", encoding="utf-8"),
-            sort_keys=False,
-        )
+        samples = [{"name": "sample", "fovs": "0"}]
 
         print("1. Sample configuration:")
-        print(sample_yaml.read_text())
+        print(samples)
 
         # Create sample traces CSV
         csv_path = tmp_path / "fov0_traces.csv"
@@ -78,7 +72,7 @@ def demonstrate_merge_functionality():
                 "cell": [1, 1],
                 "good": [True, True],
                 "area_ch_0": [10.0, 12.0],
-                "intensity_total_ch_1": [100.0, 110.0],
+                "intensity_ch_1": [100.0, 110.0],
             }
         )
         df.to_csv(csv_path, index=False)
@@ -93,36 +87,38 @@ def demonstrate_merge_functionality():
         print(processing_yaml.read_text())
 
         # Run merge
-        output_dir = tmp_path / "merged"
-        message = run_merge(sample_yaml, processing_yaml, output_dir)
+        message = run_merge(samples, tmp_path)
 
         print(f"\n4. Merge result: {message}")
 
         # Check outputs
+        output_dir = tmp_path / "merge_output"
         pc_output = output_dir / "sample_area_ch_0.csv"
-        fl_output = output_dir / "sample_intensity_total_ch_1.csv"
+        fl_output = output_dir / "sample_intensity_ch_1.csv"
 
         if pc_output.exists():
             print("\n5. Phase contrast output (area_ch_0) - tidy format:")
             pc_df = pd.read_csv(pc_output, comment="#")
             print(pc_df.to_string())
             print(f"Columns: {list(pc_df.columns)}")
-            print(f"Expected columns: ['time', 'fov', 'cell', 'value']")
-            assert list(pc_df.columns) == ["time", "fov", "cell", "value"], \
+            print("Expected columns: ['time', 'fov', 'cell', 'value']")
+            assert list(pc_df.columns) == ["time", "fov", "cell", "value"], (
                 f"Expected tidy format columns, got {list(pc_df.columns)}"
+            )
         else:
-            print("\n5. ❌ Phase contrast output file missing!")
+            print("\n5. MISSING: Phase contrast output file missing!")
 
         if fl_output.exists():
-            print("\n6. Fluorescence output (intensity_total_ch_1) - tidy format:")
+            print("\n6. Fluorescence output (intensity_ch_1) - tidy format:")
             fl_df = pd.read_csv(fl_output, comment="#")
             print(fl_df.to_string())
             print(f"Columns: {list(fl_df.columns)}")
-            print(f"Expected columns: ['time', 'fov', 'cell', 'value']")
-            assert list(fl_df.columns) == ["time", "fov", "cell", "value"], \
+            print("Expected columns: ['time', 'fov', 'cell', 'value']")
+            assert list(fl_df.columns) == ["time", "fov", "cell", "value"], (
                 f"Expected tidy format columns, got {list(fl_df.columns)}"
+            )
         else:
-            print("\n6. ❌ Fluorescence output file missing!")
+            print("\n6. MISSING: Fluorescence output file missing!")
 
 
 def demonstrate_channel_feature_config():
@@ -136,7 +132,7 @@ def demonstrate_channel_feature_config():
 
         # Create sample CSV with multiple channels and features
         csv_path = tmp_path / "fov0_traces.csv"
-        csv_content = """time,cell,good,area_ch_0,perimeter_ch_0,intensity_total_ch_1,mean_ch_1,variance_ch_2
+        csv_content = """time,cell,good,area_ch_0,perimeter_ch_0,intensity_ch_1,mean_ch_1,variance_ch_2
 0,1,True,10,15,100,50,5
 1,1,True,12,16,110,55,6
 """
@@ -150,7 +146,7 @@ def demonstrate_channel_feature_config():
         yaml_content = {
             "channels": {
                 "pc": [0, ["area", "perimeter"]],
-                "fl": [[1, ["intensity_total", "mean"]], [2, ["variance"]]],
+                "fl": [[1, ["intensity", "mean"]], [2, ["variance"]]],
             },
             "time_units": "min",
             "results": {

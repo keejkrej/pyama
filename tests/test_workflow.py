@@ -110,12 +110,10 @@ def demonstrate_workflow_execution(ctx, md):
     # Configure workflow parameters
     fov_start = 0
     fov_end = min(1, md.n_fovs - 1)  # Process at least 1 FOV
-    batch_size = 2
     n_workers = 2
 
     print("1. Workflow configuration:")
     print(f"   FOV range: {fov_start} to {fov_end}")
-    print(f"   Batch size: {batch_size}")
     print(f"   Workers: {n_workers}")
 
     print("\n2. Starting workflow execution...")
@@ -127,7 +125,6 @@ def demonstrate_workflow_execution(ctx, md):
             context=ctx,
             fov_start=fov_start,
             fov_end=fov_end,
-            batch_size=batch_size,
             n_workers=n_workers,
         )
 

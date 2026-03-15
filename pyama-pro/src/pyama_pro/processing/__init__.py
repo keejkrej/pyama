@@ -1,19 +1,21 @@
-"""Processing module components for workflow and merge functionality.
+"""Lazy exports for processing UI components."""
 
-This module provides the main processing tab and its sub-components for
-configuring and running the image processing workflow and merging results.
-"""
+from importlib import import_module
 
-# =============================================================================
-# IMPORTS
-# =============================================================================
+_EXPORTS = {
+    "ProcessingTab": ("pyama_pro.processing.main_tab", "ProcessingTab"),
+    "InputPanel": ("pyama_pro.processing.input", "InputPanel"),
+    "MergePanel": ("pyama_pro.processing.merge", "MergePanel"),
+    "OutputPanel": ("pyama_pro.processing.output", "OutputPanel"),
+}
 
-from pyama_pro.processing.main_tab import ProcessingTab
-from pyama_pro.processing.merge import MergePanel
-from pyama_pro.processing.workflow import WorkflowPanel
+__all__ = list(_EXPORTS)
 
-__all__ = [
-    "ProcessingTab",
-    "MergePanel",
-    "WorkflowPanel",
-]
+
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr_name = _EXPORTS[name]
+    value = getattr(import_module(module_name), attr_name)
+    globals()[name] = value
+    return value

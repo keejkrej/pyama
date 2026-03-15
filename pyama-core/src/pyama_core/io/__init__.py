@@ -5,6 +5,9 @@ IO utilities for microscopy image analysis.
 # Import from the unified microscopy module
 from pyama_core.io.microscopy import (
     MicroscopyMetadata,
+    MicroscopyImage,
+    NikonImage,
+    ZeissImage,
     load_microscopy_file,
     get_microscopy_frame,
     get_microscopy_channel_stack,
@@ -24,6 +27,9 @@ from pyama_core.io.analysis_csv import (
 __all__ = [
     # Unified microscopy functions
     "MicroscopyMetadata",
+    "MicroscopyImage",
+    "NikonImage",
+    "ZeissImage",
     "load_microscopy_file",
     "get_microscopy_frame",
     "get_microscopy_channel_stack",
