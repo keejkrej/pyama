@@ -1,13 +1,13 @@
 # PyAMA-Core
 
-Core processing library. Use via PyAMA-Pro or import in scripts. Install: `uv sync` from root (or `uv pip install -e pyama-core/` standalone).
+Core processing library. Use via PyAMA-Pro or import in scripts. Install: `uv sync` from root (or `uv pip install -e pyama/` standalone).
 
 ## APIs
 - **I/O**: `load_microscopy_file`, `get_microscopy_frame`, `load_analysis_csv`, `load_processing_results_yaml`
-- **Workflow**: `run_complete_workflow(metadata, context, fov_start, fov_end, batch_size, n_workers)` – `ProcessingContext`, `ChannelSelection`, `Channels` from `pyama_core.types.processing`
+- **Workflow**: `run_complete_workflow(metadata, context, fov_start, fov_end, batch_size, n_workers)` – `ProcessingContext`, `ChannelSelection`, `Channels` from `pyama.types.processing`
 - **Merge**: `run_merge(sample_yaml, processing_results_yaml, output_dir)`
-- **Modeling**: `fit_model`, `get_model`, `list_models` from `pyama_core.modeling`
-- **Statistics**: `discover_sample_pairs`, `run_folder_statistics` from `pyama_core.statistics`
+- **Modeling**: `fit_model`, `get_model`, `list_models` from `pyama.modeling`
+- **Statistics**: `discover_sample_pairs`, `run_folder_statistics` from `pyama.statistics`
 - **Features**: `list_phase_features`, `list_fluorescence_features` – built-in: `area`, `intensity`
 
 ## Workflow

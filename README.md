@@ -1,13 +1,13 @@
 # PyAMA
 
-Python application for microscopy image analysis: core library (pyama-core) + Qt GUI (pyama-pro).
+Python application for microscopy image analysis: core library (pyama) + Qt GUI (pyama-gui).
 
 ```bash
 uv sync
-uv run pyama-pro
+uv run pyama-gui
 ```
 
-**Packages**: pyama-core (workflows, modeling, statistics, I/O) · pyama-pro (Processing, Visualization, Modeling, Statistics tabs)
+**Packages**: pyama (workflows, modeling, statistics, I/O) · pyama-gui (Processing, Visualization, Modeling, Statistics tabs)
 
 **Pipeline**: Copying → Segmentation (LOG-STD) → Correction → Tracking (IoU) → Extraction → traces CSV + `processing_results.yaml`
 

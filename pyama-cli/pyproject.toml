@@ -1,0 +1,18 @@
+[project]
+name = "pyama-cli"
+version = "0.1.0"
+description = "CLI for PyAMA"
+authors = [{ name = "PyAMA Team" }]
+requires-python = ">=3.11"
+dependencies = [
+    "pyama>=0.1.0",
+    "typer",
+    "rich",
+    "tqdm",
+]
+
+[project.scripts]
+pyama-cli = "pyama_cli.main:app"
+
+[tool.uv]
+package = true

@@ -1,12 +1,14 @@
 [tool.uv.workspace]
 members = [
-    "pyama-core",
-    "pyama-pro",
+    "pyama",
+    "pyama-cli",
+    "pyama-gui",
 ]
 
 [tool.uv.sources]
-pyama-core = { workspace = true }
-pyama-pro = { workspace = true }
+pyama = { workspace = true }
+pyama-cli = { workspace = true }
+pyama-gui = { workspace = true }
 
 [dependency-groups]
 dev = ["ty", "ruff", "black", "pyinstaller", "ipykernel"]

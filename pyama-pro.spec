@@ -1,27 +1,28 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-# Minimal PyInstaller spec for PyAMA-Pro (Professional GUI)
+# Minimal PyInstaller spec for PyAMA GUI
 # Relies on built-in hooks (e.g., PySide6) without manual data/hiddenimports.
 
 from PyInstaller.utils.hooks import collect_submodules, copy_metadata
-hiddenimports = collect_submodules('xsdata_pydantic_basemodel.hooks')
+
+hiddenimports = collect_submodules("xsdata_pydantic_basemodel.hooks")
 # Include bioio plugin modules with underscores, not hyphens
-hiddenimports += collect_submodules('bioio_nd2')
+hiddenimports += collect_submodules("bioio_nd2")
 # If CZI plugin is desired, include it as well
-hiddenimports += collect_submodules('bioio_czi')
+hiddenimports += collect_submodules("bioio_czi")
 
 block_cipher = None
 
 # Collect plugin distribution metadata so entry-point discovery works in bundle
 plugin_metadata = []
-plugin_metadata += copy_metadata('bioio')
-plugin_metadata += copy_metadata('bioio-nd2')
-plugin_metadata += copy_metadata('bioio-czi')
+plugin_metadata += copy_metadata("bioio")
+plugin_metadata += copy_metadata("bioio-nd2")
+plugin_metadata += copy_metadata("bioio-czi")
 
 a = Analysis(
-    ['pyama-pro/src/pyama_pro/main.py'],
+    ["pyama-gui/src/pyama_gui/main.py"],
     # Include project roots so imports resolve without extra config
-    pathex=['.', 'pyama-pro/src', 'pyama-core/src'],
+    pathex=[".", "pyama-gui/src", "pyama/src"],
     binaries=[],
     datas=plugin_metadata,
     hiddenimports=hiddenimports,
@@ -42,7 +43,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='pyama-pro',
+    name="pyama-gui",
     console=True,
     disable_windowed_traceback=False,
     target_arch=None,
