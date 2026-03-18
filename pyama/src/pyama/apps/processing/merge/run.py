@@ -6,18 +6,15 @@ import logging
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any, Callable, Iterable
+import re
 
 import pandas as pd
 import yaml
 
 from pyama.io.csv.processing import get_dataframe
-from pyama.io.config.results import (
-    get_time_units_from_yaml,
-    get_trace_csv_path_from_yaml,
-    load_processing_results_yaml,
-)
+from pyama.io.config.results import get_trace_csv_path, scan_processing_results
 from pyama.io.path.trace import resolve_trace_path
-from pyama.types.processing import Channels, Result, FeatureMaps
+from pyama.types.processing import Result, FeatureMaps
 
 logger = logging.getLogger(__name__)
 
@@ -32,39 +29,48 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+_FEATURE_COLUMN_RE = re.compile(r"^(?P<feature>.+)_ch_(?P<channel>\d+)$")
+_BASE_TRACE_COLUMNS = {
+    "frame",
+    "time",
+    "fov",
+    "cell",
+    "good",
+    "position_x",
+    "position_y",
+    "bbox_x",
+    "bbox_y",
+    "bbox_w",
+    "bbox_h",
+}
+
+
 def get_channel_feature_config(proc_results: dict) -> list[tuple[int, list[str]]]:
-    """Determine the channel/feature selections from processing results."""
-    channels_data = proc_results.get("channels")
-    if channels_data is None:
-        raise ValueError("Processing results missing 'channels' section")
-
-    try:
-        channel_config = Channels.from_serialized(channels_data)
-    except Exception as exc:  # pragma: no cover - defensive
-        raise ValueError(
-            f"Invalid channel configuration in processing results: {exc}"
-        ) from exc
-
-    config: list[tuple[int, list[str]]] = []
-
-    pc_channel = channel_config.get_pc_channel()
-    if pc_channel is not None:
-        pc_features = channel_config.get_pc_features()
-        # Only include PC channel if it has features explicitly configured in YAML
-        if pc_features:
-            config.append((pc_channel, sorted(set(pc_features))))
-
-    fl_feature_map = channel_config.get_fl_feature_map()
-    for channel in sorted(fl_feature_map):
-        features = fl_feature_map[channel]
-        # Only include FL channel if it has features explicitly configured in YAML
-        if features:
-            config.append((channel, sorted(set(features))))
+    """Determine channel/feature selections from discovered trace CSV headers."""
+    config: dict[int, set[str]] = {}
+    for fov_data in proc_results.get("fov_data", {}).values():
+        traces_path = resolve_trace_path(fov_data.get("traces"))
+        if traces_path is None or not traces_path.exists():
+            continue
+        columns = list(pd.read_csv(traces_path, nrows=0).columns)
+        for column in columns:
+            if column in _BASE_TRACE_COLUMNS:
+                continue
+            match = _FEATURE_COLUMN_RE.match(column)
+            if match is None:
+                continue
+            channel = int(match.group("channel"))
+            feature = match.group("feature")
+            config.setdefault(channel, set()).add(feature)
 
     if not config:
         raise ValueError("No channels found in processing results")
 
-    return config
+    return [
+        (channel, sorted(features))
+        for channel, features in sorted(config.items(), key=lambda item: item[0])
+        if features
+    ]
 
 
 # =============================================================================
@@ -326,7 +332,7 @@ def run_merge(
 
     Args:
         samples: In-memory sample definitions with ``name`` and ``fovs``
-        processing_results_dir: Folder containing ``processing_results.yaml``
+        processing_results_dir: Folder containing scanned processing outputs
         progress_callback: Optional callback(current, total, message) for progress updates
     """
     normalized_samples = normalize_samples(samples)
@@ -336,16 +342,10 @@ def run_merge(
             f"Processing results folder does not exist: {processing_results_dir}"
         )
 
-    processing_results = processing_results_dir / "processing_results.yaml"
-    if not processing_results.exists():
-        raise FileNotFoundError(
-            f"processing_results.yaml not found in {processing_results_dir}"
-        )
-
     output_dir = processing_results_dir / "merge_output"
-    proc_results = load_processing_results_yaml(processing_results)
+    proc_results = scan_processing_results(processing_results_dir)
     channel_feature_config = get_channel_feature_config(proc_results)
-    time_units = get_time_units_from_yaml(proc_results)
+    time_units = proc_results.get("time_units") or "min"
 
     input_dir = processing_results_dir
 
@@ -362,7 +362,7 @@ def run_merge(
     loaded_fovs = 0
     for fov_idx, fov in enumerate(sorted_fovs):
         # Get the unified trace CSV for this FOV (preferring inspected version)
-        original_path = get_trace_csv_path_from_yaml(proc_results, fov)
+        original_path = get_trace_csv_path(proc_results, fov)
         csv_path = resolve_trace_path(original_path) if original_path else None
 
         if csv_path is None:

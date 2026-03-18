@@ -1,12 +1,10 @@
-"""Lazy exports for processing UI components."""
+"""Exports for the consolidated processing tab."""
 
 from importlib import import_module
 
 _EXPORTS = {
-    "ProcessingTab": ("pyama_gui.processing.main_tab", "ProcessingTab"),
-    "InputPanel": ("pyama_gui.processing.input", "InputPanel"),
-    "MergePanel": ("pyama_gui.processing.merge", "MergePanel"),
-    "OutputPanel": ("pyama_gui.processing.output", "OutputPanel"),
+    "ProcessingView": ("pyama_gui.processing.view", "ProcessingView"),
+    "ProcessingViewModel": ("pyama_gui.processing.view_model", "ProcessingViewModel"),
 }
 
 __all__ = list(_EXPORTS)

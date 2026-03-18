@@ -8,13 +8,8 @@ from collections.abc import Callable
 import threading
 import logging
 from pathlib import Path
-import yaml
 
 from pyama.io import MicroscopyMetadata
-from pyama.io.config.results import (
-    deserialize_from_dict,
-    save_processing_results_yaml,
-)
 from pyama.types.processing import (
     Channels,
     ProcessingContext,
@@ -440,33 +435,6 @@ def run_complete_workflow(
 
         overall_success = completed_fovs == total_fovs
         logger.info("Completed processing %d/%d FOVs", completed_fovs, total_fovs)
-
-        # Persist merged final context for downstream consumers
-        try:
-            yaml_path = output_dir / "processing_results.yaml"
-
-            # Read existing results if file exists
-            existing_context = ProcessingContext()
-            if yaml_path.exists():
-                try:
-                    with yaml_path.open("r", encoding="utf-8") as f:
-                        existing_dict = yaml.safe_load(f) or {}
-                    logger.info("Loaded existing results from %s", yaml_path)
-
-                    # Convert dict back to ProcessingContext
-                    existing_context = deserialize_from_dict(existing_dict)
-                except Exception as e:
-                    logger.warning("Could not read existing %s: %s", yaml_path, e)
-                    existing_context = ProcessingContext()
-
-            # Merge new context into existing context
-            merged_context = ensure_context(existing_context)
-            _merge_contexts(merged_context, context)
-
-            # Save using unified function (time_units will be set by save function)
-            save_processing_results_yaml(merged_context, output_dir, time_units="min")
-        except Exception as e:
-            logger.warning("Failed to write processing_results.yaml: %s", e)
 
         return overall_success
     except Exception as e:

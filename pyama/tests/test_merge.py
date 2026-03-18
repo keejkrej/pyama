@@ -6,34 +6,22 @@ Shows input and output data explicitly instead of using assertions.
 
 from pathlib import Path
 import pandas as pd
-import yaml
 
 from pyama.apps.processing.merge import (
     get_channel_feature_config,
     parse_fov_range,
     run_merge,
 )
-from pyama.io.config.results import load_processing_results_yaml
+from pyama.io.config.results import scan_processing_results
 
 
 def _write_processing_results(base_dir: Path, csv_path: Path) -> Path:
-    """Write a processing results YAML file."""
-    processing_yaml = base_dir / "processing_results.yaml"
-    yaml.safe_dump(
-        {
-            "channels": {
-                "pc": [0, ["area"]],
-                "fl": [[1, ["intensity"]]],
-            },
-            "time_units": "min",
-            "results": {
-                "0": {"traces": str(csv_path)},
-            },
-        },
-        processing_yaml.open("w", encoding="utf-8"),
-        sort_keys=False,
-    )
-    return processing_yaml
+    """Create a processing output tree for scanning."""
+    fov_dir = base_dir / "fov_000"
+    fov_dir.mkdir(parents=True, exist_ok=True)
+    dest = fov_dir / csv_path.name
+    dest.write_text(csv_path.read_text(encoding="utf-8"), encoding="utf-8")
+    return fov_dir
 
 
 def demonstrate_parse_fov_range():
@@ -83,8 +71,8 @@ def demonstrate_merge_functionality():
         # Write processing results
         processing_yaml = _write_processing_results(tmp_path, csv_path)
 
-        print("\n3. Processing results YAML:")
-        print(processing_yaml.read_text())
+        print("\n3. Processing output folder:")
+        print(processing_yaml)
 
         # Run merge
         message = run_merge(samples, tmp_path)
@@ -141,27 +129,16 @@ def demonstrate_channel_feature_config():
         print("1. Sample CSV content:")
         print(csv_content)
 
-        # Create processing results with multiple channels and features
-        processing_yaml = tmp_path / "processing_results.yaml"
-        yaml_content = {
-            "channels": {
-                "pc": [0, ["area", "perimeter"]],
-                "fl": [[1, ["intensity", "mean"]], [2, ["variance"]]],
-            },
-            "time_units": "min",
-            "results": {
-                "0": {"traces": str(csv_path)},
-            },
-        }
+        fov_dir = tmp_path / "fov_000"
+        fov_dir.mkdir()
+        scanned_csv = fov_dir / csv_path.name
+        scanned_csv.write_text(csv_content, encoding="utf-8")
 
-        with processing_yaml.open("w", encoding="utf-8") as f:
-            yaml.safe_dump(yaml_content, f, sort_keys=False)
-
-        print("\n2. Processing results YAML:")
-        print(processing_yaml.read_text())
+        print("\n2. Processing output folder:")
+        print(fov_dir)
 
         # Load and extract config
-        proc_results = load_processing_results_yaml(processing_yaml)
+        proc_results = scan_processing_results(tmp_path)
         config = get_channel_feature_config(proc_results)
 
         print("\n3. Extracted channel-feature configuration:")

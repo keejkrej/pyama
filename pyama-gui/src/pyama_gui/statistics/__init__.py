@@ -1,15 +1,10 @@
-"""Lazy exports for statistics UI components."""
+"""Exports for the consolidated statistics tab."""
 
 from importlib import import_module
 
 _EXPORTS = {
-    "StatisticsTab": ("pyama_gui.statistics.main_tab", "StatisticsTab"),
-    "StatisticsLoadPanel": ("pyama_gui.statistics.load", "StatisticsLoadPanel"),
-    "StatisticsDetailPanel": ("pyama_gui.statistics.detail", "StatisticsDetailPanel"),
-    "StatisticsComparisonPanel": (
-        "pyama_gui.statistics.comparison",
-        "StatisticsComparisonPanel",
-    ),
+    "StatisticsView": ("pyama_gui.statistics.view", "StatisticsView"),
+    "StatisticsViewModel": ("pyama_gui.statistics.view_model", "StatisticsViewModel"),
 }
 
 __all__ = list(_EXPORTS)

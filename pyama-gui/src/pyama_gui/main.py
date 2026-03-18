@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Application entry-point wiring together the PyAMA-Pro consolidated widgets."""
+"""Application entry point for the PyAMA Qt shell."""
 
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
 import argparse
-from importlib import import_module
 import logging
 import multiprocessing as mp
 import sys
 
 from PySide6.QtWidgets import QApplication
+
+from pyama_gui.main_window import MainWindow
 
 
 # =============================================================================
@@ -48,7 +49,7 @@ def main() -> None:
 
     logger = logging.getLogger(__name__)
     logger.info(
-        "Starting PyAMA-Pro (level=%s, debug=%s)",
+        "Starting PyAMA (level=%s, debug=%s)",
         logging.getLevelName(log_level),
         args.debug,
     )
@@ -69,13 +70,12 @@ def main() -> None:
     # QT APPLICATION SETUP
     # ------------------------------------------------------------------------
     app = QApplication(sys.argv)
-    app.setApplicationName("PyAMA-Pro")
+    app.setApplicationName("PyAMA")
     app.setQuitOnLastWindowClosed(True)
 
     # ------------------------------------------------------------------------
     # MAIN WINDOW CREATION AND DISPLAY
     # ------------------------------------------------------------------------
-    MainWindow = getattr(import_module("pyama_gui.main_window"), "MainWindow")
     window = MainWindow()
     window.show()
 

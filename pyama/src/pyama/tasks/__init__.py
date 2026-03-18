@@ -13,7 +13,7 @@ from pyama.apps.statistics import discover_sample_pairs
 from pyama.apps.statistics.metrics import evaluate_onset_trace
 from pyama.apps.visualization.cache import CachedStack
 from pyama.io import load_microscopy_file
-from pyama.io.config.results import load_processing_results_yaml
+from pyama.io.config.results import scan_processing_results
 from pyama.io.csv.analysis import load_analysis_csv
 from pyama.io.csv.processing import (
     extract_all_cells_data,
@@ -256,7 +256,7 @@ __all__ = [
     "list_tasks",
     "load_analysis_csv",
     "load_microscopy_file",
-    "load_processing_results_yaml",
+    "scan_processing_results",
     "parse_fov_range",
     "read_samples_yaml",
     "resolve_trace_path",

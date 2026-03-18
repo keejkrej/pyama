@@ -177,32 +177,8 @@ def demonstrate_results_inspection(ctx, output_dir):
     else:
         print("   Output directory does not exist")
 
-    # Look for processing results YAML
     yaml_path = output_dir / "processing_results.yaml"
-    if yaml_path.exists():
-        print(f"\n3. Processing results YAML found: {yaml_path}")
-
-        # Load and display summary
-        try:
-            from pyama.io.config.results import load_processing_results_yaml
-
-            results = load_processing_results_yaml(yaml_path)
-
-            print("   YAML summary:")
-            if "channels" in results:
-                channels = results["channels"]
-                if "pc" in channels:
-                    print(f"     PC channel: {channels['pc']}")
-                if "fl" in channels:
-                    print(f"     FL channels: {channels['fl']}")
-
-            if "results" in results:
-                print(f"     FOVs processed: {list(results['results'].keys())}")
-                for fov_id, fov_data in results["results"].items():
-                    print(f"       FOV {fov_id}: {list(fov_data.keys())}")
-
-        except Exception as e:
-            print(f"   ❌ Error loading YAML: {e}")
+    print(f"\n3. processing_results.yaml exists: {yaml_path.exists()}")
 
 
 def main():

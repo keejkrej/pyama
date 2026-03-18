@@ -1,407 +1,154 @@
-"""
-Processing results YAML management - discovery, loading, and writing utilities.
-"""
+"""Folder-based processing results discovery helpers."""
 
 import logging
-from collections.abc import Mapping
+import re
 from pathlib import Path
-from typing import Any
 
-import yaml
+import pandas as pd
 
 from pyama.types.io import ProcessingResults
-from pyama.types.processing import (
-    ChannelSelection,
-    Channels,
-    ProcessingContext,
-    ensure_results_entry,
-)
+from pyama.types.processing import ChannelSelection, Channels
 
 logger = logging.getLogger(__name__)
 
+_FOV_DIR_RE = re.compile(r"^fov_(\d+)$")
+_TRACES_RE = re.compile(r"_traces(?:_inspected)?\.csv$")
+_CHANNEL_KEY_RE = re.compile(
+    r"_(pc|seg|seg_labeled|fl|fl_corrected|fl_background)_ch_(\d+)\.npy$"
+)
+_FEATURE_COLUMN_RE = re.compile(r"^(?P<feature>.+)_ch_(?P<channel>\d+)$")
+_BASE_TRACE_COLUMNS = {
+    "frame",
+    "time",
+    "fov",
+    "cell",
+    "good",
+    "position_x",
+    "position_y",
+    "bbox_x",
+    "bbox_y",
+    "bbox_w",
+    "bbox_h",
+}
 
-# =============================================================================
-# PUBLIC API - LOADING FUNCTIONS
-# =============================================================================
 
-
-def load_processing_results_yaml(file_path: Path) -> ProcessingResults:
-    """Load processing results from YAML file with path correction."""
-    if not file_path.exists():
-        return ProcessingResults(
-            project_path=file_path.parent,
-            n_fov=0,
-            fov_data={},
-            channels=Channels().to_raw(),
-            time_units=None,
-        )
-
-    # Load and parse YAML file
-    output_dir = file_path.parent
-    try:
-        with open(file_path, "r") as f:
-            yaml_data = yaml.safe_load(f)
-    except Exception as e:
-        raise ValueError(f"Failed to load YAML file {file_path}: {e}")
-
-    results_section = yaml_data.get("results")
-    if not yaml_data or results_section is None:
-        raise ValueError("YAML file missing 'results' section")
+def scan_processing_results(project_dir: Path) -> ProcessingResults:
+    """Scan a processing output folder and build a ProcessingResults object."""
+    project_dir = project_dir.expanduser()
+    if not project_dir.exists() or not project_dir.is_dir():
+        raise FileNotFoundError(f"Processing results folder does not exist: {project_dir}")
 
     fov_data: dict[int, dict[str, Path]] = {}
+    inferred_channels = Channels()
 
-    for fov_str, fov_files in results_section.items():
-        try:
-            fov_id = int(fov_str)
-        except Exception:
-            # Skip non-integer keys
+    for fov_dir in sorted(project_dir.iterdir()):
+        if not fov_dir.is_dir():
+            continue
+        match = _FOV_DIR_RE.match(fov_dir.name)
+        if match is None:
             continue
 
-        data_files: dict[str, Path] = {}
+        fov = int(match.group(1))
+        files = _scan_fov_dir(fov_dir)
+        if not files:
+            continue
 
-        for data_type, file_info in (fov_files or {}).items():
-            if data_type == "traces":
-                if file_info is None:
-                    continue
-                path = Path(file_info)
-                corrected_path = _correct_file_path(path, output_dir)
-                if corrected_path and corrected_path.exists():
-                    # Always store the original path from YAML
-                    data_files["traces"] = corrected_path
-                continue
+        fov_data[fov] = files
+        _merge_channels(inferred_channels, _infer_channels_from_fov(files))
 
-            # Handle NPY files - they can be single or multi-channel
-            if isinstance(file_info, list) and len(file_info) >= 1:
-                if isinstance(file_info[0], list):
-                    # Multi-channel format: [[channel, path], [channel, path], ...]
-                    # This handles both single-item [[channel, path]] and multi-item cases
-                    for channel_info in file_info:
-                        if len(channel_info) >= 2 and channel_info[1] is not None:
-                            channel, file_path = (
-                                channel_info[0],
-                                Path(channel_info[1]),
-                            )
-                            corrected_path = _correct_file_path(file_path, output_dir)
-                            if corrected_path and corrected_path.exists():
-                                full_key = f"{data_type}_ch_{channel}"
-                                data_files[full_key] = corrected_path
-                elif len(file_info) >= 2 and file_info[1] is not None:
-                    # Single channel format: [channel, path]
-                    channel, file_path = file_info[0], Path(file_info[1])
-                    corrected_path = _correct_file_path(file_path, output_dir)
-                    if corrected_path and corrected_path.exists():
-                        full_key = f"{data_type}_ch_{channel}"
-                        data_files[full_key] = corrected_path
-
-        fov_data[fov_id] = data_files
-
-    channels_block = yaml_data.get("channels")
-    if channels_block is None:
-        channels_block = {}
-    try:
-        channels_serialized = Channels.from_serialized(channels_block).to_raw()
-    except ValueError as exc:
-        raise ValueError(
-            "Invalid 'channels' section in processing_results.yaml"
-        ) from exc
+    if not fov_data:
+        raise FileNotFoundError(f"No recognizable processing outputs found in {project_dir}")
 
     return ProcessingResults(
-        project_path=output_dir,
+        project_path=project_dir,
         n_fov=len(fov_data),
         fov_data=fov_data,
-        channels=channels_serialized,
-        time_units=yaml_data.get("time_units"),
-        extra={
-            k: v
-            for k, v in yaml_data.items()
-            if k not in {"results", "channels", "time_units"}
-        },
+        channels=inferred_channels.to_raw(),
+        time_units="min",
+        extra={},
     )
 
 
-# =============================================================================
-# PUBLIC API - QUERY FUNCTIONS
-# =============================================================================
+def get_trace_csv_path(processing_results: ProcessingResults, fov: int) -> Path | None:
+    """Return the unified trace CSV path for a given FOV, if present."""
+    return processing_results["fov_data"].get(fov, {}).get("traces")
 
 
-def get_channels_from_yaml(processing_results: ProcessingResults) -> list[int]:
-    """Get list of fluorescence channels from processing results."""
-    channels_info = processing_results["channels"]
-    if channels_info is None:
-        return []
-    if not isinstance(channels_info, Mapping):
-        raise ValueError("Processing results 'channels' section must be a mapping")
-    return Channels.from_serialized(channels_info).get_fl_channels()
+def _scan_fov_dir(fov_dir: Path) -> dict[str, Path]:
+    files: dict[str, Path] = {}
+    for file_path in sorted(fov_dir.iterdir()):
+        if not file_path.is_file():
+            continue
+
+        if file_path.suffix == ".csv" and _TRACES_RE.search(file_path.name):
+            if file_path.name.endswith("_inspected.csv"):
+                continue
+            files["traces"] = file_path
+            continue
+
+        if file_path.suffix != ".npy":
+            continue
+
+        match = _CHANNEL_KEY_RE.search(file_path.name)
+        if match is None:
+            continue
+
+        prefix, channel = match.groups()
+        key = f"{prefix}_ch_{int(channel)}"
+        files[key] = file_path
+
+    return files
 
 
-def get_time_units_from_yaml(processing_results: ProcessingResults) -> str | None:
-    """Get time units from processing results."""
-    return processing_results["time_units"]
-
-
-def get_trace_csv_path_from_yaml(
-    processing_results: ProcessingResults, fov: int
-) -> Path | None:
-    """Get trace CSV path for specific FOV from processing results.
-
-    Returns the original trace CSV path from YAML (one per FOV) containing all channels.
-    Does NOT check for inspected files - use trace_paths.resolve_trace_path() for that.
-
-    Args:
-        processing_results: Processing results object
-        fov: FOV ID
-
-    Returns:
-        Path to trace CSV file, or None if not found
-    """
-    fov_data = processing_results["fov_data"].get(fov, {})
-
-    # Unified schema: one traces CSV per FOV
-    if "traces" in fov_data:
-        return fov_data["traces"]
-
-    return None
-
-
-# =============================================================================
-# PUBLIC API - SERIALIZATION FUNCTIONS
-# =============================================================================
-
-
-def serialize_processing_results(
-    context: Any,
-    time_units: str = "min",
-) -> dict[str, Any]:
-    """Serialize processing context to a YAML-safe dictionary.
-
-    This function converts a ProcessingContext (or dict-like object) into a
-    dictionary that can be safely written to YAML. The caller is responsible
-    for merging with existing results if needed before calling this function.
-
-    Args:
-        context: ProcessingContext to serialize (should already be merged if needed)
-        time_units: Time units string to include (default: "min")
-
-    Returns:
-        Dictionary ready for YAML serialization
-
-    Raises:
-        ValueError: If context cannot be serialized
-    """
-    # Ensure time_units is set on context (create a copy to avoid modifying original)
-    # Set time_units if context is a ProcessingContext
-    if isinstance(context, ProcessingContext):
-        context.time_units = time_units
-    elif hasattr(context, "time_units"):
-        context.time_units = time_units
-    else:
-        # For dict-like contexts, create a copy with time_units
-        context_dict = dict(context) if isinstance(context, dict) else context
-        if isinstance(context_dict, dict):
-            context_dict = dict(context_dict)
-            context_dict["time_units"] = time_units
-            context = context_dict
-
-    # Serialize context for YAML using recursive helper
-    def _serialize_for_yaml(obj: Any) -> Any:
-        """Convert context to a YAML-friendly representation.
-
-        - pathlib.Path -> str
-        - set -> list (sorted for determinism)
-        - tuple -> list
-        - dict/list: recurse
-        - dataclasses: convert to dict
-        """
+def _infer_channels_from_fov(fov_files: dict[str, Path]) -> Channels:
+    feature_map: dict[int, set[str]] = {}
+    traces_path = fov_files.get("traces")
+    if traces_path is not None:
         try:
-            if isinstance(obj, ChannelSelection):
-                return obj.to_payload()
-            if isinstance(obj, Channels):
-                return obj.to_raw()
-            # Handle dataclasses
-            if hasattr(obj, "__dataclass_fields__"):
-                result = {}
-                for field_name in obj.__dataclass_fields__:
-                    field_value = getattr(obj, field_name)
-                    result[field_name] = _serialize_for_yaml(field_value)
-                return result
-            if isinstance(obj, Path):
-                return str(obj)
-            if isinstance(obj, dict):
-                return {str(k): _serialize_for_yaml(v) for k, v in obj.items()}
-            if isinstance(obj, (list, tuple)):
-                return [_serialize_for_yaml(v) for v in obj]
-            if isinstance(obj, set):
-                return [
-                    _serialize_for_yaml(v)
-                    for v in sorted(list(obj), key=lambda x: str(x))
-                ]
-            return obj
-        except Exception:
-            # Fallback to string if anything goes wrong
-            try:
-                return str(obj)
-            except Exception:
-                return None
+            columns = list(pd.read_csv(traces_path, nrows=0).columns)
+        except Exception as exc:
+            logger.warning("Failed to inspect trace CSV %s: %s", traces_path, exc)
+            columns = []
 
-    return _serialize_for_yaml(context)
+        for column in columns:
+            if column in _BASE_TRACE_COLUMNS:
+                continue
+            match = _FEATURE_COLUMN_RE.match(column)
+            if match is None:
+                continue
+            feature = match.group("feature")
+            channel = int(match.group("channel"))
+            feature_map.setdefault(channel, set()).add(feature)
 
+    pc_channel: int | None = None
+    if any(key.startswith(("pc_ch_", "seg_ch_", "seg_labeled_ch_")) for key in fov_files):
+        pc_candidates = {
+            int(key.rsplit("_", 1)[-1])
+            for key in fov_files
+            if key.startswith(("pc_ch_", "seg_ch_", "seg_labeled_ch_"))
+        }
+        if pc_candidates:
+            pc_channel = min(pc_candidates)
 
-def save_processing_results_yaml(
-    context: Any,
-    output_dir: Path,
-    time_units: str = "min",
-) -> None:
-    """Save processing context to processing_results.yaml file.
+    fl_channels = {
+        int(key.rsplit("_", 1)[-1])
+        for key in fov_files
+        if key.startswith(("fl_ch_", "fl_corrected_ch_", "fl_background_ch_"))
+    }
 
-    This function provides a unified API for saving processing results YAML files.
-    It handles serialization and file writing. The caller is responsible for
-    merging with existing results if needed.
-
-    Args:
-        context: ProcessingContext to serialize (should already be merged if needed)
-        output_dir: Directory where processing_results.yaml will be written
-        time_units: Time units string to include (default: "min")
-
-    Raises:
-        OSError: If the file cannot be written
-        ValueError: If context cannot be serialized
-    """
-    yaml_path = output_dir / "processing_results.yaml"
-
-    # Serialize context to YAML-safe dict
-    safe_context = serialize_processing_results(context, time_units)
-
-    try:
-        with yaml_path.open("w", encoding="utf-8") as f:
-            yaml.safe_dump(
-                safe_context,
-                f,
-                sort_keys=False,
-                default_flow_style=False,
-                allow_unicode=True,
-            )
-        logger.info("Wrote processing results to %s", yaml_path)
-    except Exception as e:
-        logger.warning("Failed to write processing_results.yaml: %s", e)
-        raise
-
-
-def deserialize_from_dict(data: dict) -> Any:
-    """Convert a dict back to a ProcessingContext object.
-
-    Args:
-        data: Dictionary loaded from YAML
-
-    Returns:
-        ProcessingContext object
-    """
-    context = ProcessingContext()
-
-    if not isinstance(data, dict):
-        return context
-
-    context.output_dir = (
-        Path(data.get("output_dir")) if data.get("output_dir") else None
-    )
-
-    channels_data = data.get("channels")
-    if channels_data is None:
-        context.channels = Channels()
-    elif isinstance(channels_data, Mapping):
-        context.channels = Channels.from_serialized(channels_data)
+    if pc_channel is not None and pc_channel in feature_map:
+        pc = ChannelSelection(pc_channel, sorted(feature_map.pop(pc_channel)))
+    elif pc_channel is not None:
+        pc = ChannelSelection(pc_channel, [])
     else:
-        raise ValueError("Invalid 'channels' section when deserializing context")
+        pc = None
 
-    results_block = data.get("results")
-    if results_block:
-        context.results = {}
-        for fov_str, fov_data in results_block.items():
-            fov = int(fov_str)
-            fov_entry = ensure_results_entry()
+    fl = []
+    for channel in sorted(set(feature_map) | fl_channels):
+        fl.append(ChannelSelection(channel, sorted(feature_map.get(channel, set()))))
 
-            if fov_data.get("pc"):
-                pc_data = fov_data["pc"]
-                if isinstance(pc_data, (list, tuple)) and len(pc_data) == 2:
-                    fov_entry.pc = (int(pc_data[0]), Path(pc_data[1]))
-
-            if fov_data.get("fl"):
-                for fl_item in fov_data["fl"]:
-                    if isinstance(fl_item, (list, tuple)) and len(fl_item) == 2:
-                        fov_entry.fl.append((int(fl_item[0]), Path(fl_item[1])))
-
-            if fov_data.get("seg"):
-                seg_data = fov_data["seg"]
-                if isinstance(seg_data, (list, tuple)) and len(seg_data) == 2:
-                    fov_entry.seg = (int(seg_data[0]), Path(seg_data[1]))
-
-            if fov_data.get("seg_labeled"):
-                seg_labeled_data = fov_data["seg_labeled"]
-                if (
-                    isinstance(seg_labeled_data, (list, tuple))
-                    and len(seg_labeled_data) == 2
-                ):
-                    fov_entry.seg_labeled = (
-                        int(seg_labeled_data[0]),
-                        Path(seg_labeled_data[1]),
-                    )
-
-            bg_data = fov_data.get("fl_background")
-            if bg_data:
-                for fl_bg_item in bg_data:
-                    if isinstance(fl_bg_item, (list, tuple)) and len(fl_bg_item) == 2:
-                        fov_entry.fl_background.append(
-                            (int(fl_bg_item[0]), Path(fl_bg_item[1]))
-                        )
-
-            traces_value = fov_data.get("traces")
-            if isinstance(traces_value, (str, Path)):
-                fov_entry.traces = Path(traces_value)
-
-            context.results[fov] = fov_entry
-
-    context.params = data.get("params", {})
-    context.time_units = data.get("time_units")
-
-    return context
+    return Channels(pc=pc, fl=fl)
 
 
-# =============================================================================
-# PRIVATE HELPER FUNCTIONS
-# =============================================================================
-
-
-def _correct_file_path(file_path: Path, current_output_dir: Path) -> Path | None:
-    """
-    Correct file paths from YAML to work with the current directory structure.
-
-    The YAML file contains absolute paths that may be invalid if the data folder
-    has been moved. This function reconstructs the correct path based on:
-    1. The current output directory (where the user is loading from)
-    2. The relative structure from the YAML path
-
-    Args:
-        file_path: Original path from YAML file
-        current_output_dir: Current directory where user is loading from
-
-    Returns:
-        Corrected path that should exist in the current structure, or None if invalid
-    """
-    try:
-        # If the original path exists, use it
-        if file_path.exists():
-            return file_path
-
-        # Extract the relative part of the path (FOV folder and filename)
-        path_parts = file_path.parts
-
-        # Use last two parts (FOV directory and filename)
-        relative_parts = path_parts[-2:]
-        corrected_path = current_output_dir
-        for part in relative_parts:
-            corrected_path = corrected_path / part
-
-        return corrected_path
-
-    except Exception:
-        # Fallback: just use filename in current directory
-        return current_output_dir / file_path.name
+def _merge_channels(target: Channels, incoming: Channels) -> None:
+    target.merge_from(incoming)

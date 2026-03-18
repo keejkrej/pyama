@@ -1,12 +1,13 @@
-"""Lazy exports for visualization UI components."""
+"""Exports for the consolidated visualization tab."""
 
 from importlib import import_module
 
 _EXPORTS = {
-    "VisualizationTab": ("pyama_gui.visualization.main_tab", "VisualizationTab"),
-    "ImagePanel": ("pyama_gui.visualization.image", "ImagePanel"),
-    "LoadPanel": ("pyama_gui.visualization.load", "LoadPanel"),
-    "TracePanel": ("pyama_gui.visualization.trace", "TracePanel"),
+    "VisualizationView": ("pyama_gui.visualization.view", "VisualizationView"),
+    "VisualizationViewModel": (
+        "pyama_gui.visualization.view_model",
+        "VisualizationViewModel",
+    ),
 }
 
 __all__ = list(_EXPORTS)

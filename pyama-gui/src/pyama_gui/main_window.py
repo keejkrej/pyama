@@ -1,14 +1,16 @@
-"""Primary application window hosting all PyAMA views without MVC separation."""
+"""Primary application window for the consolidated MVVM Qt shell."""
 
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
 import logging
-from importlib import import_module
+from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import Slot
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -17,19 +19,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-logger = logging.getLogger(__name__)
+from pyama_gui.app_view_model import AppViewModel
+from pyama_gui.constants import DEFAULT_DIR
 
-_TAB_SPECS = (
-    ("processing_tab", "Processing", "pyama_gui.processing.main_tab", "ProcessingTab"),
-    ("statistics_tab", "Statistics", "pyama_gui.statistics.main_tab", "StatisticsTab"),
-    ("modeling_tab", "Modeling", "pyama_gui.modeling.main_tab", "ModelingTab"),
-    (
-        "visualization_tab",
-        "Visualization",
-        "pyama_gui.visualization.main_tab",
-        "VisualizationTab",
-    ),
-)
+logger = logging.getLogger(__name__)
 
 
 class _LazyTabContainer(QWidget):
@@ -51,40 +44,6 @@ class _LazyTabContainer(QWidget):
             return
         self._loaded_widget = widget
         self._layout.addWidget(widget)
-
-
-# =============================================================================
-# STATUS MANAGER
-# =============================================================================
-
-
-class StatusManager(QObject):
-    """Status manager for showing user-friendly messages."""
-
-    # ------------------------------------------------------------------------
-    # SIGNALS
-    # ------------------------------------------------------------------------
-    status_message = Signal(str)  # message
-    status_cleared = Signal()  # Clear the status
-
-    # ------------------------------------------------------------------------
-    # INITIALIZATION
-    # ------------------------------------------------------------------------
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-
-    # ------------------------------------------------------------------------
-    # STATUS METHODS
-    # ------------------------------------------------------------------------
-    def show_message(self, message: str) -> None:
-        """Show a status message."""
-        logger.debug("Status Bar: Rendering user status message: %s", message)
-        self.status_message.emit(message)
-
-    def clear_status(self) -> None:
-        """Clear the status message."""
-        logger.debug("Status Bar: Clearing status message and reverting to ready state")
-        self.status_cleared.emit()
 
 
 # =============================================================================
@@ -111,6 +70,8 @@ class StatusBar(QStatusBar):
         # Main status label
         self._status_label = QLabel("Ready")
         self.addWidget(self._status_label)
+        self._workspace_label = QLabel("Workspace: Not set")
+        self.addPermanentWidget(self._workspace_label)
 
     def _connect_signals(self) -> None:
         """Connect signals for the status bar."""
@@ -127,6 +88,12 @@ class StatusBar(QStatusBar):
         """Clear status and show ready state."""
         self._status_label.setText("Ready")
 
+    def show_workspace(self, path: Path | None) -> None:
+        if path is None:
+            self._workspace_label.setText("Workspace: Not set")
+        else:
+            self._workspace_label.setText(f"Workspace: {path}")
+
 
 # =============================================================================
 # MAIN WINDOW CLASS
@@ -141,7 +108,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     def __init__(self) -> None:
         super().__init__()
-        self.status_manager = StatusManager()
+        self.app_view_model = AppViewModel(self)
         self.processing_tab = None
         self.visualization_tab = None
         self.modeling_tab = None
@@ -156,6 +123,7 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         """Build all UI components for the main window."""
         self._setup_window()
+        self._create_menu_bar()
         self._create_status_bar()
         self._create_tabs()
         self._finalize_window()
@@ -166,6 +134,10 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         """Connect all signals and establish communication between components."""
         self.tabs.currentChanged.connect(self._on_tab_changed)
+        self._set_workspace_action.triggered.connect(self._on_set_workspace_folder)
+        self.app_view_model.status_changed.connect(self._on_status_message)
+        self.app_view_model.workspace_changed.connect(self._on_workspace_changed)
+        self.app_view_model.busy_changed.connect(self._on_busy_changed)
         self._ensure_tab_loaded(0)
 
     # ------------------------------------------------------------------------
@@ -173,7 +145,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     def _setup_window(self) -> None:
         """Configure basic window properties."""
-        self.setWindowTitle("PyAMA-Pro")
+        self.setWindowTitle("PyAMA")
         self.resize(1600, 800)
 
     # ------------------------------------------------------------------------
@@ -183,19 +155,15 @@ class MainWindow(QMainWindow):
         """Create and configure the status bar."""
         self.status_bar = StatusBar(self)
         self.setStatusBar(self.status_bar)
+        self.status_bar.show_workspace(self.app_view_model.workspace_dir)
 
-        # Connect status manager signals to status bar
-        self.status_manager.status_message.connect(self._on_status_message)
-        self.status_manager.status_cleared.connect(self._on_status_cleared)
+    def _create_menu_bar(self) -> None:
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu("File")
 
-    # ------------------------------------------------------------------------
-    # TAB CONNECTIONS
-    # ------------------------------------------------------------------------
-    def _connect_tabs(self) -> None:
-        """Kept for compatibility with the older eager-tab layout."""
-        return None
+        self._set_workspace_action = QAction("Set Workspace Folder", self)
+        file_menu.addAction(self._set_workspace_action)
 
-    # ------------------------------------------------------------------------
     # TAB CREATION
     # ------------------------------------------------------------------------
     def _create_tabs(self) -> None:
@@ -207,10 +175,38 @@ class MainWindow(QMainWindow):
         self.tabs.setDocumentMode(True)
 
         self._tab_containers = []
-        for _attr_name, label, _module_path, _class_name in _TAB_SPECS:
+        for _attr_name, label, _factory in self._tab_specs():
             container = _LazyTabContainer(label, self)
             self._tab_containers.append(container)
             self.tabs.addTab(container, label)
+
+    def _tab_specs(self) -> tuple[tuple[str, str, object], ...]:
+        return (
+            ("processing_tab", "Processing", self._create_processing_tab),
+            ("statistics_tab", "Statistics", self._create_statistics_tab),
+            ("modeling_tab", "Modeling", self._create_modeling_tab),
+            ("visualization_tab", "Visualization", self._create_visualization_tab),
+        )
+
+    def _create_processing_tab(self) -> QWidget:
+        from pyama_gui.processing.view import ProcessingView
+
+        return ProcessingView(self.app_view_model, self)
+
+    def _create_statistics_tab(self) -> QWidget:
+        from pyama_gui.statistics.view import StatisticsView
+
+        return StatisticsView(self.app_view_model, self)
+
+    def _create_modeling_tab(self) -> QWidget:
+        from pyama_gui.modeling.view import ModelingView
+
+        return ModelingView(self.app_view_model, self)
+
+    def _create_visualization_tab(self) -> QWidget:
+        from pyama_gui.visualization.view import VisualizationView
+
+        return VisualizationView(self.app_view_model, self)
 
     def _ensure_tab_loaded(self, index: int) -> QWidget | None:
         """Instantiate a tab the first time it is shown or requested."""
@@ -221,34 +217,21 @@ class MainWindow(QMainWindow):
         if container.loaded_widget is not None:
             return container.loaded_widget
 
-        attr_name, label, module_path, class_name = _TAB_SPECS[index]
-        logger.debug("Lazy-loading tab '%s' from %s.%s", label, module_path, class_name)
-        module = import_module(module_path)
-        tab_class = getattr(module, class_name)
-        widget = tab_class(self)
+        attr_name, label, factory = self._tab_specs()[index]
+        logger.debug("Lazy-loading tab '%s'", label)
+        widget = factory()
         container.set_loaded_widget(widget)
         setattr(self, attr_name, widget)
-        self._wire_tab(widget)
         return widget
 
-    def _wire_tab(self, widget: QWidget) -> None:
-        """Attach shared signals and services to a lazily-loaded tab."""
-        if hasattr(widget, "processing_started"):
-            widget.processing_started.connect(self._on_processing_started)
-        if hasattr(widget, "processing_finished"):
-            widget.processing_finished.connect(self._on_processing_finished)
-        if hasattr(widget, "set_status_manager"):
-            widget.set_status_manager(self.status_manager)
-
-    @Slot()
+    @Slot(str)
     def _on_status_message(self, message: str) -> None:
         """Handle status message display."""
         self.status_bar.show_status_message(message)
 
-    @Slot()
-    def _on_status_cleared(self) -> None:
-        """Handle status clearing."""
-        self.status_bar.clear_status()
+    @Slot(object)
+    def _on_workspace_changed(self, path: Path | None) -> None:
+        self.status_bar.show_workspace(path)
 
     @Slot(int)
     def _on_tab_changed(self, index: int) -> None:
@@ -263,22 +246,27 @@ class MainWindow(QMainWindow):
         )
 
     @Slot()
-    def _on_processing_started(self) -> None:
-        """Disable tab switching during processing."""
-        logger.debug(
-            "Processing started from tab '%s'; disabling tab switching",
-            self.tabs.tabText(self.tabs.currentIndex()),
+    def _on_set_workspace_folder(self) -> None:
+        start_dir = str(self.app_view_model.workspace_dir or DEFAULT_DIR)
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "Select Workspace Folder",
+            start_dir,
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
-        self.tabs.tabBar().setEnabled(False)  # Only disable tab bar, not content
+        if not path:
+            return
 
-    @Slot()
-    def _on_processing_finished(self) -> None:
-        """Re-enable tab switching when processing finishes."""
-        logger.debug(
-            "Processing finished; re-enabling tab switching for %d tabs",
-            self.tabs.count(),
+        workspace_dir = Path(path)
+        logger.info("Workspace folder set to %s", workspace_dir)
+        self.app_view_model.set_workspace_dir(workspace_dir)
+        self.app_view_model.set_status_message(
+            f"Workspace folder set to {workspace_dir}"
         )
-        self.tabs.tabBar().setEnabled(True)  # Re-enable tab bar only
+
+    @Slot(bool)
+    def _on_busy_changed(self, is_busy: bool) -> None:
+        self.tabs.tabBar().setEnabled(not is_busy)
 
     # ------------------------------------------------------------------------
     # WINDOW FINALIZATION

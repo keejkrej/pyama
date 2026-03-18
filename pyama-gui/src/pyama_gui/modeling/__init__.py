@@ -1,12 +1,10 @@
-"""Lazy exports for modeling UI components."""
+"""Exports for the consolidated modeling tab."""
 
 from importlib import import_module
 
 _EXPORTS = {
-    "ModelingTab": ("pyama_gui.modeling.main_tab", "ModelingTab"),
-    "DataPanel": ("pyama_gui.modeling.data", "DataPanel"),
-    "ParameterPanel": ("pyama_gui.modeling.parameter", "ParameterPanel"),
-    "QualityPanel": ("pyama_gui.modeling.quality", "QualityPanel"),
+    "ModelingView": ("pyama_gui.modeling.view", "ModelingView"),
+    "ModelingViewModel": ("pyama_gui.modeling.view_model", "ModelingViewModel"),
 }
 
 __all__ = list(_EXPORTS)

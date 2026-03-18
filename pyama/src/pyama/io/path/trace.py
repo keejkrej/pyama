@@ -52,7 +52,7 @@ def get_trace_path_from_processing_results(proc_results, fov: int) -> Path | Non
 
     Convenience function that extracts the trace path from ProcessingResults
     and resolves it using resolve_trace_path(). This is useful when working
-    with ProcessingResults objects from YAML files.
+    with ProcessingResults objects from scanned project folders.
 
     Args:
         proc_results: ProcessingResults object from results_yaml
@@ -62,13 +62,13 @@ def get_trace_path_from_processing_results(proc_results, fov: int) -> Path | Non
         Resolved trace path (inspected if available), or None if not found
 
     Examples:
-        >>> from pyama.io.config.results import load_processing_results_yaml
-        >>> proc_results = load_processing_results_yaml(Path("results.yaml"))
+        >>> from pyama.io.config.results import scan_processing_results
+        >>> proc_results = scan_processing_results(Path("results"))
         >>> trace_path = get_trace_path_from_processing_results(proc_results, 0)
     """
-    from pyama.io.config.results import get_trace_csv_path_from_yaml
+    from pyama.io.config.results import get_trace_csv_path
 
-    original_path = get_trace_csv_path_from_yaml(proc_results, fov)
+    original_path = get_trace_csv_path(proc_results, fov)
     if original_path is None:
         return None
 
