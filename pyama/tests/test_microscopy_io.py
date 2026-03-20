@@ -133,16 +133,16 @@ class _FakeCziReaderMismatch(_FakeCziReader):
 
 
 def test_load_nd2_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("pyama.io.microscopy.base.nd2.ND2File", _FakeNd2File)
+    monkeypatch.setattr("pyama.io.microscopy.nd2.ND2File", _FakeNd2File)
 
     reader, metadata = load_microscopy_file(Path("sample.nd2"))
 
     assert metadata.file_type == "nd2"
-    assert metadata.fov_list == [0, 1]
+    assert metadata.fov_list == (0, 1)
     assert metadata.n_fovs == 2
     assert metadata.n_channels == 2
-    assert metadata.channel_names == ["Phase", "GFP"]
-    assert metadata.timepoints == [0.0, 5.0, 10.0]
+    assert metadata.channel_names == ("Phase", "GFP")
+    assert metadata.timepoints == (0.0, 5.0, 10.0)
     assert reader.shape == (2, 3, 2, 2, 3)
 
     frame = get_microscopy_frame(reader, 1, 1, 2)
@@ -166,27 +166,27 @@ def test_load_nd2_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_load_nd2_fallback_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("pyama.io.microscopy.base.nd2.ND2File", _FakeNd2FileFallback)
+    monkeypatch.setattr("pyama.io.microscopy.nd2.ND2File", _FakeNd2FileFallback)
 
     _, metadata = load_microscopy_file(Path("fallback.nd2"))
 
-    assert metadata.channel_names == ["C0", "C1"]
-    assert metadata.timepoints == [0.0, 1.0, 2.0]
+    assert metadata.channel_names == ("C0", "C1")
+    assert metadata.timepoints == (0.0, 1.0, 2.0)
 
 
 def test_load_czi_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("pyama.io.microscopy.base.czi_api.CziReader", _FakeCziReader)
+    monkeypatch.setattr("pyama.io.microscopy.czi_api.CziReader", _FakeCziReader)
 
     reader, metadata = load_microscopy_file(Path("sample.czi"))
 
     assert metadata.file_type == "czi"
-    assert metadata.fov_list == [0, 1]
+    assert metadata.fov_list == (0, 1)
     assert metadata.n_fovs == 2
     assert metadata.n_channels == 2
     assert metadata.height == 2
     assert metadata.width == 3
-    assert metadata.channel_names == ["Brightfield", "Fluor"]
-    assert metadata.timepoints == [1.5, 3.0, 4.5]
+    assert metadata.channel_names == ("Brightfield", "Fluor")
+    assert metadata.timepoints == (1.5, 3.0, 4.5)
 
     frame = get_microscopy_frame(reader, 1, 1, 2)
     assert np.array_equal(frame, np.full((2, 3), 32, dtype=np.uint16))
@@ -205,7 +205,7 @@ def test_load_czi_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_czi_scene_size_mismatch_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "pyama.io.microscopy.base.czi_api.CziReader", _FakeCziReaderMismatch
+        "pyama.io.microscopy.czi_api.CziReader", _FakeCziReaderMismatch
     )
 
     with pytest.raises(RuntimeError, match="identical layer-0 dimensions"):

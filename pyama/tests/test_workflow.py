@@ -9,11 +9,18 @@ import logging
 from pathlib import Path
 
 from pyama.io import load_microscopy_file
-from pyama.apps.processing.workflow.run import run_complete_workflow
+from pyama.tasks import (
+    ProcessingTaskRequest,
+    TaskStatus,
+    submit_processing,
+    subscribe,
+    unsubscribe,
+)
 from pyama.types.processing import (
     ChannelSelection,
     Channels,
     ProcessingContext,
+    ProcessingParams,
 )
 
 
@@ -44,7 +51,7 @@ def demonstrate_workflow_setup():
 
     # Build per-channel feature mapping
     print("\n3. Discovering available features...")
-    from pyama.apps.processing.extraction.features import (
+    from pyama.apps.processing.extract import (
         list_fluorescence_features,
         list_phase_features,
     )
@@ -90,14 +97,17 @@ def demonstrate_workflow_setup():
             pc=ChannelSelection(channel=0, features=pc_features),
             fl=fl_channels,
         ),
-        params={"background_weight": 0.0},
+        params=ProcessingParams(background_weight=0.0),
     )
 
     print("✓ Processing context created:")
-    print(f"   PC Channel: {ctx.channels.pc.channel if ctx.channels.pc else 'None'}")
-    print(f"   PC Features: {ctx.channels.pc.features if ctx.channels.pc else 'None'}")
-    print(f"   FL Channels: {[fl.channel for fl in ctx.channels.fl]}")
-    for i, fl in enumerate(ctx.channels.fl):
+    channels = ctx.channels
+    if channels is None:
+        raise RuntimeError("Processing context is missing channels")
+    print(f"   PC Channel: {channels.pc.channel if channels.pc else 'None'}")
+    print(f"   PC Features: {channels.pc.features if channels.pc else 'None'}")
+    print(f"   FL Channels: {[fl.channel for fl in channels.fl]}")
+    for i, fl in enumerate(channels.fl):
         print(f"     Channel {fl.channel}: {fl.features}")
 
     return microscopy_path, ctx, md
@@ -120,13 +130,38 @@ def demonstrate_workflow_execution(ctx, md):
     print("   (This may take several minutes depending on data size...)")
 
     try:
-        success = run_complete_workflow(
-            metadata=md,
-            context=ctx,
-            fov_start=fov_start,
-            fov_end=fov_end,
-            n_workers=n_workers,
+        record = submit_processing(
+            ProcessingTaskRequest(
+                metadata=md,
+                context=ctx,
+                fov_start=fov_start,
+                fov_end=fov_end,
+                n_workers=n_workers,
+            )
         )
+        queue = subscribe(record.id)
+        try:
+            while True:
+                snapshot = queue.get()
+                if snapshot.progress is not None:
+                    progress = snapshot.progress
+                    print(
+                        "   Progress:",
+                        progress.step,
+                        progress.percent,
+                        progress.message,
+                    )
+                if snapshot.status in {
+                    TaskStatus.COMPLETED,
+                    TaskStatus.FAILED,
+                    TaskStatus.CANCELLED,
+                }:
+                    success = snapshot.status == TaskStatus.COMPLETED and bool(
+                        (snapshot.result or {}).get("success", False)
+                    )
+                    break
+        finally:
+            unsubscribe(record.id, queue)
 
         if success:
             print("✓ Workflow completed successfully!")

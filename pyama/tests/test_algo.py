@@ -11,10 +11,10 @@ from matplotlib.colors import TwoSlopeNorm
 import numpy as np
 import pandas as pd
 from pyama.io import load_microscopy_file, get_microscopy_time_stack
-from pyama.apps.processing.segmentation import segment_cell
+from pyama.apps.processing.segment import segment_cell
 from pyama.apps.processing.background import estimate_background
-from pyama.apps.processing.tracking import track_cell
-from pyama.apps.processing.extraction import extract_trace
+from pyama.apps.processing.track import track_cell
+from pyama.apps.processing.extract import extract_trace
 from pyama.apps.modeling.fitting import fit_model
 from pyama.apps.modeling.models import get_model
 
@@ -220,18 +220,15 @@ def demonstrate_feature_extraction(fluorescence_data, tracked_data, output_dir):
 
     if trace_path.exists():
         print("Loading existing traces...")
-        df = pd.read_csv(trace_path, index_col=["cell", "time"])
+        df = pd.read_csv(trace_path)
         print(f"✓ Loaded traces from: {trace_path}")
     else:
         print("Running feature extraction...")
-        # Create time array (assuming 6 frames per hour, adjust as needed)
-        times = np.arange(len(fluorescence_data)) / 6.0
         # Create zeros background for test (no background correction in demo)
         test_background = np.zeros_like(fluorescence_data, dtype=np.float32)
         df = extract_trace(
             fluorescence_data,
             tracked_data,
-            times,
             test_background,
             progress_callback,
             background_weight=0.0,
@@ -241,10 +238,8 @@ def demonstrate_feature_extraction(fluorescence_data, tracked_data, output_dir):
 
     print("Extracted features:")
     print(f"  Total traces: {len(df)}")
-    print(f"  Unique cells: {len(df.index.get_level_values('cell').unique())}")
-    print(
-        f"  Time range: {df.index.get_level_values('time').min():.1f} - {df.index.get_level_values('time').max():.1f} hours"
-    )
+    print(f"  Unique cells: {df['cell'].nunique()}")
+    print(f"  Frame range: {df['frame'].min()} - {df['frame'].max()}")
     print(f"  Available columns: {list(df.columns)}")
 
     # Display extracted features
@@ -288,7 +283,7 @@ def demonstrate_model_fitting(df, output_dir):
     all_cells = df.index.get_level_values("cell").unique()
     cell_id = all_cells[len(all_cells) // 2]  # Use middle cell
 
-    print(f"Fitting maturation model to cell {cell_id}")
+    print(f"Fitting base model to cell {cell_id}")
 
     y = df.loc[cell_id]["intensity"]
     t = df.loc[cell_id].index.values
@@ -297,8 +292,14 @@ def demonstrate_model_fitting(df, output_dir):
     print(f"  Intensity range: {y.min():.1f} - {y.max():.1f}")
     print(f"  Data points: {len(y)}")
 
-    model = get_model("maturation")
-    result = fit_model(model, t, y, model.DEFAULT_FIXED, model.DEFAULT_FIT)
+    model = get_model("base")
+    result = fit_model(
+        model,
+        t,
+        y,
+        model.get_fixed_parameters(),
+        model.get_fit_parameters(),
+    )
 
     print("✓ Fitting completed:")
     print(f"  R² = {result.r_squared:.3f}")
@@ -386,5 +387,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

@@ -1,20 +1,24 @@
-"""In-memory task manager and compatibility workflow wrapper."""
+"""In-memory task manager for asynchronous pyama jobs."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
+import tempfile
 from queue import Queue
 from threading import Event, Lock, Thread
 from uuid import uuid4
+import yaml
 
-from pyama.apps.modeling.fitting_service import FittingService as CoreFittingService
-from pyama.apps.processing.merge import run_merge as run_merge_impl
-from pyama.apps.processing.workflow.run import run_complete_workflow
-from pyama.apps.statistics.service import (
-    run_folder_statistics as run_folder_statistics_impl,
+from pyama.apps.modeling.service import fit_csv_file as fit_csv_file_impl
+from pyama.apps.processing.service import (
+    run_complete_workflow,
+    run_merge_traces as run_merge_impl,
 )
-from pyama.apps.visualization.cache import VisualizationCache as CoreVisualizationCache
+from pyama.apps.statistics.service import run_folder_statistics as run_folder_statistics_impl
+from pyama.apps.visualization.service import get_or_build_uint8 as get_or_build_uint8_impl
 from pyama.tasks.broker import TaskBroker
-from pyama.types.processing import ensure_context
+from pyama.types.pipeline import Channels, ProcessingConfig
+from pyama.types.progress_payload import ProgressPayload
 from pyama.types.tasks import (
     MergeTaskRequest,
     ModelFitTaskRequest,
@@ -25,9 +29,8 @@ from pyama.types.tasks import (
     TaskRecord,
     TaskStatus,
     VisualizationTaskRequest,
-    WorkflowProgressEvent,
-    WorkflowStatusEvent,
 )
+from pyama.utils.progress import build_progress_payload
 
 TERMINAL_TASK_STATUSES = {
     TaskStatus.COMPLETED,
@@ -36,31 +39,65 @@ TERMINAL_TASK_STATUSES = {
 }
 
 
+def _config_from_request(request: ProcessingTaskRequest) -> ProcessingConfig:
+    if request.config is not None:
+        return request.config
+
+    context = request.context
+    if context is None:
+        return ProcessingConfig()
+
+    channels_obj = getattr(context, "channels", None)
+    params_obj = getattr(context, "params", None)
+    pc_selection = getattr(channels_obj, "pc", None)
+    fl_selections = list(getattr(channels_obj, "fl", [])) if channels_obj is not None else []
+
+    channels = None
+    if pc_selection is not None:
+        channels = Channels(
+            pc={int(pc_selection.channel): sorted(list(getattr(pc_selection, "features", [])))},
+            fl={
+                int(selection.channel): sorted(list(getattr(selection, "features", [])))
+                for selection in fl_selections
+            },
+        )
+
+    if request.fov_start is None or request.fov_start < 0:
+        start = 0
+    else:
+        start = request.fov_start
+    if request.fov_end is None or request.fov_end < 0:
+        end = request.metadata.n_positions - 1
+    else:
+        end = request.fov_end
+
+    return ProcessingConfig(
+        channels=channels,
+        params={
+            "positions": f"{start}:{end + 1}",
+            "n_workers": max(1, int(request.n_workers or 1)),
+            "background_weight": float(getattr(params_obj, "background_weight", 1.0)),
+            "copy_only": bool(getattr(params_obj, "copy_only", False)),
+        },
+    )
+
+
+def _output_dir_from_request(request: ProcessingTaskRequest):
+    if request.output_dir is not None:
+        return request.output_dir
+    context = request.context
+    if context is not None:
+        return getattr(context, "output_dir", None)
+    return None
+
 def _clone_progress(progress: TaskProgress | None) -> TaskProgress | None:
     if progress is None:
         return None
-    return TaskProgress(
-        task_id=progress.task_id,
-        kind=progress.kind,
-        step=progress.step,
-        current=progress.current,
-        total=progress.total,
-        percent=progress.percent,
-        message=progress.message,
-        details=dict(progress.details),
-    )
+    return replace(progress, details=dict(progress.details))
 
 
 def _clone_record(record: TaskRecord) -> TaskRecord:
-    return TaskRecord(
-        id=record.id,
-        kind=record.kind,
-        status=record.status,
-        request=record.request,
-        progress=_clone_progress(record.progress),
-        result=record.result,
-        error_message=record.error_message,
-    )
+    return replace(record, progress=_clone_progress(record.progress))
 
 
 class TaskManager:
@@ -102,16 +139,24 @@ class TaskManager:
             cancel_event = self._cancel_events.get(task_id)
             if record is None or record.status in TERMINAL_TASK_STATUSES:
                 return False
-            record.status = TaskStatus.CANCELLED
-            record.error_message = "Task cancelled"
-            snapshot = _clone_record(record)
+            updated_record = replace(
+                record,
+                status=TaskStatus.CANCELLED,
+                error_message="Task cancelled",
+            )
+            self._tasks[task_id] = updated_record
+            snapshot = _clone_record(updated_record)
         if cancel_event is not None:
             cancel_event.set()
         self._broker.publish(snapshot)
         return True
 
     def subscribe(self, task_id: str) -> Queue:
-        return self._broker.subscribe(task_id)
+        queue = self._broker.subscribe(task_id)
+        snapshot = self.get_task(task_id)
+        if snapshot is not None:
+            queue.put(snapshot)
+        return queue
 
     def unsubscribe(self, task_id: str, queue: Queue) -> None:
         self._broker.unsubscribe(task_id, queue)
@@ -120,7 +165,7 @@ class TaskManager:
         self,
         kind: TaskKind,
         request,
-        runner: Callable[[str, object, Event], object],
+        runner: Callable[..., object],
     ) -> TaskRecord:
         task_id = uuid4().hex
         record = TaskRecord(
@@ -147,7 +192,7 @@ class TaskManager:
         task_id: str,
         request,
         cancel_event: Event,
-        runner: Callable[[str, object, Event], object],
+        runner: Callable[..., object],
     ) -> None:
         self._set_status(task_id, TaskStatus.RUNNING)
         try:
@@ -176,12 +221,16 @@ class TaskManager:
             if record.status == TaskStatus.CANCELLED and status != TaskStatus.CANCELLED:
                 snapshot = _clone_record(record)
             else:
-                record.status = status
-                if result is not None:
-                    record.result = result
-                if error_message is not None:
-                    record.error_message = error_message
-                snapshot = _clone_record(record)
+                updated_record = replace(
+                    record,
+                    status=status,
+                    result=record.result if result is None else result,
+                    error_message=(
+                        record.error_message if error_message is None else error_message
+                    ),
+                )
+                self._tasks[task_id] = updated_record
+                snapshot = _clone_record(updated_record)
         self._broker.publish(snapshot)
 
     def _publish_progress(
@@ -194,7 +243,7 @@ class TaskManager:
         total: int | None = None,
         percent: int | None = None,
         message: str = "",
-        details: dict | None = None,
+        details: Mapping[str, object] | None = None,
     ) -> None:
         progress = TaskProgress(
             task_id=task_id,
@@ -211,9 +260,27 @@ class TaskManager:
             if record.status == TaskStatus.CANCELLED:
                 snapshot = _clone_record(record)
             else:
-                record.progress = progress
-                snapshot = _clone_record(record)
+                updated_record = replace(record, progress=progress)
+                self._tasks[task_id] = updated_record
+                snapshot = _clone_record(updated_record)
         self._broker.publish(snapshot)
+
+    def _publish_payload_progress(
+        self,
+        task_id: str,
+        kind: TaskKind,
+        payload: ProgressPayload,
+    ) -> None:
+        self._publish_progress(
+            task_id,
+            kind,
+            str(payload.get("step", kind.value)),
+            current=payload.get("current"),
+            total=payload.get("total"),
+            percent=payload.get("progress"),
+            message=str(payload.get("message", "")),
+            details=payload,
+        )
 
     def _run_processing(
         self,
@@ -221,39 +288,78 @@ class TaskManager:
         request: ProcessingTaskRequest,
         cancel_event: Event,
     ) -> dict:
-        context = ensure_context(request.context)
+        config = _config_from_request(request)
+        output_dir = _output_dir_from_request(request)
+        if output_dir is None:
+            raise RuntimeError("Processing output_dir is required")
 
-        def progress_reporter(payload: dict) -> None:
-            event_type = str(payload.get("event", "frame"))
-            if event_type == "status":
-                self._publish_progress(
-                    task_id,
-                    TaskKind.PROCESSING,
-                    "workflow",
-                    current=int(payload.get("completed_fovs", 0)),
-                    total=int(payload.get("total_fovs", 0)),
-                    percent=int(payload.get("progress_percent", 0)),
-                    message=str(payload.get("message", "")),
-                    details=payload,
-                )
-                return
-            current = int(payload.get("t", 0))
+        if config.params.positions.strip().lower() == "all":
+            selected_positions = list(range(request.metadata.n_positions))
+        else:
+            from pyama.utils.position import parse_position_range
+
+            selected_positions = parse_position_range(
+                config.params.positions, length=request.metadata.n_positions
+            )
+
+        channels = config.channels
+        has_pc = channels is not None
+        fl_count = 0 if channels is None else len(channels.fl)
+        total_channels = 0 if channels is None else 1 + fl_count
+        stage_units = {
+            "copy": len(selected_positions) * max(1, total_channels) * max(1, int(request.metadata.n_frames)),
+            "segmentation": len(selected_positions) * int(has_pc) * max(1, int(request.metadata.n_frames)),
+            "tracking": len(selected_positions) * int(has_pc) * max(1, int(request.metadata.n_frames)),
+            "background_estimation": len(selected_positions) * max(1, fl_count) * max(1, int(request.metadata.n_frames)),
+            "roi": len(selected_positions) * max(1, total_channels + 1) * max(1, int(request.metadata.n_frames)),
+            "extraction": len(selected_positions) * max(1, int(request.metadata.n_frames)),
+        }
+        workflow_total = max(1, sum(stage_units.values()))
+        stage_progress: dict[tuple[str, int, int | None], int] = {}
+
+        def progress_reporter(payload: ProgressPayload) -> None:
+            step = str(payload.get("step", "workflow"))
+            fov = int(payload.get("fov", -1))
+            channel = payload.get("channel")
+            channel_id = int(channel) if isinstance(channel, (int, str)) else None
+            current = int(payload.get("t", 0)) + 1
             total = int(payload.get("T", 0))
-            percent = int((current / total) * 100) if total > 0 else None
+            current = min(current, total) if total > 0 else current
+
+            progress_key = (
+                step,
+                fov,
+                channel_id if step in {"copy", "background_estimation", "extraction"} else None,
+            )
+            previous = stage_progress.get(progress_key, 0)
+            if current > previous:
+                stage_progress[progress_key] = current
+
+            workflow_current = sum(stage_progress.values())
+            workflow_percent = int((workflow_current / workflow_total) * 100) if workflow_total > 0 else None
             self._publish_progress(
                 task_id,
                 TaskKind.PROCESSING,
-                str(payload.get("step", "workflow")),
-                current=current,
-                total=total if total > 0 else None,
-                percent=percent,
+                step,
+                current=workflow_current,
+                total=workflow_total,
+                percent=workflow_percent,
                 message=str(payload.get("message", "")),
-                details=payload,
+                details={
+                    **payload,
+                    "overall_current": workflow_current,
+                    "overall_total": workflow_total,
+                    "overall_percent": workflow_percent,
+                    "step_current": current,
+                    "step_total": total,
+                },
             )
 
         success = run_complete_workflow(
             metadata=request.metadata,
-            context=context,
+            config=config,
+            output_dir=output_dir,
+            context=request.context,
             fov_start=request.fov_start,
             fov_end=request.fov_end,
             n_workers=request.n_workers,
@@ -262,7 +368,7 @@ class TaskManager:
         )
         if not success:
             raise RuntimeError("Processing workflow failed")
-        return {"success": success, "output_dir": context.output_dir}
+        return {"success": success, "output_dir": output_dir}
 
     def _run_merge(
         self,
@@ -270,26 +376,58 @@ class TaskManager:
         request: MergeTaskRequest,
         cancel_event: Event,
     ) -> dict:
-        def progress_callback(current: int, total: int, message: str) -> None:
-            percent = int((current / total) * 100) if total > 0 else None
-            self._publish_progress(
-                task_id,
-                TaskKind.MERGE,
-                "merge",
-                current=current,
-                total=total if total > 0 else None,
-                percent=percent,
-                message=message,
-            )
-
         if cancel_event.is_set():
             raise RuntimeError("Task cancelled")
-        message = run_merge_impl(
-            request.samples,
-            request.processing_results_dir,
-            progress_callback=progress_callback,
+
+        input_dir = request.input_dir or request.processing_results_dir
+        if input_dir is None:
+            raise RuntimeError("Merge input_dir is required")
+        output_dir = request.output_dir or (input_dir / "traces_merged")
+
+        samples = [
+            {"name": sample.name, "positions": list(sample.positions)}
+            for sample in request.samples
+        ]
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".yaml", encoding="utf-8", delete=False
+            ) as handle:
+                yaml.safe_dump({"samples": samples}, handle, sort_keys=False)
+                temp_path = Path(handle.name)
+
+            summary = run_merge_impl(
+                input_dir=input_dir,
+                sample_yaml=temp_path,
+                output_dir=output_dir,
+            )
+        finally:
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink(missing_ok=True)
+
+        self._publish_payload_progress(
+            task_id,
+            TaskKind.MERGE,
+            build_progress_payload(
+                step="merge",
+                current=int(summary["merged_positions"]),
+                total=int(summary["merged_positions"]),
+                message=(
+                    f"Merged {summary['merged_positions']} positions into "
+                    f"{summary['merged_files']} file(s)"
+                ),
+            ),
         )
-        return {"message": message}
+        return {
+            "message": (
+                f"Merged {summary['merged_positions']} positions into "
+                f"{summary['merged_files']} file(s)"
+            ),
+            "output_dir": summary["output_dir"],
+            "merged_positions": summary["merged_positions"],
+            "merged_files": summary["merged_files"],
+            "merged_rows": summary["merged_rows"],
+        }
 
     def _run_model_fit(
         self,
@@ -297,24 +435,15 @@ class TaskManager:
         request: ModelFitTaskRequest,
         cancel_event: Event,
     ):
-        def progress_reporter(payload: dict) -> None:
-            self._publish_progress(
-                task_id,
-                TaskKind.MODEL_FIT,
-                str(payload.get("step", "model_fit")),
-                current=payload.get("current"),
-                total=payload.get("total"),
-                percent=payload.get("progress"),
-                message=str(payload.get("message", "")),
-                details=payload,
-            )
+        def progress_reporter(payload: ProgressPayload) -> None:
+            self._publish_payload_progress(task_id, TaskKind.MODEL_FIT, payload)
 
         if cancel_event.is_set():
             raise RuntimeError("Task cancelled")
-        service = CoreFittingService(progress_reporter=progress_reporter)
-        return service.fit_csv_file(
+        return fit_csv_file_impl(
             request.csv_file,
             request.model_type,
+            frame_interval_minutes=request.frame_interval_minutes,
             model_params=request.model_params,
             model_bounds=request.model_bounds,
             progress_reporter=progress_reporter,
@@ -326,6 +455,9 @@ class TaskManager:
         request: StatisticsTaskRequest,
         cancel_event: Event,
     ):
+        def progress_reporter(payload: ProgressPayload) -> None:
+            self._publish_payload_progress(task_id, TaskKind.STATISTICS, payload)
+
         if cancel_event.is_set():
             raise RuntimeError("Task cancelled")
         self._publish_progress(
@@ -338,8 +470,11 @@ class TaskManager:
             request.folder_path,
             request.mode,
             normalize_by_area=request.normalize_by_area,
-            fit_window_hours=request.fit_window_hours,
+            frame_interval_minutes=request.frame_interval_minutes,
+            fit_window_min=request.fit_window_min,
             area_filter_size=request.area_filter_size,
+            progress_reporter=progress_reporter,
+            cancel_event=cancel_event,
         )
 
     def _run_visualization(
@@ -350,18 +485,38 @@ class TaskManager:
     ):
         if cancel_event.is_set():
             raise RuntimeError("Task cancelled")
-        self._publish_progress(
+        self._publish_payload_progress(
             task_id,
             TaskKind.VISUALIZATION,
-            "visualization_cache",
-            message=f"Building cache for {request.channel_id}",
+            build_progress_payload(
+                step="visualization_cache",
+                current=0,
+                total=1,
+                message=f"Building cache for {request.channel_id}",
+                channel_id=request.channel_id,
+                source_path=str(request.source_path),
+            ),
         )
-        cache = CoreVisualizationCache(cache_root=request.cache_root)
-        return cache.get_or_build_uint8(
+        result = get_or_build_uint8_impl(
             request.source_path,
             request.channel_id,
+            cache_root=request.cache_root,
             force_rebuild=request.force_rebuild,
         )
+        self._publish_payload_progress(
+            task_id,
+            TaskKind.VISUALIZATION,
+            build_progress_payload(
+                step="visualization_cache",
+                current=1,
+                total=1,
+                message=f"Built cache for {request.channel_id}",
+                channel_id=request.channel_id,
+                source_path=str(request.source_path),
+                cached_path=str(result.path),
+            ),
+        )
+        return result
 
 
 _task_manager: TaskManager | None = None
@@ -374,87 +529,4 @@ def get_task_manager() -> TaskManager:
     return _task_manager
 
 
-class WorkflowTaskManager:
-    """Compatibility wrapper around the generic task manager."""
-
-    def __init__(self, task_manager: TaskManager | None = None) -> None:
-        self._task_manager = task_manager or get_task_manager()
-        self._cancel_event = Event()
-        self._task_id: str | None = None
-
-    def run(
-        self,
-        *,
-        metadata,
-        context,
-        fov_start: int,
-        fov_end: int,
-        n_workers: int,
-        progress_reporter: (
-            Callable[[WorkflowProgressEvent | WorkflowStatusEvent], None] | None
-        ) = None,
-    ) -> bool:
-        if self._cancel_event.is_set():
-            return False
-
-        record = self._task_manager.submit_processing(
-            ProcessingTaskRequest(
-                metadata=metadata,
-                context=context,
-                fov_start=fov_start,
-                fov_end=fov_end,
-                n_workers=n_workers,
-            )
-        )
-        self._task_id = record.id
-        queue = self._task_manager.subscribe(record.id)
-        try:
-            while True:
-                snapshot = queue.get()
-                if progress_reporter and snapshot.progress is not None:
-                    details = snapshot.progress.details
-                    if details.get("event") == "status":
-                        progress_reporter(
-                            WorkflowStatusEvent(
-                                completed_fovs=int(details.get("completed_fovs", 0)),
-                                total_fovs=int(details.get("total_fovs", 0)),
-                                progress_percent=int(
-                                    details.get("progress_percent", 0)
-                                ),
-                                message=str(details.get("message", "")),
-                            )
-                        )
-                    elif snapshot.progress.kind == TaskKind.PROCESSING:
-                        progress_reporter(
-                            WorkflowProgressEvent(
-                                worker_id=int(details.get("worker_id", -1)),
-                                step=str(details.get("step", "workflow")),
-                                fov=int(details.get("fov", -1)),
-                                frame_index=int(details.get("t", 0)),
-                                frame_total=int(details.get("T", 0)),
-                                message=str(details.get("message", "")),
-                            )
-                        )
-                if snapshot.status in TERMINAL_TASK_STATUSES:
-                    return snapshot.status == TaskStatus.COMPLETED and bool(
-                        (snapshot.result or {}).get("success", False)
-                    )
-        finally:
-            self._task_manager.unsubscribe(record.id, queue)
-
-    def cancel(self) -> None:
-        self._cancel_event.set()
-        if self._task_id is not None:
-            self._task_manager.cancel_task(self._task_id)
-
-    @property
-    def cancel_event(self) -> Event:
-        return self._cancel_event
-
-
-__all__ = [
-    "TERMINAL_TASK_STATUSES",
-    "TaskManager",
-    "WorkflowTaskManager",
-    "get_task_manager",
-]
+__all__ = ["TERMINAL_TASK_STATUSES", "TaskManager", "get_task_manager"]

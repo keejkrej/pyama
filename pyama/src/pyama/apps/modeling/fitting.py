@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from pyama.apps.modeling.models import get_model
-from pyama.types.modeling import FitParam, FitParams, FittingResult, FixedParams
+from pyama.types.modeling import FittingResult, ModelParameter
 
 
 def analyze_fitting_quality(results_df: pd.DataFrame) -> dict:
@@ -55,8 +55,8 @@ def fit_model(
     model,
     t_data: np.ndarray,
     y_data: np.ndarray,
-    fixed_params: FixedParams,
-    fit_params: FitParams,
+    fixed_params: dict[str, ModelParameter],
+    fit_params: dict[str, ModelParameter],
 ) -> FittingResult:
     """Fit a model to time series data.
 
@@ -64,8 +64,8 @@ def fit_model(
         model: Model module with eval function
         t_data: Time array
         y_data: Data array
-        fixed_params: FixedParams dict
-        fit_params: FitParams dict with initial values and bounds
+        fixed_params: Fixed-parameter dict
+        fit_params: Fit-parameter dict with initial values and bounds
 
     Returns:
         FittingResult with fixed_params, fitted_params, success status, and r_squared
@@ -93,12 +93,16 @@ def fit_model(
 
     # Create residual function
     def residual_func(params):
-        fitted_params: FitParams = {
-            param_name: FitParam(
+        fitted_params: dict[str, ModelParameter] = {
+            param_name: ModelParameter(
+                key=fit_params[param_name].key,
                 name=fit_params[param_name].name,
                 value=params[idx],
+                mode=fit_params[param_name].mode,
+                is_interest=fit_params[param_name].is_interest,
                 lb=fit_params[param_name].lb,
                 ub=fit_params[param_name].ub,
+                presets=fit_params[param_name].presets,
             )
             for idx, param_name in enumerate(fit_param_names)
         }
@@ -108,7 +112,10 @@ def fit_model(
         from scipy import optimize
 
         result = optimize.least_squares(
-            residual_func, p0, bounds=(lower_bounds, upper_bounds)
+            residual_func,
+            p0,
+            bounds=(lower_bounds, upper_bounds),
+            loss="soft_l1",
         )
 
         # Compute r-squared
@@ -116,13 +123,17 @@ def fit_model(
         ss_tot = float(np.sum((y_clean - np.mean(y_clean)) ** 2))
         r_squared = max(0.0, min(1.0, 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0))
 
-        # Create FitParams dict with fitted values
-        fitted_params: FitParams = {
-            param_name: FitParam(
+        # Create fitted-parameter dict with optimized values
+        fitted_params: dict[str, ModelParameter] = {
+            param_name: ModelParameter(
+                key=fit_params[param_name].key,
                 name=fit_params[param_name].name,
                 value=result.x[idx],
+                mode=fit_params[param_name].mode,
+                is_interest=fit_params[param_name].is_interest,
                 lb=fit_params[param_name].lb,
                 ub=fit_params[param_name].ub,
+                presets=fit_params[param_name].presets,
             )
             for idx, param_name in enumerate(fit_param_names)
         }
@@ -135,12 +146,16 @@ def fit_model(
         )
     except Exception:
         # Return initial fit_params on error
-        fitted_params: FitParams = {
-            param_name: FitParam(
+        fitted_params: dict[str, ModelParameter] = {
+            param_name: ModelParameter(
+                key=fit_params[param_name].key,
                 name=fit_params[param_name].name,
                 value=p0[idx],
+                mode=fit_params[param_name].mode,
+                is_interest=fit_params[param_name].is_interest,
                 lb=fit_params[param_name].lb,
                 ub=fit_params[param_name].ub,
+                presets=fit_params[param_name].presets,
             )
             for idx, param_name in enumerate(fit_param_names)
         }
@@ -155,21 +170,21 @@ def fit_model(
 def fit_trace_data(
     df: pd.DataFrame,
     model_type: str,
-    fixed_params: FixedParams | None = None,
-    fit_params: FitParams | None = None,
+    fixed_params: dict[str, ModelParameter] | None = None,
+    fit_params: dict[str, ModelParameter] | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> list[tuple[tuple[int, int], FittingResult]]:
     """Fit trace data for all cells in the DataFrame.
 
     Args:
-        df: DataFrame with MultiIndex (fov, cell) and 'time', 'value' columns
+        df: DataFrame with MultiIndex (position, roi) and 'time_min', 'value' columns
         model_type: Type of model to fit
-        fixed_params: Optional FixedParams dict (shared across all cells)
-        fit_params: Optional FitParams dict with initial values and bounds (shared across all cells)
+        fixed_params: Optional fixed-parameter dict (shared across all cells)
+        fit_params: Optional fit-parameter dict with initial values and bounds (shared across all cells)
         progress_callback: Optional callback function(current, total, message) for progress updates
 
     Returns:
-        List of tuples ((fov, cell), FittingResult) for all cells in the DataFrame
+        List of tuples ((position, roi), FittingResult) for all traces in the DataFrame
     """
     # Setup: get model and resolve defaults (done once, not in loop)
     try:
@@ -178,19 +193,17 @@ def fit_trace_data(
         return []
 
     if fixed_params is None:
-        fixed_params = model.DEFAULT_FIXED
+        fixed_params = model.get_fixed_parameters()
     if fit_params is None:
-        fit_params = model.DEFAULT_FIT
+        fit_params = model.get_fit_parameters()
 
-    # Get unique (fov, cell) combinations from MultiIndex
-    cell_ids = df.index.unique().tolist()
-    total_cells = len(cell_ids)
+    trace_ids = df.index.unique().tolist()
+    total_cells = len(trace_ids)
 
     results = []
-    for cell_idx, (fov, cell) in enumerate(cell_ids):
-        # Extract time series for this cell
-        cell_data = df.loc[(fov, cell)]
-        time_data = cell_data["time"].values.astype(np.float64)
+    for cell_idx, (position, roi) in enumerate(trace_ids):
+        cell_data = df.loc[(position, roi)].sort_values("frame")
+        time_data = cell_data["time_min"].values.astype(np.float64)
         trace_data = cell_data["value"].values.astype(np.float64)
 
         result = fit_model(
@@ -200,7 +213,7 @@ def fit_trace_data(
             fixed_params=fixed_params,
             fit_params=fit_params,
         )
-        results.append(((fov, cell), result))
+        results.append(((position, roi), result))
 
         if progress_callback:
             progress_callback(cell_idx, total_cells, "Fitting cells")

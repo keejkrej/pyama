@@ -7,12 +7,13 @@ Shows input and output data explicitly instead of using assertions.
 from pathlib import Path
 import pandas as pd
 
-from pyama.apps.processing.merge import (
+from pyama.apps.processing.merge import normalize_samples
+from pyama.apps.processing.service import (
     get_channel_feature_config,
     parse_fov_range,
     run_merge,
 )
-from pyama.io.config.results import scan_processing_results
+from pyama.io.config import scan_processing_results
 
 
 def _write_processing_results(base_dir: Path, csv_path: Path) -> Path:
@@ -46,7 +47,7 @@ def demonstrate_merge_functionality():
     with TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
 
-        samples = [{"name": "sample", "fovs": "0"}]
+        samples = normalize_samples([{"name": "sample", "fovs": "0"}])
 
         print("1. Sample configuration:")
         print(samples)
@@ -55,8 +56,8 @@ def demonstrate_merge_functionality():
         csv_path = tmp_path / "fov0_traces.csv"
         df = pd.DataFrame(
             {
+                "frame": [0, 1],
                 "fov": [0, 0],
-                "time": [0.0, 1.0],
                 "cell": [1, 1],
                 "good": [True, True],
                 "area_ch_0": [10.0, 12.0],
@@ -86,11 +87,11 @@ def demonstrate_merge_functionality():
 
         if pc_output.exists():
             print("\n5. Phase contrast output (area_ch_0) - tidy format:")
-            pc_df = pd.read_csv(pc_output, comment="#")
+            pc_df = pd.read_csv(pc_output)
             print(pc_df.to_string())
             print(f"Columns: {list(pc_df.columns)}")
-            print("Expected columns: ['time', 'fov', 'cell', 'value']")
-            assert list(pc_df.columns) == ["time", "fov", "cell", "value"], (
+            print("Expected columns: ['frame', 'fov', 'cell', 'value']")
+            assert list(pc_df.columns) == ["frame", "fov", "cell", "value"], (
                 f"Expected tidy format columns, got {list(pc_df.columns)}"
             )
         else:
@@ -98,11 +99,11 @@ def demonstrate_merge_functionality():
 
         if fl_output.exists():
             print("\n6. Fluorescence output (intensity_ch_1) - tidy format:")
-            fl_df = pd.read_csv(fl_output, comment="#")
+            fl_df = pd.read_csv(fl_output)
             print(fl_df.to_string())
             print(f"Columns: {list(fl_df.columns)}")
-            print("Expected columns: ['time', 'fov', 'cell', 'value']")
-            assert list(fl_df.columns) == ["time", "fov", "cell", "value"], (
+            print("Expected columns: ['frame', 'fov', 'cell', 'value']")
+            assert list(fl_df.columns) == ["frame", "fov", "cell", "value"], (
                 f"Expected tidy format columns, got {list(fl_df.columns)}"
             )
         else:
@@ -120,7 +121,7 @@ def demonstrate_channel_feature_config():
 
         # Create sample CSV with multiple channels and features
         csv_path = tmp_path / "fov0_traces.csv"
-        csv_content = """time,cell,good,area_ch_0,perimeter_ch_0,intensity_ch_1,mean_ch_1,variance_ch_2
+        csv_content = """frame,cell,good,area_ch_0,perimeter_ch_0,intensity_ch_1,mean_ch_1,variance_ch_2
 0,1,True,10,15,100,50,5
 1,1,True,12,16,110,55,6
 """

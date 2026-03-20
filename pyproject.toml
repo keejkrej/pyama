@@ -11,4 +11,4 @@ pyama-cli = { workspace = true }
 pyama-gui = { workspace = true }
 
 [dependency-groups]
-dev = ["ty", "ruff", "black", "pyinstaller", "ipykernel"]
+dev = ["ty", "ruff", "black", "pyinstaller", "ipykernel", "pytest"]

@@ -5,8 +5,6 @@ from pyama.types.tasks import (
     TaskProgress,
     TaskRecord,
     TaskStatus,
-    WorkflowProgressEvent,
-    WorkflowStatusEvent,
 )
 
 __all__ = [
@@ -14,6 +12,4 @@ __all__ = [
     "TaskProgress",
     "TaskRecord",
     "TaskStatus",
-    "WorkflowProgressEvent",
-    "WorkflowStatusEvent",
 ]

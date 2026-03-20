@@ -9,10 +9,9 @@ from typing import Any
 @dataclass(slots=True)
 class ProcessingResults(Mapping[str, Any]):
     project_path: Path
-    n_fov: int
-    fov_data: dict[int, dict[str, Path]]
-    channels: dict[str, Any]
-    time_units: str | None
+    n_positions: int
+    position_data: dict[int, dict[str, object]]
+    channels: dict[str, object]
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __getitem__(self, key: str) -> Any:
@@ -49,10 +48,9 @@ class ProcessingResults(Mapping[str, Any]):
     def _core_mapping(self) -> dict[str, Any]:
         return {
             "project_path": self.project_path,
-            "n_fov": self.n_fov,
-            "fov_data": self.fov_data,
+            "n_positions": self.n_positions,
+            "position_data": self.position_data,
             "channels": self.channels,
-            "time_units": self.time_units,
         }
 
 

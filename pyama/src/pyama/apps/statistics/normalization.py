@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from pyama.io.csv.analysis import load_analysis_csv
+from pyama.io.csv import load_analysis_csv
 from pyama.types.statistics import SamplePair
 
 logger = logging.getLogger(__name__)
@@ -16,29 +16,32 @@ def load_normalized_sample(
     area_filter_size: int = 10,
     *,
     normalize_by_area: bool = True,
+    frame_interval_minutes: float = 10.0,
 ) -> pd.DataFrame:
-    """Load one sample pair and return statistics traces by cell."""
+    """Load one sample pair and return statistics traces by ROI."""
     from scipy.ndimage import median_filter
 
     if normalize_by_area and area_filter_size < 1:
         raise ValueError("area_filter_size must be >= 1")
 
     intensity_df = (
-        load_analysis_csv(pair.intensity_csv)
+        load_analysis_csv(
+            pair.intensity_csv, frame_interval_minutes=frame_interval_minutes
+        )
         .reset_index()
-        .sort_values(["fov", "cell", "time"])
+        .sort_values(["position", "roi", "frame"])
         .reset_index(drop=True)
     )
 
     if not normalize_by_area:
-        trace_df = intensity_df[["fov", "cell", "time", "value"]].copy()
+        trace_df = intensity_df[["position", "roi", "frame", "time_min", "value"]].copy()
         logger.info(
             "Loaded raw intensity sample '%s' from %s (%d rows)",
             pair.sample_name,
             pair.intensity_csv.name,
             len(trace_df),
         )
-        return trace_df.set_index(["fov", "cell"]).sort_index()
+        return trace_df.set_index(["position", "roi"]).sort_index()
 
     if pair.area_csv is None:
         raise ValueError(
@@ -46,21 +49,21 @@ def load_normalized_sample(
         )
 
     area_df = (
-        load_analysis_csv(pair.area_csv)
+        load_analysis_csv(pair.area_csv, frame_interval_minutes=frame_interval_minutes)
         .reset_index()
-        .sort_values(["fov", "cell", "time"])
+        .sort_values(["position", "roi", "frame"])
         .reset_index(drop=True)
     )
 
-    intensity_keys = intensity_df[["fov", "cell", "time"]]
-    area_keys = area_df[["fov", "cell", "time"]]
+    intensity_keys = intensity_df[["position", "roi", "frame"]]
+    area_keys = area_df[["position", "roi", "frame"]]
     if len(intensity_df) != len(area_df) or not intensity_keys.equals(area_keys):
         raise ValueError(
             f"Sample '{pair.sample_name}' intensity/area rows are not aligned"
         )
 
     filtered_area = np.full(len(area_df), np.nan, dtype=np.float64)
-    for _, group_df in area_df.groupby(["fov", "cell"], sort=False):
+    for _, group_df in area_df.groupby(["position", "roi"], sort=False):
         values = group_df["value"].to_numpy(dtype=np.float64)
         filtered = median_filter(values, size=area_filter_size, mode="nearest")
         filtered_area[group_df.index.to_numpy()] = filtered
@@ -73,7 +76,7 @@ def load_normalized_sample(
         intensity_values[valid_value_mask] / filtered_area[valid_value_mask]
     )
 
-    normalized_df = intensity_df[["fov", "cell", "time"]].copy()
+    normalized_df = intensity_df[["position", "roi", "frame", "time_min"]].copy()
     normalized_df["value"] = normalized_values
 
     logger.info(
@@ -84,4 +87,4 @@ def load_normalized_sample(
         len(normalized_df),
     )
 
-    return normalized_df.set_index(["fov", "cell"]).sort_index()
+    return normalized_df.set_index(["position", "roi"]).sort_index()

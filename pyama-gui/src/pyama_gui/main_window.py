@@ -8,19 +8,19 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import Slot
-from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QPushButton,
     QStatusBar,
     QTabWidget,
+    QVBoxLayout,
     QWidget,
 )
 
 from pyama_gui.app_view_model import AppViewModel
-from pyama_gui.constants import DEFAULT_DIR
+from pyama_gui.services import FileDialogService
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +70,6 @@ class StatusBar(QStatusBar):
         # Main status label
         self._status_label = QLabel("Ready")
         self.addWidget(self._status_label)
-        self._workspace_label = QLabel("Workspace: Not set")
-        self.addPermanentWidget(self._workspace_label)
 
     def _connect_signals(self) -> None:
         """Connect signals for the status bar."""
@@ -88,11 +86,38 @@ class StatusBar(QStatusBar):
         """Clear status and show ready state."""
         self._status_label.setText("Ready")
 
+
+class WorkspaceBar(QWidget):
+    """Top-level workspace selector shown above the main tab widget."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 0)
+
+        self._title_label = QLabel("Workspace:")
+        self._path_label = QLabel("Not set")
+        self._change_button = QPushButton("Set Workspace...")
+
+        layout.addWidget(self._title_label)
+        layout.addWidget(self._path_label, 1)
+        layout.addWidget(self._change_button)
+
+    @property
+    def change_button(self) -> QPushButton:
+        return self._change_button
+
     def show_workspace(self, path: Path | None) -> None:
         if path is None:
-            self._workspace_label.setText("Workspace: Not set")
-        else:
-            self._workspace_label.setText(f"Workspace: {path}")
+            self._path_label.setText("Not set")
+            self._change_button.setText("Set Workspace...")
+            return
+
+        self._path_label.setText(str(path))
+        self._change_button.setText("Change...")
 
 
 # =============================================================================
@@ -106,9 +131,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     # INITIALIZATION
     # ------------------------------------------------------------------------
-    def __init__(self) -> None:
+    def __init__(self, *, dialog_service: FileDialogService | None = None) -> None:
         super().__init__()
-        self.app_view_model = AppViewModel(self)
+        self.app_view_model = AppViewModel(self, dialog_service=dialog_service)
         self.processing_tab = None
         self.visualization_tab = None
         self.modeling_tab = None
@@ -125,6 +150,7 @@ class MainWindow(QMainWindow):
         self._setup_window()
         self._create_menu_bar()
         self._create_status_bar()
+        self._create_workspace_bar()
         self._create_tabs()
         self._finalize_window()
 
@@ -134,7 +160,7 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         """Connect all signals and establish communication between components."""
         self.tabs.currentChanged.connect(self._on_tab_changed)
-        self._set_workspace_action.triggered.connect(self._on_set_workspace_folder)
+        self.workspace_bar.change_button.clicked.connect(self._on_set_workspace_folder)
         self.app_view_model.status_changed.connect(self._on_status_message)
         self.app_view_model.workspace_changed.connect(self._on_workspace_changed)
         self.app_view_model.busy_changed.connect(self._on_busy_changed)
@@ -155,14 +181,14 @@ class MainWindow(QMainWindow):
         """Create and configure the status bar."""
         self.status_bar = StatusBar(self)
         self.setStatusBar(self.status_bar)
-        self.status_bar.show_workspace(self.app_view_model.workspace_dir)
+
+    def _create_workspace_bar(self) -> None:
+        self.workspace_bar = WorkspaceBar(self)
+        self.workspace_bar.show_workspace(self.app_view_model.workspace_dir)
 
     def _create_menu_bar(self) -> None:
         menu_bar = self.menuBar()
-        file_menu = menu_bar.addMenu("File")
-
-        self._set_workspace_action = QAction("Set Workspace Folder", self)
-        file_menu.addAction(self._set_workspace_action)
+        menu_bar.clear()
 
     # TAB CREATION
     # ------------------------------------------------------------------------
@@ -189,22 +215,22 @@ class MainWindow(QMainWindow):
         )
 
     def _create_processing_tab(self) -> QWidget:
-        from pyama_gui.processing.view import ProcessingView
+        from pyama_gui.apps.processing.view import ProcessingView
 
         return ProcessingView(self.app_view_model, self)
 
     def _create_statistics_tab(self) -> QWidget:
-        from pyama_gui.statistics.view import StatisticsView
+        from pyama_gui.apps.statistics.view import StatisticsView
 
         return StatisticsView(self.app_view_model, self)
 
     def _create_modeling_tab(self) -> QWidget:
-        from pyama_gui.modeling.view import ModelingView
+        from pyama_gui.apps.modeling.view import ModelingView
 
         return ModelingView(self.app_view_model, self)
 
     def _create_visualization_tab(self) -> QWidget:
-        from pyama_gui.visualization.view import VisualizationView
+        from pyama_gui.apps.visualization.view import VisualizationView
 
         return VisualizationView(self.app_view_model, self)
 
@@ -231,7 +257,7 @@ class MainWindow(QMainWindow):
 
     @Slot(object)
     def _on_workspace_changed(self, path: Path | None) -> None:
-        self.status_bar.show_workspace(path)
+        self.workspace_bar.show_workspace(path)
 
     @Slot(int)
     def _on_tab_changed(self, index: int) -> None:
@@ -247,22 +273,14 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_set_workspace_folder(self) -> None:
-        start_dir = str(self.app_view_model.workspace_dir or DEFAULT_DIR)
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "Select Workspace Folder",
-            start_dir,
-            options=QFileDialog.Option.DontUseNativeDialog,
-        )
-        if not path:
+        self.app_view_model.select_workspace()
+
+    def prompt_for_workspace_on_startup(self) -> None:
+        """Prompt for a workspace folder when the app starts without one."""
+        if self.app_view_model.workspace_dir is not None:
             return
 
-        workspace_dir = Path(path)
-        logger.info("Workspace folder set to %s", workspace_dir)
-        self.app_view_model.set_workspace_dir(workspace_dir)
-        self.app_view_model.set_status_message(
-            f"Workspace folder set to {workspace_dir}"
-        )
+        self.app_view_model.select_workspace()
 
     @Slot(bool)
     def _on_busy_changed(self, is_busy: bool) -> None:
@@ -273,4 +291,10 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     def _finalize_window(self) -> None:
         """Add tabs to window and complete setup."""
-        self.setCentralWidget(self.tabs)
+        container = QWidget(self)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.workspace_bar)
+        layout.addWidget(self.tabs, 1)
+        self.setCentralWidget(container)

@@ -1,38 +1,29 @@
 """Processing-related data structures."""
 
-# =============================================================================
-# IMPORTS
-# =============================================================================
+from dataclasses import dataclass, field
 
-from dataclasses import dataclass
-from pathlib import Path
+from pyama_gui.types.common import ListRowState
 
-from pyama.types import FeatureMaps
+@dataclass(frozen=True, slots=True)
+class ProcessingViewState:
+    """Render state for the processing tab."""
 
-
-# =============================================================================
-# DATA STRUCTURES
-# =============================================================================
-
-
-@dataclass(frozen=True)
-class ChannelSelectionPayload:
-    """Lightweight payload describing selected channels."""
-
-    phase: int | None
-    fluorescence: list[int]
-
-
-@dataclass(frozen=True)
-class MergeRequest:
-    """Data structure for merge operation requests."""
-
-    samples: list[dict[str, str]]
-    processing_results_dir: Path
+    microscopy_path_label: str = ""
+    phase_channel_options: list[tuple[str, int]] = field(default_factory=list)
+    fluorescence_channel_options: list[tuple[str, int]] = field(default_factory=list)
+    available_pc_features: list[str] = field(default_factory=list)
+    available_fl_features: list[str] = field(default_factory=list)
+    selected_phase_channel: int | None = None
+    fluorescence_feature_rows: list[tuple[str, int, str]] = field(default_factory=list)
+    parameter_values: dict[str, dict[str, object]] = field(default_factory=dict)
+    workflow_running: bool = False
+    workflow_progress: int = 0
+    workflow_message: str = ""
+    samples: list[dict[str, str]] = field(default_factory=list)
+    sample_rows: list[ListRowState] = field(default_factory=list)
+    merge_running: bool = False
 
 
 __all__ = [
-    "ChannelSelectionPayload",
-    "MergeRequest",
-    "FeatureMaps",
+    "ProcessingViewState",
 ]

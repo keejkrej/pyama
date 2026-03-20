@@ -12,11 +12,13 @@
 3. Save Inspected CSV before merging
 
 ## Modeling
-1. Load CSV (merged or inspected) → pick model (e.g. maturation) → Start Fitting
-2. Quality panel: R² color coding, trace pagination by FOV
-3. Parameter Analysis: histograms, scatter; Save All Plots
+1. Load CSV (merged or inspected) → pick model (`base`) → set time interval in minutes
+2. In the parameter editor, choose preset-backed fixed values such as protein degradation from the dropdown, then start fitting
+3. Quality panel: R² color coding, trace pagination by FOV
+4. Parameter Analysis only shows parameters of interest, such as Time Onset and mRNA Degradation Rate; Save All Plots as needed
 
 ## Statistics
-1. Load a `merge_output` folder containing matched `*_intensity_ch_1.csv` and `*_area_ch_0.csv` files
-2. Pick `AUC` or `Onset` and run statistics across all discovered samples
-3. Inspect per-sample normalized traces and compare sample distributions in the boxplot view
+1. Load a `merge_output` folder containing matched frame-based `*_intensity_ch_1.csv` and `*_area_ch_0.csv` files
+2. Set the time interval and onset window in minutes, then pick `AUC` or `Onset`
+3. Run statistics across all discovered samples
+4. Inspect per-sample normalized traces and compare sample distributions in the boxplot view

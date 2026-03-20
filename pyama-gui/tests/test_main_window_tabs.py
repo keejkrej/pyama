@@ -4,23 +4,46 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pandas as pd
+import pytest
 from PySide6.QtWidgets import QApplication
 
 from pyama_gui.app_view_model import AppViewModel
+from pyama_gui.apps.modeling.view_model import ModelingViewModel
 from pyama_gui.main_window import MainWindow
-from pyama_gui.modeling.view import ModelingView
-from pyama_gui.processing.view import ProcessingView
-from pyama_gui.processing.view_model import ProcessingViewModel
-from pyama_gui.statistics.view import StatisticsView
-from pyama_gui.statistics.view_model import StatisticsViewModel
-from pyama_gui.visualization.view import VisualizationView
-from pyama_gui.visualization.view_model import VisualizationViewModel
+from pyama_gui.services import FileDialogService
+from pyama_gui.apps.modeling.view import ModelingView
+from pyama_gui.apps.processing.view import ProcessingView
+from pyama_gui.apps.processing.view_model import ProcessingViewModel
+from pyama_gui.apps.statistics.view import StatisticsView
+from pyama_gui.apps.statistics.view_model import StatisticsViewModel
+from pyama_gui.apps.visualization.view import VisualizationView
+from pyama_gui.apps.visualization.view_model import VisualizationViewModel
 
 
 def _write_analysis_csv(path: Path, rows: list[dict[str, float | int]]) -> None:
-    pd.DataFrame(rows, columns=["time", "fov", "cell", "value"]).to_csv(
+    pd.DataFrame(rows, columns=["frame", "fov", "cell", "value"]).to_csv(
         path, index=False
     )
+
+
+class StubDialogService(FileDialogService):
+    def __init__(self, *, directory: Path | None = None, open_file: Path | None = None, save_file: Path | None = None) -> None:
+        self.directory = directory
+        self.open_file = open_file
+        self.save_file = save_file
+
+    def select_directory(self, caption: str, directory: str) -> Path | None:
+        return self.directory
+
+    def select_open_file(
+        self, caption: str, directory: str, file_filter: str
+    ) -> Path | None:
+        return self.open_file
+
+    def select_save_file(
+        self, caption: str, directory: str, file_filter: str
+    ) -> Path | None:
+        return self.save_file
 
 
 def test_main_window_has_consolidated_tabs() -> None:
@@ -28,6 +51,9 @@ def test_main_window_has_consolidated_tabs() -> None:
 
     window = MainWindow()
 
+    assert window.workspace_bar._path_label.text() == "Not set"
+    assert window.workspace_bar.change_button.text() == "Set Workspace..."
+    assert not window.menuBar().actions()
     assert [window.tabs.tabText(index) for index in range(window.tabs.count())] == [
         "Processing",
         "Statistics",
@@ -70,8 +96,122 @@ def test_main_window_loads_non_processing_tabs_lazily() -> None:
         app.processEvents()
 
 
+def test_main_window_startup_prompt_sets_workspace(
+) -> None:
+    app = QApplication.instance() or QApplication([])
+    workspace = Path("/tmp/startup-workspace")
+
+    window = MainWindow(dialog_service=StubDialogService(directory=workspace))
+    window.prompt_for_workspace_on_startup()
+
+    assert window.app_view_model.workspace_dir == workspace
+    assert window.app_view_model.status_message == f"Workspace folder set to {workspace}"
+    assert window.workspace_bar._path_label.text() == str(workspace)
+    assert window.workspace_bar.change_button.text() == "Change..."
+
+    window.close()
+    if QApplication.instance() is app:
+        app.processEvents()
+
+
+def test_workspace_bar_button_sets_workspace() -> None:
+    app = QApplication.instance() or QApplication([])
+    workspace = Path("/tmp/workspace-bar-workspace")
+
+    window = MainWindow(dialog_service=StubDialogService(directory=workspace))
+    window.workspace_bar.change_button.click()
+
+    assert window.app_view_model.workspace_dir == workspace
+    assert window.workspace_bar._path_label.text() == str(workspace)
+    assert window.workspace_bar.change_button.text() == "Change..."
+
+    window.close()
+    if QApplication.instance() is app:
+        app.processEvents()
+
+
+def test_statistics_tab_loads_existing_workspace_when_lazy_created(tmp_path: Path) -> None:
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    merge_output = workspace / "merge_output"
+    merge_output.mkdir(parents=True)
+    _write_analysis_csv(
+        merge_output / "sample_a_intensity_ch_1.csv",
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+    )
+    _write_analysis_csv(
+        merge_output / "sample_a_area_ch_0.csv",
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+    )
+
+    window = MainWindow()
+    window.app_view_model.set_workspace_dir(workspace)
+    window.tabs.setCurrentIndex(1)
+    app.processEvents()
+
+    assert isinstance(window.statistics_tab, StatisticsView)
+    assert [window.statistics_tab._sample_list.item(i).text() for i in range(window.statistics_tab._sample_list.count())] == [
+        "sample_a"
+    ]
+
+    window.close()
+    if QApplication.instance() is app:
+        app.processEvents()
+
+
+def test_visualization_tab_loads_existing_workspace_when_lazy_created(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    monkeypatch.setattr(
+        "pyama_gui.apps.visualization.view_model.run_task",
+        lambda worker, **kwargs: worker.run(),
+    )
+
+    class _Handle:
+        pass
+
+    monkeypatch.setattr(
+        "pyama_gui.apps.visualization.view_model.WorkerHandle",
+        _Handle,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "pyama_gui.apps.visualization.view_model.scan_processing_results",
+        lambda path: type(
+            "Result",
+            (),
+            {
+                "to_dict": staticmethod(
+                    lambda: {
+                        "project_path": str(path),
+                        "n_fov": 1,
+                        "fov_data": {0: {"raw_ch_0": str(path / 'raw.tif')}},
+                    }
+                )
+            },
+        )(),
+    )
+
+    window = MainWindow()
+    window.app_view_model.set_workspace_dir(workspace)
+    window.tabs.setCurrentIndex(3)
+    app.processEvents()
+
+    assert isinstance(window.visualization_tab, VisualizationView)
+    assert window.visualization_tab.view_model.workspace_dir == workspace
+    assert "Project Path:" in window.visualization_tab.view_model.details_text
+
+    window.close()
+    if QApplication.instance() is app:
+        app.processEvents()
+
+
 def test_app_view_model_tracks_workspace_and_busy() -> None:
-    app_view_model = AppViewModel()
+    app_view_model = AppViewModel(dialog_service=StubDialogService())
     workspace = Path("/tmp/example-workspace")
 
     assert app_view_model.workspace_dir is None
@@ -93,7 +233,7 @@ def test_app_view_model_tracks_workspace_and_busy() -> None:
 
 
 def test_processing_view_model_reports_missing_inputs() -> None:
-    app_view_model = AppViewModel()
+    app_view_model = AppViewModel(dialog_service=StubDialogService())
     view_model = ProcessingViewModel(app_view_model)
 
     view_model.run_workflow()
@@ -108,15 +248,15 @@ def test_statistics_view_model_enables_area_normalization_only_for_complete_samp
     mixed_folder.mkdir()
     _write_analysis_csv(
         mixed_folder / "sample_a_intensity_ch_1.csv",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         mixed_folder / "sample_a_area_ch_0.csv",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         mixed_folder / "sample_b_intensity_ch_1.csv",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
     )
 
     app_view_model = AppViewModel()
@@ -125,21 +265,42 @@ def test_statistics_view_model_enables_area_normalization_only_for_complete_samp
 
     assert view_model.normalization_available is False
     assert view_model.normalize_by_area is False
+    assert view_model.frame_interval_minutes == 10.0
+    assert view_model.fit_window_min == 240.0
 
     complete_folder = tmp_path / "complete_workspace" / "merge_output"
     complete_folder.mkdir(parents=True)
     _write_analysis_csv(
         complete_folder / "sample_a_intensity_ch_1.csv",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         complete_folder / "sample_a_area_ch_0.csv",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
     )
 
     app_view_model.set_workspace_dir(tmp_path / "complete_workspace")
 
     assert view_model.normalization_available is True
+
+
+def test_mvvm_dialog_boundary_removed_from_widgets() -> None:
+    paths = [
+        Path("pyama-gui/src/pyama_gui/main_window.py"),
+        Path("pyama-gui/src/pyama_gui/apps/processing/view.py"),
+        Path("pyama-gui/src/pyama_gui/apps/modeling/view.py"),
+        Path("pyama-gui/src/pyama_gui/apps/visualization/view.py"),
+    ]
+    for path in paths:
+        assert "QFileDialog" not in path.read_text()
+
+
+def test_gui_feature_packages_only_live_under_apps() -> None:
+    repo_root = Path("pyama-gui/src/pyama_gui")
+    assert not (repo_root / "processing").exists()
+    assert not (repo_root / "statistics").exists()
+    assert not (repo_root / "modeling").exists()
+    assert not (repo_root / "visualization").exists()
 
 
 def test_visualization_view_model_loads_workspace_on_workspace_change(
@@ -154,7 +315,7 @@ def test_visualization_view_model_loads_workspace_on_workspace_change(
     app_view_model.set_workspace_dir(workspace)
 
     assert view_model.workspace_dir == workspace
-    assert view_model.running is True or "Workspace:" in view_model.details_text
+    assert view_model.state.loading_project is True or "Workspace:" in view_model.details_text
 
 
 def test_statistics_view_model_populates_first_sample_immediately() -> None:
@@ -172,8 +333,8 @@ def test_statistics_view_model_populates_first_sample_immediately() -> None:
     )
     trace_df = pd.DataFrame(
         [
-            {"fov": 0, "cell": 1, "time": 0.0, "value": 1.0},
-            {"fov": 0, "cell": 1, "time": 1.0, "value": 2.0},
+            {"fov": 0, "cell": 1, "frame": 0, "time_min": 0.0, "value": 1.0},
+            {"fov": 0, "cell": 1, "frame": 6, "time_min": 60.0, "value": 2.0},
         ]
     ).set_index(["fov", "cell"])
 
@@ -190,3 +351,21 @@ def test_statistics_view_model_populates_first_sample_immediately() -> None:
 
     if QApplication.instance() is app:
         app.processEvents()
+
+
+def test_modeling_view_model_defaults_to_base_and_10_minute_interval() -> None:
+    view_model = ModelingViewModel(AppViewModel())
+
+    assert "base" in view_model.model_names
+    assert view_model.model_type == "base"
+    assert view_model.state.frame_interval_minutes == 10.0
+    parameter_keys = [parameter.key for parameter in view_model.state.parameters]
+    assert parameter_keys == [
+        "protein_degradation_rate_min",
+        "time_onset_min",
+        "ktl_m0_min",
+        "mrna_degradation_rate_min",
+        "intensity_offset",
+    ]
+    protein_param = view_model.state.parameters[0]
+    assert [option.key for option in protein_param.preset_options] == ["gfp", "dsred"]

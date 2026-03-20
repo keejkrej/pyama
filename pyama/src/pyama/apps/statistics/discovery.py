@@ -1,4 +1,4 @@
-"""Discovery utilities for merge_output statistics inputs."""
+"""Discovery utilities for traces_merged statistics inputs."""
 
 import logging
 from pathlib import Path
@@ -7,12 +7,12 @@ from pyama.types.statistics import SamplePair
 
 logger = logging.getLogger(__name__)
 
-INTENSITY_SUFFIX = "_intensity_ch_1.csv"
-AREA_SUFFIX = "_area_ch_0.csv"
+INTENSITY_DIR = "intensity_total_c1"
+AREA_DIR = "area_c0"
 
 
 def discover_sample_pairs(folder_path: Path | str) -> list[SamplePair]:
-    """Discover intensity samples with optional area CSVs in a merge_output folder."""
+    """Discover intensity samples with optional area CSVs in a traces_merged folder."""
     folder = Path(folder_path)
     if not folder.exists():
         raise FileNotFoundError(f"Statistics folder not found: {folder}")
@@ -22,15 +22,23 @@ def discover_sample_pairs(folder_path: Path | str) -> list[SamplePair]:
     intensity_by_sample: dict[str, Path] = {}
     area_by_sample: dict[str, Path] = {}
 
-    for csv_path in sorted(folder.glob("*.csv")):
-        name = csv_path.name
-        if name.endswith(INTENSITY_SUFFIX):
-            sample_name = name[: -len(INTENSITY_SUFFIX)]
-            intensity_by_sample[sample_name] = csv_path
-            continue
-        if name.endswith(AREA_SUFFIX):
-            sample_name = name[: -len(AREA_SUFFIX)]
-            area_by_sample[sample_name] = csv_path
+    intensity_dir = folder / INTENSITY_DIR
+    area_dir = folder / AREA_DIR
+    if intensity_dir.exists():
+        for csv_path in sorted(intensity_dir.glob("*.csv")):
+            intensity_by_sample[csv_path.stem] = csv_path
+    if area_dir.exists():
+        for csv_path in sorted(area_dir.glob("*.csv")):
+            area_by_sample[csv_path.stem] = csv_path
+    if not intensity_by_sample and not area_by_sample:
+        for csv_path in sorted(folder.glob("*.csv")):
+            name = csv_path.name
+            if name.endswith("_intensity_ch_1.csv"):
+                sample_name = name[: -len("_intensity_ch_1.csv")]
+                intensity_by_sample[sample_name] = csv_path
+            elif name.endswith("_area_ch_0.csv"):
+                sample_name = name[: -len("_area_ch_0.csv")]
+                area_by_sample[sample_name] = csv_path
 
     pairs: list[SamplePair] = []
     for sample_name in sorted(set(intensity_by_sample) | set(area_by_sample)):

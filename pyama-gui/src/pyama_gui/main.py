@@ -10,9 +10,11 @@ import logging
 import multiprocessing as mp
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from pyama_gui.main_window import MainWindow
+from pyama_gui.services import QtFileDialogService
 
 
 # =============================================================================
@@ -76,8 +78,9 @@ def main() -> None:
     # ------------------------------------------------------------------------
     # MAIN WINDOW CREATION AND DISPLAY
     # ------------------------------------------------------------------------
-    window = MainWindow()
+    window = MainWindow(dialog_service=QtFileDialogService())
     window.show()
+    QTimer.singleShot(0, window.prompt_for_workspace_on_startup)
 
     # ------------------------------------------------------------------------
     # EVENT LOOP EXECUTION

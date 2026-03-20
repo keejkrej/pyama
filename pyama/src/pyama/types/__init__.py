@@ -1,22 +1,26 @@
 """Consumer-facing type definitions for the pyama library."""
 
-from pyama.io.microscopy.base import MicroscopyMetadata
 from pyama.types.io import ProcessingResults
+from pyama.types.microscopy import MicroscopyMetadata
 from pyama.types.modeling import (
-    FitParam,
-    FitParams,
     FittingResult,
-    FixedParam,
-    FixedParams,
+    ModelParameter,
+    ParameterPreset,
+)
+from pyama.types.pipeline import (
+    Channels,
+    ProcessingConfig,
+    ProcessingParams,
+    SegmentationMethod,
+    TrackingMethod,
 )
 from pyama.types.processing import (
-    ChannelSelection,
-    Channels,
-    ExtractionContext,
-    FeatureMaps,
-    ProcessingContext,
+    MergeSample,
+    MergeSamplePayload,
     Result,
+    SamplesFilePayload,
 )
+from pyama.types.progress_payload import FrameProgressPayload, ProgressPayload
 from pyama.types.statistics import SamplePair, StatisticsRequest
 from pyama.types.tasks import (
     MergeTaskRequest,
@@ -28,35 +32,34 @@ from pyama.types.tasks import (
     TaskRecord,
     TaskStatus,
     VisualizationTaskRequest,
-    WorkflowProgressEvent,
-    WorkflowStatusEvent,
 )
 
 __all__ = [
-    "ChannelSelection",
     "Channels",
-    "ExtractionContext",
-    "FeatureMaps",
-    "FitParam",
-    "FitParams",
     "FittingResult",
-    "FixedParam",
-    "FixedParams",
+    "FrameProgressPayload",
+    "MergeSample",
+    "MergeSamplePayload",
     "MergeTaskRequest",
     "MicroscopyMetadata",
     "ModelFitTaskRequest",
-    "ProcessingContext",
+    "ModelParameter",
+    "ParameterPreset",
+    "ProcessingConfig",
+    "ProcessingParams",
     "ProcessingResults",
     "ProcessingTaskRequest",
+    "ProgressPayload",
     "Result",
     "SamplePair",
+    "SamplesFilePayload",
+    "SegmentationMethod",
     "StatisticsRequest",
     "StatisticsTaskRequest",
     "TaskKind",
     "TaskProgress",
     "TaskRecord",
     "TaskStatus",
+    "TrackingMethod",
     "VisualizationTaskRequest",
-    "WorkflowProgressEvent",
-    "WorkflowStatusEvent",
 ]

@@ -1,12 +1,14 @@
 """Consumer-facing task models and request payloads."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from pyama.io.microscopy.base import MicroscopyMetadata
-from pyama.types.processing import ProcessingContext
+from pyama.io.microscopy import MicroscopyMetadata
+from pyama.types.pipeline import ProcessingConfig
+from pyama.types.processing import MergeSample
 from pyama.types.statistics import StatisticsRequest
 
 
@@ -26,25 +28,7 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-@dataclass(slots=True)
-class WorkflowProgressEvent:
-    worker_id: int
-    step: str
-    fov: int
-    frame_index: int
-    frame_total: int
-    message: str
-
-
-@dataclass(slots=True)
-class WorkflowStatusEvent:
-    completed_fovs: int
-    total_fovs: int
-    progress_percent: int
-    message: str
-
-
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class TaskProgress:
     task_id: str
     kind: TaskKind
@@ -53,28 +37,33 @@ class TaskProgress:
     total: int | None = None
     percent: int | None = None
     message: str = ""
-    details: dict[str, Any] = field(default_factory=dict)
+    details: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
 class ProcessingTaskRequest:
     metadata: MicroscopyMetadata
-    context: ProcessingContext
-    fov_start: int
-    fov_end: int
-    n_workers: int
+    config: ProcessingConfig | None = None
+    output_dir: Path | None = None
+    context: Any = None
+    fov_start: int | None = None
+    fov_end: int | None = None
+    n_workers: int | None = None
 
 
 @dataclass(slots=True)
 class MergeTaskRequest:
-    samples: list[dict[str, Any]]
-    processing_results_dir: Path
+    samples: list[MergeSample]
+    input_dir: Path | None = None
+    output_dir: Path | None = None
+    processing_results_dir: Path | None = None
 
 
 @dataclass(slots=True)
 class ModelFitTaskRequest:
     csv_file: Path
     model_type: str
+    frame_interval_minutes: float = 10.0
     model_params: dict[str, float] | None = None
     model_bounds: dict[str, tuple[float, float]] | None = None
 
@@ -90,7 +79,7 @@ class VisualizationTaskRequest:
     force_rebuild: bool = False
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class TaskRecord:
     id: str
     kind: TaskKind
@@ -111,6 +100,4 @@ __all__ = [
     "TaskRecord",
     "TaskStatus",
     "VisualizationTaskRequest",
-    "WorkflowProgressEvent",
-    "WorkflowStatusEvent",
 ]

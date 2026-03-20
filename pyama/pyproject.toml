@@ -9,9 +9,12 @@ dependencies = [
     "scipy",
     "nd2",
     "pandas<3",
+    "pydantic>=2.0",
     "scikit-image",
+    "tifffile",
     "pyyaml",
     "pylibczirw>=5.0.0",
+    "zarr",
 ]
 
 [tool.uv]

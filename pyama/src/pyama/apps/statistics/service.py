@@ -1,5 +1,6 @@
 """Folder-level statistics orchestration services."""
 
+from collections.abc import Callable
 import logging
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from pyama.apps.statistics.metrics import (
     compute_onset_shifted_relu_results,
 )
 from pyama.apps.statistics.normalization import load_normalized_sample
+from pyama.types.progress_payload import ProgressPayload
+from pyama.utils.progress import emit_progress
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +23,11 @@ def run_folder_statistics(
     mode: str,
     *,
     normalize_by_area: bool = True,
-    fit_window_hours: float = 4.0,
+    frame_interval_minutes: float = 10.0,
+    fit_window_min: float = 240.0,
     area_filter_size: int = 10,
+    progress_reporter: Callable[[ProgressPayload], None] | None = None,
+    cancel_event=None,
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], Path]:
     """Run a statistics mode across all discovered samples in a folder."""
     folder = Path(folder_path)
@@ -52,26 +58,47 @@ def run_folder_statistics(
         folder,
     )
 
-    for pair in sample_pairs:
+    total_samples = len(sample_pairs)
+    for sample_index, pair in enumerate(sample_pairs, start=1):
+        if cancel_event is not None and cancel_event.is_set():
+            raise RuntimeError("Task cancelled")
         trace_df = load_normalized_sample(
             pair,
             area_filter_size=area_filter_size,
             normalize_by_area=normalize_by_area,
+            frame_interval_minutes=frame_interval_minutes,
         )
         traces_by_sample[pair.sample_name] = trace_df
 
         if mode == "auc":
-            result_frames.append(compute_auc_results(trace_df, pair))
+            result_frames.append(
+                compute_auc_results(
+                    trace_df,
+                    pair,
+                    frame_interval_minutes=frame_interval_minutes,
+                )
+            )
         elif mode == "onset_shifted_relu":
             result_frames.append(
                 compute_onset_shifted_relu_results(
                     trace_df,
                     pair,
-                    fit_window_hours=fit_window_hours,
+                    fit_window_min=fit_window_min,
+                    frame_interval_minutes=frame_interval_minutes,
                 )
             )
         else:
             raise ValueError(f"Unsupported statistics mode: {mode}")
+
+        emit_progress(
+            progress_reporter,
+            step="statistics",
+            mode=mode,
+            sample=pair.sample_name,
+            current=sample_index,
+            total=total_samples,
+            message=f"Processed sample {pair.sample_name}",
+        )
 
     results_df = pd.concat(result_frames, ignore_index=True)
     results_df["normalization_mode"] = normalization_mode

@@ -6,11 +6,12 @@ import pandas as pd
 from pyama.apps.statistics.discovery import discover_sample_pairs
 from pyama.apps.statistics.normalization import load_normalized_sample
 from pyama.apps.statistics.service import run_folder_statistics
+from pyama.io.csv import DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES, load_analysis_csv
 from pyama.types.statistics import SamplePair
 
 
 def _write_analysis_csv(path: Path, rows: list[dict]) -> None:
-    pd.DataFrame(rows, columns=["time", "fov", "cell", "value"]).to_csv(
+    pd.DataFrame(rows, columns=["frame", "fov", "cell", "value"]).to_csv(
         path, index=False
     )
 
@@ -31,20 +32,20 @@ def test_discover_sample_pairs_returns_intensity_samples_with_optional_area(
     _write_sample_pair(
         tmp_path,
         "sample_a",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 2.0}],
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 2.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         tmp_path / "sample_b_intensity_ch_1.csv",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 3.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 3.0}],
     )
     _write_analysis_csv(
         tmp_path / "sample_c_area_ch_0.csv",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         tmp_path / "statistics_auc_normalized.csv",
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
     )
 
     pairs = discover_sample_pairs(tmp_path)
@@ -63,15 +64,15 @@ def test_load_normalized_sample_applies_area_median_filter(tmp_path: Path) -> No
     _write_analysis_csv(
         pair.intensity_csv,
         [
-            {"time": float(time), "fov": 0, "cell": 0, "value": float(value)}
-            for time, value in enumerate([10, 20, 30, 40, 50])
+            {"frame": frame, "fov": 0, "cell": 0, "value": float(value)}
+            for frame, value in enumerate([10, 20, 30, 40, 50])
         ],
     )
     _write_analysis_csv(
         pair.area_csv,
         [
-            {"time": float(time), "fov": 0, "cell": 0, "value": float(value)}
-            for time, value in enumerate([10, 10, 100, 10, 10])
+            {"frame": frame, "fov": 0, "cell": 0, "value": float(value)}
+            for frame, value in enumerate([10, 10, 100, 10, 10])
         ],
     )
 
@@ -89,17 +90,17 @@ def test_load_normalized_sample_marks_non_positive_area_invalid(tmp_path: Path) 
     _write_analysis_csv(
         pair.intensity_csv,
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 2.0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
         ],
     )
     _write_analysis_csv(
         pair.area_csv,
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 0.0},
-            {"time": 2.0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 0.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
         ],
     )
 
@@ -117,15 +118,15 @@ def test_load_normalized_sample_can_skip_area_normalization(tmp_path: Path) -> N
     _write_analysis_csv(
         pair.intensity_csv,
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 4.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 4.0},
         ],
     )
     _write_analysis_csv(
         pair.area_csv,
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 10.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 10.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 10.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 10.0},
         ],
     )
 
@@ -141,28 +142,28 @@ def test_run_folder_statistics_auc_writes_expected_metrics(tmp_path: Path) -> No
         tmp_path,
         "sample_a",
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 0.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 2.0, "fov": 0, "cell": 0, "value": 4.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 0.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 4.0},
         ],
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 2.0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
         ],
     )
     _write_sample_pair(
         tmp_path,
         "sample_b",
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 2.0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
         ],
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 2.0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
         ],
     )
 
@@ -178,8 +179,8 @@ def test_run_folder_statistics_auc_writes_expected_metrics(tmp_path: Path) -> No
         row["sample"]: row["auc"]
         for _, row in results_df.sort_values("sample").iterrows()
     }
-    assert result_map["sample_a"] == 2.0
-    assert result_map["sample_b"] == 2.0
+    assert result_map["sample_a"] == 2.0 * DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES
+    assert result_map["sample_b"] == 2.0 * DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES
 
 
 def test_run_folder_statistics_auc_can_use_raw_intensity(tmp_path: Path) -> None:
@@ -187,14 +188,14 @@ def test_run_folder_statistics_auc_can_use_raw_intensity(tmp_path: Path) -> None
         tmp_path,
         "sample",
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 0.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 2.0, "fov": 0, "cell": 0, "value": 4.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 0.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 4.0},
         ],
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 2.0},
-            {"time": 2.0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
         ],
     )
 
@@ -212,7 +213,7 @@ def test_run_folder_statistics_auc_can_use_raw_intensity(tmp_path: Path) -> None
     row = results_df.iloc[0]
     assert row["normalization_mode"] == "raw_intensity"
     assert row["source_area_file"] == ""
-    assert float(row["auc"]) == 4.0
+    assert float(row["auc"]) == 4.0 * DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES
 
 
 def test_run_folder_statistics_normalized_requires_area_for_every_sample(
@@ -221,8 +222,8 @@ def test_run_folder_statistics_normalized_requires_area_for_every_sample(
     _write_analysis_csv(
         tmp_path / "sample_intensity_ch_1.csv",
         [
-            {"time": 0.0, "fov": 0, "cell": 0, "value": 1.0},
-            {"time": 1.0, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "fov": 0, "cell": 0, "value": 1.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
         ],
     )
 
@@ -243,22 +244,24 @@ def test_run_folder_statistics_onset_fits_and_marks_short_traces(
     tmp_path: Path,
 ) -> None:
     normalized_rows = []
-    for time in [0.0, 1.0, 2.0, 3.0, 4.0]:
+    for frame in [0, 6, 12, 18, 24]:
+        time = frame * DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES
         normalized_rows.append(
             {
-                "time": time,
+                "frame": frame,
                 "fov": 0,
                 "cell": 0,
-                "value": 0.5 + 2.0 * max(time - 1.0, 0.0),
+                "value": 0.5 + (2.0 / 60.0) * max(time - 60.0, 0.0),
             }
         )
-    for time in [0.0, 1.0, 2.0]:
+    for frame in [0, 6, 12]:
+        time = frame * DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES
         normalized_rows.append(
             {
-                "time": time,
+                "frame": frame,
                 "fov": 0,
                 "cell": 1,
-                "value": 1.0 + max(time - 0.5, 0.0),
+                "value": 1.0 + (1.0 / 60.0) * max(time - 30.0, 0.0),
             }
         )
 
@@ -273,7 +276,7 @@ def test_run_folder_statistics_onset_fits_and_marks_short_traces(
     results_df, _, output_path = run_folder_statistics(
         tmp_path,
         "onset_shifted_relu",
-        fit_window_hours=4.0,
+        fit_window_min=240.0,
         area_filter_size=1,
     )
 
@@ -284,8 +287,8 @@ def test_run_folder_statistics_onset_fits_and_marks_short_traces(
     short_row = results_df.loc[results_df["cell"] == 1].iloc[0]
 
     assert bool(good_row["success"]) is True
-    assert abs(float(good_row["onset_time"]) - 1.0) < 1e-2
-    assert abs(float(good_row["slope"]) - 2.0) < 1e-2
+    assert abs(float(good_row["onset_time_min"]) - 60.0) < 1e-2
+    assert abs(float(good_row["slope_min"]) - (2.0 / 60.0)) < 1e-2
     assert abs(float(good_row["offset"]) - 0.5) < 1e-2
     assert float(good_row["r_squared"]) > 0.99
 
@@ -297,13 +300,14 @@ def test_run_folder_statistics_onset_allows_negative_onset(
     tmp_path: Path,
 ) -> None:
     normalized_rows = []
-    for time in [-1.0, 0.0, 1.0, 2.0, 3.0]:
+    for frame in [0, 6, 12, 18, 24]:
+        time = frame * DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES
         normalized_rows.append(
             {
-                "time": time,
+                "frame": frame,
                 "fov": 0,
                 "cell": 0,
-                "value": 0.5 + 2.0 * max(time + 0.25, 0.0),
+                "value": 0.5 + (2.0 / 60.0) * max(time + 15.0, 0.0),
             }
         )
 
@@ -318,14 +322,53 @@ def test_run_folder_statistics_onset_allows_negative_onset(
     results_df, _, _ = run_folder_statistics(
         tmp_path,
         "onset_shifted_relu",
-        fit_window_hours=4.0,
+        fit_window_min=240.0,
         area_filter_size=1,
     )
 
     row = results_df.iloc[0]
 
     assert bool(row["success"]) is True
-    assert float(row["onset_time"]) < 0.0
-    assert abs(float(row["onset_time"]) + 0.25) < 1e-2
-    assert abs(float(row["slope"]) - 2.0) < 1e-2
+    assert float(row["onset_time_min"]) < 0.0
+    assert abs(float(row["onset_time_min"]) + 15.0) < 1e-2
+    assert abs(float(row["slope_min"]) - (2.0 / 60.0)) < 1e-2
     assert abs(float(row["offset"]) - 0.5) < 1e-2
+
+
+def test_load_analysis_csv_derives_time_min_from_frame(tmp_path: Path) -> None:
+    csv_path = tmp_path / "sample.csv"
+    _write_analysis_csv(
+        csv_path,
+        [
+            {"frame": 0, "fov": 0, "cell": 0, "value": 1.0},
+            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 2, "fov": 0, "cell": 0, "value": 3.0},
+        ],
+    )
+
+    df = load_analysis_csv(csv_path).reset_index()
+
+    assert pd.api.types.is_integer_dtype(df["frame"])
+    np.testing.assert_allclose(
+        df["time_min"].to_numpy(),
+        [
+            0.0,
+            DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES,
+            2.0 * DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES,
+        ],
+    )
+
+
+def test_load_analysis_csv_rejects_legacy_time_schema(tmp_path: Path) -> None:
+    csv_path = tmp_path / "legacy.csv"
+    pd.DataFrame(
+        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
+        columns=["time", "fov", "cell", "value"],
+    ).to_csv(csv_path, index=False)
+
+    try:
+        load_analysis_csv(csv_path)
+    except ValueError as exc:
+        assert "expected 'frame' column" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected legacy time-based CSV to be rejected")

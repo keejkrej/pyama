@@ -4,11 +4,12 @@ Core processing library. Use via PyAMA-Pro or import in scripts. Install: `uv sy
 
 ## APIs
 - **I/O**: `load_microscopy_file`, `get_microscopy_frame`, `load_analysis_csv`, `scan_processing_results`
-- **Workflow**: `run_complete_workflow(metadata, context, fov_start, fov_end, batch_size, n_workers)` – `ProcessingContext`, `ChannelSelection`, `Channels` from `pyama.types.processing`
-- **Merge**: `run_merge(sample_yaml, processing_results_yaml, output_dir)`
-- **Modeling**: `fit_model`, `get_model`, `list_models` from `pyama.modeling`
+- **Tasks**: `submit_processing`, `submit_merge`, `submit_model_fit`, `submit_statistics`, `submit_visualization`, `subscribe`, `unsubscribe`
+- **Workflow types**: `ProcessingContext`, `ChannelSelection`, `Channels` from `pyama.types.processing`
+- **Merge**: `run_merge(samples, processing_results_dir)` for synchronous library callers
+- **Modeling**: `fit_model`, `get_model`, `list_models` from `pyama.modeling` (`base` is the built-in model)
 - **Statistics**: `discover_sample_pairs`, `run_folder_statistics` from `pyama.statistics`
-- **Features**: `list_phase_features`, `list_fluorescence_features` – built-in: `area`, `intensity`
+- **Features**: `list_phase_features`, `list_fluorescence_features` from `pyama.apps.processing.extract` – built-in: `area`, `intensity`
 
 ## Workflow
 Copying → Segmentation (LOG-STD) → Correction → Tracking (IoU) → Extraction.
@@ -21,11 +22,10 @@ Copying → Segmentation (LOG-STD) → Correction → Tracking (IoU) → Extract
 | 4. Tracking | `*_seg_labeled_ch_*.npy` |
 | 5. Extraction | `*_traces.csv` |
 
-Output: `fov_XXX/` dirs containing traces and channel arrays. Copying sequential per batch; steps 2–5 parallel. Filtering: min 30 frames, 50px border.
+Output: `fov_XXX/` dirs containing traces and channel arrays. Trace CSVs are frame-based; merged analysis CSVs use `frame,fov,cell,value`, and analysis/modeling/statistics derive minute time from a configurable frame interval (default 10 minutes). Copying sequential per batch; steps 2–5 parallel. Filtering: min 30 frames, 50px border.
 
 ## Extending
-- **Features**: `extract_*(ctx) -> float`; register built-ins in the package `__init__.py`
+- **Features**: `extract_*(ctx) -> float`; register built-ins in `pyama.apps.processing.extract`
 - **Models**: `Params`, `Bounds`, `DEFAULTS`, `BOUNDS`, `eval`; register built-ins in the package `__init__.py`
 
 See `tests/test_workflow.py`, `tests/test_merge.py`.
-

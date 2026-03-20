@@ -1,11 +1,9 @@
-"""
-Simple functional models for curve fitting.
-"""
+"""Simple functional models for curve fitting."""
 
-from pyama.apps.modeling.models import maturation
+from pyama.apps.modeling.models import base
 
 MODELS = {
-    "maturation": maturation,
+    "base": base,
 }
 
 
@@ -20,12 +18,11 @@ def get_types(model_name: str):
     """Get type classes for a model.
 
     Returns UserParams and UserBounds for validation.
-    Models with FixedParams/FitParams structure will have these types.
+    Models may optionally expose legacy validation helper types.
     """
     model = get_model(model_name)
     types = {}
 
-    # Check for new structure (FixedParams/FitParams)
     if hasattr(model, "UserParams"):
         types["UserParams"] = model.UserParams
     if hasattr(model, "UserBounds"):
