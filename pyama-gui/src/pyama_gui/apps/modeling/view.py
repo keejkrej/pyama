@@ -24,7 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyama.tasks import analyze_fitting_quality, get_model
+from pyama.apps.modeling.fitting import analyze_fitting_quality
+from pyama.apps.modeling.models import get_model
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.apps.modeling.view_model import ModelingViewModel
 from pyama_gui.widgets import MplCanvas
@@ -408,32 +409,32 @@ class ModelingView(QWidget):
             f"Bad: {quality_metrics['poor_percentage']:.1f}%"
         )
 
-    def _fov_groups(self, df: pd.DataFrame) -> dict[int, list[tuple[int, int]]]:
+    def _position_groups(self, df: pd.DataFrame) -> dict[int, list[tuple[int, int]]]:
         groups: dict[int, list[tuple[int, int]]] = {}
-        if "fov" not in df.columns or "cell" not in df.columns:
+        if "position" not in df.columns or "roi" not in df.columns:
             return groups
         for _, row in df.iterrows():
-            groups.setdefault(int(row["fov"]), []).append(
-                (int(row["fov"]), int(row["cell"]))
+            groups.setdefault(int(row["position"]), []).append(
+                (int(row["position"]), int(row["roi"]))
             )
-        for fov in groups:
-            groups[fov].sort(key=lambda value: value[1])
+        for position in groups:
+            groups[position].sort(key=lambda value: value[1])
         return groups
 
     def _visible_fit_ids(self, df: pd.DataFrame) -> list[tuple[int, int]]:
-        fov_list = sorted(self._fov_groups(df))
-        if self._fit_page >= len(fov_list):
+        position_list = sorted(self._position_groups(df))
+        if self._fit_page >= len(position_list):
             return []
-        return self._fov_groups(df).get(fov_list[self._fit_page], [])
+        return self._position_groups(df).get(position_list[self._fit_page], [])
 
     def _update_quality_pagination(self, df: pd.DataFrame) -> None:
-        fov_list = sorted(self._fov_groups(df))
-        total_pages = max(1, len(fov_list))
-        if self._fit_page < len(fov_list):
-            current_fov = fov_list[self._fit_page]
-            cell_count = len(self._fov_groups(df).get(current_fov, []))
+        position_list = sorted(self._position_groups(df))
+        total_pages = max(1, len(position_list))
+        if self._fit_page < len(position_list):
+            current_position = position_list[self._fit_page]
+            roi_count = len(self._position_groups(df).get(current_position, []))
             self._quality_page_label.setText(
-                f"FOV {current_fov} ({cell_count} cells) - "
+                f"Position {current_position} ({roi_count} ROIs) - "
                 f"Page {self._fit_page + 1} of {total_pages}"
             )
         else:
@@ -445,10 +446,10 @@ class ModelingView(QWidget):
         trace_ids = self._visible_fit_ids(df)
         self._quality_list.blockSignals(True)
         self._quality_list.clear()
-        for fov, cell in trace_ids:
-            item = QListWidgetItem(f"Cell {cell}")
-            item.setData(Qt.ItemDataRole.UserRole, (fov, cell))
-            row = df[(df["fov"] == fov) & (df["cell"] == cell)]
+        for position, roi in trace_ids:
+            item = QListWidgetItem(f"ROI {roi}")
+            item.setData(Qt.ItemDataRole.UserRole, (position, roi))
+            row = df[(df["position"] == position) & (df["roi"] == roi)]
             if not row.empty and "r_squared" in row.columns:
                 value = row.iloc[0]["r_squared"]
                 if pd.notna(value):
@@ -468,9 +469,9 @@ class ModelingView(QWidget):
         if df is None or raw_data is None or cell_id is None:
             self._quality_canvas.clear()
             return
-        fov, cell = cell_id
+        position, roi = cell_id
         try:
-            cell_data = raw_data.loc[(fov, cell)].sort_values("frame")
+            cell_data = raw_data.loc[(position, roi)].sort_values("frame")
         except KeyError:
             self._quality_canvas.clear()
             return
@@ -479,9 +480,14 @@ class ModelingView(QWidget):
         trace_data = cell_data["value"].values
         lines_data = [(time_data, trace_data)]
         styles_data = [
-            {"color": "blue", "alpha": 0.7, "label": f"FOV {fov}, Cell {cell}", "linewidth": 1}
+            {
+                "color": "blue",
+                "alpha": 0.7,
+                "label": f"Position {position}, ROI {roi}",
+                "linewidth": 1,
+            }
         ]
-        result_row = df[(df["fov"] == fov) & (df["cell"] == cell)]
+        result_row = df[(df["position"] == position) & (df["roi"] == roi)]
         if not result_row.empty:
             row = result_row.iloc[0]
             model_type = row.get("model_type")
@@ -510,9 +516,9 @@ class ModelingView(QWidget):
                     )
                 except Exception as exc:
                     logger.warning(
-                        "Could not generate fitted curve for FOV %s, Cell %s: %s",
-                        fov,
-                        cell,
+                        "Could not generate fitted curve for position %s, ROI %s: %s",
+                        position,
+                        roi,
                         exc,
                     )
         self._quality_canvas.plot_lines(
@@ -817,8 +823,8 @@ class ModelingView(QWidget):
     @staticmethod
     def _discover_numeric_parameters(df: pd.DataFrame) -> list[str]:
         metadata_cols = {
-            "fov",
-            "cell",
+            "position",
+            "roi",
             "file",
             "model_type",
             "success",

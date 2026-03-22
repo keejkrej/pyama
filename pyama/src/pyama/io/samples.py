@@ -1,8 +1,12 @@
-"""Discovery utilities for traces_merged statistics inputs."""
+"""Sample YAML and statistics sample discovery helpers."""
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 
+import yaml
+
+from pyama.types.processing import MergeSamplePayload, SamplesFilePayload
 from pyama.types.statistics import SamplePair
 
 logger = logging.getLogger(__name__)
@@ -11,8 +15,30 @@ INTENSITY_DIR = "intensity_total_c1"
 AREA_DIR = "area_c0"
 
 
-def discover_sample_pairs(folder_path: Path | str) -> list[SamplePair]:
-    """Discover intensity samples with optional area CSVs in a traces_merged folder."""
+def read_samples_yaml(path: Path) -> SamplesFilePayload:
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        raise ValueError("Samples YAML must contain a mapping at top level")
+    samples = data.get("samples")
+    if not isinstance(samples, list):
+        raise ValueError("Samples YAML must contain a 'samples' list")
+
+    validated_samples: list[MergeSamplePayload] = []
+    for index, sample in enumerate(samples, start=1):
+        if not isinstance(sample, Mapping):
+            raise ValueError(f"Sample {index} must be a mapping")
+        name = sample.get("name")
+        positions = sample.get("positions")
+        if not isinstance(name, str):
+            raise ValueError(f"Sample {index} is missing a name")
+        if not isinstance(positions, (str, list)):
+            raise ValueError(f"Sample {index} must include a string or list of positions")
+        validated_samples.append({"name": name, "positions": positions})
+    return {"samples": validated_samples}
+
+
+def discover_statistics_sample_pairs(folder_path: Path | str) -> list[SamplePair]:
     folder = Path(folder_path)
     if not folder.exists():
         raise FileNotFoundError(f"Statistics folder not found: {folder}")
@@ -65,3 +91,6 @@ def discover_sample_pairs(folder_path: Path | str) -> list[SamplePair]:
         )
 
     return pairs
+
+
+__all__ = ["discover_statistics_sample_pairs", "read_samples_yaml"]

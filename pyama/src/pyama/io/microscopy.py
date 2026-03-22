@@ -10,7 +10,7 @@ import nd2
 import numpy as np
 from pylibCZIrw import czi as czi_api
 
-from pyama.types.microscopy import MicroscopyMetadata
+from pyama.types.io import MicroscopyMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -186,12 +186,12 @@ class NikonImage:
 
     def get_frame(
         self,
-        fov_idx: int,
+        position_idx: int,
         channel_idx: int,
         time_idx: int,
         z_idx: int = 0,
     ) -> np.ndarray:
-        coords = {"P": fov_idx, "T": time_idx, "C": channel_idx, "Z": z_idx}
+        coords = {"P": position_idx, "T": time_idx, "C": channel_idx, "Z": z_idx}
         index = tuple(coords.get(dim, 0) for dim in self._dim_order)
         return np.asarray(self._dask_array[index].compute())
 
@@ -290,12 +290,12 @@ class ZeissImage:
 
     def get_frame(
         self,
-        fov_idx: int,
+        position_idx: int,
         channel_idx: int,
         time_idx: int,
         z_idx: int = 0,
     ) -> np.ndarray:
-        scene_id = self._scene_ids[fov_idx]
+        scene_id = self._scene_ids[position_idx]
         plane = {"T": time_idx, "C": channel_idx, "Z": z_idx}
         frame = np.asarray(self._reader.read(scene=scene_id, plane=plane))
         frame = np.squeeze(frame)
@@ -382,31 +382,32 @@ def load_microscopy_file(file_path: Path) -> tuple[MicroscopyImage, MicroscopyMe
 
 def get_microscopy_frame(
     img: MicroscopyImage,
-    fov: int,
+    position: int,
     channel: int,
     time: int,
     z: int = 0,
 ) -> np.ndarray:
     """Return a single microscopy frame as a numpy array."""
-    return img.get_frame(fov, channel, time, z)
+    return img.get_frame(position, channel, time, z)
 
 
 def get_microscopy_channel_stack(
-    img: MicroscopyImage, fov: int, time: int
+    img: MicroscopyImage, position: int, time: int
 ) -> np.ndarray:
     """Return a channel stack with shape ``(C, H, W)``."""
     channel_frames = [
-        get_microscopy_frame(img, fov, channel, time)
+        get_microscopy_frame(img, position, channel, time)
         for channel in range(int(img.dims.C))
     ]
     return np.stack(channel_frames, axis=0)
 
 
 def get_microscopy_time_stack(
-    img: MicroscopyImage, fov: int, channel: int
+    img: MicroscopyImage, position: int, channel: int
 ) -> np.ndarray:
     """Return a time stack with shape ``(T, H, W)``."""
     time_frames = [
-        get_microscopy_frame(img, fov, channel, time) for time in range(int(img.dims.T))
+        get_microscopy_frame(img, position, channel, time)
+        for time in range(int(img.dims.T))
     ]
     return np.stack(time_frames, axis=0)

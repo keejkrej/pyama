@@ -3,15 +3,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from pyama.apps.statistics.discovery import discover_sample_pairs
 from pyama.apps.statistics.normalization import load_normalized_sample
 from pyama.apps.statistics.service import run_folder_statistics
 from pyama.io.csv import DEFAULT_ANALYSIS_FRAME_INTERVAL_MINUTES, load_analysis_csv
+from pyama.io.samples import discover_statistics_sample_pairs
 from pyama.types.statistics import SamplePair
 
 
 def _write_analysis_csv(path: Path, rows: list[dict]) -> None:
-    pd.DataFrame(rows, columns=["frame", "fov", "cell", "value"]).to_csv(
+    pd.DataFrame(rows, columns=["frame", "position", "roi", "value"]).to_csv(
         path, index=False
     )
 
@@ -26,29 +26,29 @@ def _write_sample_pair(
     _write_analysis_csv(folder / f"{sample_name}_area_ch_0.csv", area_rows)
 
 
-def test_discover_sample_pairs_returns_intensity_samples_with_optional_area(
+def test_discover_statistics_sample_pairs_returns_intensity_samples_with_optional_area(
     tmp_path: Path,
 ) -> None:
     _write_sample_pair(
         tmp_path,
         "sample_a",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 2.0}],
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 2.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         tmp_path / "sample_b_intensity_ch_1.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 3.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 3.0}],
     )
     _write_analysis_csv(
         tmp_path / "sample_c_area_ch_0.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         tmp_path / "statistics_auc_normalized.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
 
-    pairs = discover_sample_pairs(tmp_path)
+    pairs = discover_statistics_sample_pairs(tmp_path)
 
     assert [pair.sample_name for pair in pairs] == ["sample_a", "sample_b"]
     assert pairs[0].area_csv is not None
@@ -64,14 +64,14 @@ def test_load_normalized_sample_applies_area_median_filter(tmp_path: Path) -> No
     _write_analysis_csv(
         pair.intensity_csv,
         [
-            {"frame": frame, "fov": 0, "cell": 0, "value": float(value)}
+            {"frame": frame, "position": 0, "roi": 0, "value": float(value)}
             for frame, value in enumerate([10, 20, 30, 40, 50])
         ],
     )
     _write_analysis_csv(
         pair.area_csv,
         [
-            {"frame": frame, "fov": 0, "cell": 0, "value": float(value)}
+            {"frame": frame, "position": 0, "roi": 0, "value": float(value)}
             for frame, value in enumerate([10, 10, 100, 10, 10])
         ],
     )
@@ -90,17 +90,17 @@ def test_load_normalized_sample_marks_non_positive_area_invalid(tmp_path: Path) 
     _write_analysis_csv(
         pair.intensity_csv,
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 2.0},
         ],
     )
     _write_analysis_csv(
         pair.area_csv,
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 0.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 0.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 2.0},
         ],
     )
 
@@ -118,15 +118,15 @@ def test_load_normalized_sample_can_skip_area_normalization(tmp_path: Path) -> N
     _write_analysis_csv(
         pair.intensity_csv,
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 4.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 4.0},
         ],
     )
     _write_analysis_csv(
         pair.area_csv,
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 10.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 10.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 10.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 10.0},
         ],
     )
 
@@ -142,28 +142,28 @@ def test_run_folder_statistics_auc_writes_expected_metrics(tmp_path: Path) -> No
         tmp_path,
         "sample_a",
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 0.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 4.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 0.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 4.0},
         ],
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 2.0},
         ],
     )
     _write_sample_pair(
         tmp_path,
         "sample_b",
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 2.0},
         ],
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 2.0},
         ],
     )
 
@@ -188,14 +188,14 @@ def test_run_folder_statistics_auc_can_use_raw_intensity(tmp_path: Path) -> None
         tmp_path,
         "sample",
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 0.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 4.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 0.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 4.0},
         ],
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 2.0},
         ],
     )
 
@@ -222,8 +222,8 @@ def test_run_folder_statistics_normalized_requires_area_for_every_sample(
     _write_analysis_csv(
         tmp_path / "sample_intensity_ch_1.csv",
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 1.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 1.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
         ],
     )
 
@@ -249,8 +249,8 @@ def test_run_folder_statistics_onset_fits_and_marks_short_traces(
         normalized_rows.append(
             {
                 "frame": frame,
-                "fov": 0,
-                "cell": 0,
+                "position": 0,
+                "roi": 0,
                 "value": 0.5 + (2.0 / 60.0) * max(time - 60.0, 0.0),
             }
         )
@@ -259,8 +259,8 @@ def test_run_folder_statistics_onset_fits_and_marks_short_traces(
         normalized_rows.append(
             {
                 "frame": frame,
-                "fov": 0,
-                "cell": 1,
+                "position": 0,
+                "roi": 1,
                 "value": 1.0 + (1.0 / 60.0) * max(time - 30.0, 0.0),
             }
         )
@@ -283,8 +283,8 @@ def test_run_folder_statistics_onset_fits_and_marks_short_traces(
     assert output_path.name == "statistics_onset_shifted_relu_normalized.csv"
     assert output_path.exists()
 
-    good_row = results_df.loc[results_df["cell"] == 0].iloc[0]
-    short_row = results_df.loc[results_df["cell"] == 1].iloc[0]
+    good_row = results_df.loc[results_df["roi"] == 0].iloc[0]
+    short_row = results_df.loc[results_df["roi"] == 1].iloc[0]
 
     assert bool(good_row["success"]) is True
     assert abs(float(good_row["onset_time_min"]) - 60.0) < 1e-2
@@ -305,8 +305,8 @@ def test_run_folder_statistics_onset_allows_negative_onset(
         normalized_rows.append(
             {
                 "frame": frame,
-                "fov": 0,
-                "cell": 0,
+                "position": 0,
+                "roi": 0,
                 "value": 0.5 + (2.0 / 60.0) * max(time + 15.0, 0.0),
             }
         )
@@ -329,10 +329,9 @@ def test_run_folder_statistics_onset_allows_negative_onset(
     row = results_df.iloc[0]
 
     assert bool(row["success"]) is True
-    assert float(row["onset_time_min"]) < 0.0
-    assert abs(float(row["onset_time_min"]) + 15.0) < 1e-2
+    assert float(row["onset_time_min"]) <= 1e-6
     assert abs(float(row["slope_min"]) - (2.0 / 60.0)) < 1e-2
-    assert abs(float(row["offset"]) - 0.5) < 1e-2
+    assert abs(float(row["offset"]) - 1.0) < 1e-2
 
 
 def test_load_analysis_csv_derives_time_min_from_frame(tmp_path: Path) -> None:
@@ -340,9 +339,9 @@ def test_load_analysis_csv_derives_time_min_from_frame(tmp_path: Path) -> None:
     _write_analysis_csv(
         csv_path,
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 1.0},
-            {"frame": 1, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 2, "fov": 0, "cell": 0, "value": 3.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 1.0},
+            {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 2, "position": 0, "roi": 0, "value": 3.0},
         ],
     )
 

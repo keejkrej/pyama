@@ -7,15 +7,10 @@ from typing import cast
 import pandas as pd
 from PySide6.QtCore import QObject, Signal
 
-from pyama.tasks import (
-    ModelFitTaskRequest,
-    TaskStatus,
-    analyze_fitting_quality,
-    get_model,
-    list_models,
-    load_analysis_csv,
-    submit_model_fit,
-)
+from pyama.apps.modeling.fitting import analyze_fitting_quality
+from pyama.apps.modeling.models import get_model, list_models
+from pyama.io.csv import load_analysis_csv
+from pyama.tasks import ModelFitTaskRequest, TaskStatus, submit_model_fit
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.task_runner import TaskWorker, WorkerHandle, run_task
 from pyama_gui.types.common import ListRowState, PageState, PlotSpec
@@ -207,9 +202,9 @@ class ModelingViewModel(QObject):
         if df is None or df.empty:
             return []
         rows: list[ListRowState] = []
-        for fov, cell in self._visible_fit_ids(df):
+        for position, roi in self._visible_fit_ids(df):
             color = None
-            row = df[(df["fov"] == fov) & (df["cell"] == cell)]
+            row = df[(df["position"] == position) & (df["roi"] == roi)]
             if not row.empty and "r_squared" in row.columns:
                 value = row.iloc[0]["r_squared"]
                 if pd.notna(value):
@@ -221,10 +216,10 @@ class ModelingViewModel(QObject):
                         color = "red"
             rows.append(
                 ListRowState(
-                    label=f"Cell {cell}",
-                    value=(fov, cell),
+                    label=f"ROI {roi}",
+                    value=(position, roi),
                     color=color,
-                    selected=(self._selected_fit_cell == (fov, cell)),
+                    selected=(self._selected_fit_cell == (position, roi)),
                 )
             )
         return rows
@@ -249,12 +244,15 @@ class ModelingViewModel(QObject):
         df = self._results_df
         if df is None or df.empty:
             return PageState()
-        fov_list = sorted(self._fov_groups(df))
-        total_pages = max(1, len(fov_list))
-        if self._fit_page < len(fov_list):
-            current_fov = fov_list[self._fit_page]
-            cell_count = len(self._fov_groups(df).get(current_fov, []))
-            label = f"FOV {current_fov} ({cell_count} cells) - Page {self._fit_page + 1} of {total_pages}"
+        position_list = sorted(self._position_groups(df))
+        total_pages = max(1, len(position_list))
+        if self._fit_page < len(position_list):
+            current_position = position_list[self._fit_page]
+            roi_count = len(self._position_groups(df).get(current_position, []))
+            label = (
+                f"Position {current_position} ({roi_count} ROIs) - "
+                f"Page {self._fit_page + 1} of {total_pages}"
+            )
         else:
             label = f"Page {self._fit_page + 1} of {total_pages}"
         return PageState(
@@ -270,9 +268,9 @@ class ModelingViewModel(QObject):
         cell_id = self._selected_fit_cell
         if df is None or raw_data is None or cell_id is None:
             return None
-        fov, cell = cell_id
+        position, roi = cell_id
         try:
-            cell_data = raw_data.loc[(fov, cell)].sort_values("frame")
+            cell_data = raw_data.loc[(position, roi)].sort_values("frame")
         except KeyError:
             return None
         time_data = cell_data["time_min"].values
@@ -282,11 +280,11 @@ class ModelingViewModel(QObject):
             {
                 "color": "blue",
                 "alpha": 0.7,
-                "label": f"FOV {fov}, Cell {cell}",
+                "label": f"Position {position}, ROI {roi}",
                 "linewidth": 1,
             }
         ]
-        result_row = df[(df["fov"] == fov) & (df["cell"] == cell)]
+        result_row = df[(df["position"] == position) & (df["roi"] == roi)]
         if not result_row.empty:
             row = result_row.iloc[0]
             model_type = row.get("model_type")
@@ -315,9 +313,9 @@ class ModelingViewModel(QObject):
                     )
                 except Exception as exc:
                     logger.warning(
-                        "Could not generate fitted curve for FOV %s, Cell %s: %s",
-                        fov,
-                        cell,
+                        "Could not generate fitted curve for position %s, ROI %s: %s",
+                        position,
+                        roi,
                         exc,
                     )
         return PlotSpec(
@@ -598,7 +596,7 @@ class ModelingViewModel(QObject):
     def next_quality_page(self) -> None:
         if self._results_df is None:
             return
-        total_pages = max(1, len(self._fov_groups(self._results_df)))
+        total_pages = max(1, len(self._position_groups(self._results_df)))
         if self._fit_page >= total_pages - 1:
             return
         self._fit_page += 1
@@ -686,23 +684,23 @@ class ModelingViewModel(QObject):
         )
 
     @staticmethod
-    def _fov_groups(df: pd.DataFrame) -> dict[int, list[tuple[int, int]]]:
+    def _position_groups(df: pd.DataFrame) -> dict[int, list[tuple[int, int]]]:
         groups: dict[int, list[tuple[int, int]]] = {}
-        if "fov" not in df.columns or "cell" not in df.columns:
+        if "position" not in df.columns or "roi" not in df.columns:
             return groups
         for _, row in df.iterrows():
-            groups.setdefault(int(row["fov"]), []).append(
-                (int(row["fov"]), int(row["cell"]))
+            groups.setdefault(int(row["position"]), []).append(
+                (int(row["position"]), int(row["roi"]))
             )
-        for fov in groups:
-            groups[fov].sort(key=lambda value: value[1])
+        for position in groups:
+            groups[position].sort(key=lambda value: value[1])
         return groups
 
     def _visible_fit_ids(self, df: pd.DataFrame) -> list[tuple[int, int]]:
-        fov_list = sorted(self._fov_groups(df))
-        if self._fit_page >= len(fov_list):
+        position_list = sorted(self._position_groups(df))
+        if self._fit_page >= len(position_list):
             return []
-        return self._fov_groups(df).get(fov_list[self._fit_page], [])
+        return self._position_groups(df).get(position_list[self._fit_page], [])
 
     def _get_histogram_series(
         self, df: pd.DataFrame, param_name: str
@@ -718,8 +716,8 @@ class ModelingViewModel(QObject):
     @staticmethod
     def _discover_numeric_parameters(df: pd.DataFrame) -> list[str]:
         metadata_cols = {
-            "fov",
-            "cell",
+            "position",
+            "roi",
             "file",
             "model_type",
             "success",

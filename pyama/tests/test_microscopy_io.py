@@ -138,8 +138,8 @@ def test_load_nd2_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
     reader, metadata = load_microscopy_file(Path("sample.nd2"))
 
     assert metadata.file_type == "nd2"
-    assert metadata.fov_list == (0, 1)
-    assert metadata.n_fovs == 2
+    assert metadata.position_list == (0, 1)
+    assert metadata.n_positions == 2
     assert metadata.n_channels == 2
     assert metadata.channel_names == ("Phase", "GFP")
     assert metadata.timepoints == (0.0, 5.0, 10.0)
@@ -180,8 +180,8 @@ def test_load_czi_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
     reader, metadata = load_microscopy_file(Path("sample.czi"))
 
     assert metadata.file_type == "czi"
-    assert metadata.fov_list == (0, 1)
-    assert metadata.n_fovs == 2
+    assert metadata.position_list == (0, 1)
+    assert metadata.n_positions == 2
     assert metadata.n_channels == 2
     assert metadata.height == 2
     assert metadata.width == 3

@@ -16,12 +16,7 @@ from pyama.tasks import (
     subscribe,
     unsubscribe,
 )
-from pyama.types.processing import (
-    ChannelSelection,
-    Channels,
-    ProcessingContext,
-    ProcessingParams,
-)
+from pyama.types.processing import Channels, ProcessingConfig, ProcessingParams
 
 
 def demonstrate_workflow_setup():
@@ -73,58 +68,54 @@ def demonstrate_workflow_setup():
         print(f"   Channels: {md.n_channels}")
         print(f"   Channel names: {md.channel_names}")
         print(f"   Timepoints: {md.n_frames}")
-        print(f"   FOVs: {md.n_fovs}")
+        print(f"   Positions: {md.n_positions}")
         print(f"   Image shape: {img.shape}")
     except Exception as e:
         print(f"❌ Error loading microscopy file: {e}")
         return None, None, None
 
-    # Build processing context
-    print("\n5. Building processing context...")
+    print("\n5. Building processing config...")
 
-    # Adjust channel selection based on available channels
     available_channels = md.n_channels
-    fl_channels = []
+    fl_channels: dict[int, list[str]] = {}
 
     if available_channels >= 2:
-        fl_channels.append(ChannelSelection(channel=1, features=fl_feature_choices))
+        fl_channels[1] = fl_feature_choices
     if available_channels >= 3:
-        fl_channels.append(ChannelSelection(channel=2, features=fl_feature_choices))
+        fl_channels[2] = fl_feature_choices
 
-    ctx = ProcessingContext(
-        output_dir=output_dir,
+    config = ProcessingConfig(
         channels=Channels(
-            pc=ChannelSelection(channel=0, features=pc_features),
+            pc={0: pc_features},
             fl=fl_channels,
         ),
-        params=ProcessingParams(background_weight=0.0),
+        params=ProcessingParams(
+            positions=f"0:{min(2, md.n_positions)}",
+            n_workers=2,
+            background_weight=0.0,
+        ),
     )
 
-    print("✓ Processing context created:")
-    channels = ctx.channels
+    print("✓ Processing config created:")
+    channels = config.channels
     if channels is None:
-        raise RuntimeError("Processing context is missing channels")
-    print(f"   PC Channel: {channels.pc.channel if channels.pc else 'None'}")
-    print(f"   PC Features: {channels.pc.features if channels.pc else 'None'}")
-    print(f"   FL Channels: {[fl.channel for fl in channels.fl]}")
-    for i, fl in enumerate(channels.fl):
-        print(f"     Channel {fl.channel}: {fl.features}")
+        raise RuntimeError("Processing config is missing channels")
+    print(f"   PC Channel: {next(iter(channels.pc)) if channels.pc else 'None'}")
+    print(f"   PC Features: {next(iter(channels.pc.values())) if channels.pc else 'None'}")
+    print(f"   FL Channels: {list(channels.fl)}")
+    for channel_id, features in channels.fl.items():
+        print(f"     Channel {channel_id}: {features}")
 
-    return microscopy_path, ctx, md
+    return microscopy_path, output_dir, config, md
 
 
-def demonstrate_workflow_execution(ctx, md):
+def demonstrate_workflow_execution(output_dir, config, md):
     """Demonstrate workflow execution with progress tracking."""
     print("\n=== Workflow Execution Demo ===")
 
-    # Configure workflow parameters
-    fov_start = 0
-    fov_end = min(1, md.n_fovs - 1)  # Process at least 1 FOV
-    n_workers = 2
-
     print("1. Workflow configuration:")
-    print(f"   FOV range: {fov_start} to {fov_end}")
-    print(f"   Workers: {n_workers}")
+    print(f"   Positions: {config.params.positions}")
+    print(f"   Workers: {config.params.n_workers}")
 
     print("\n2. Starting workflow execution...")
     print("   (This may take several minutes depending on data size...)")
@@ -133,10 +124,8 @@ def demonstrate_workflow_execution(ctx, md):
         record = submit_processing(
             ProcessingTaskRequest(
                 metadata=md,
-                context=ctx,
-                fov_start=fov_start,
-                fov_end=fov_end,
-                n_workers=n_workers,
+                config=config,
+                output_dir=output_dir,
             )
         )
         queue = subscribe(record.id)
@@ -175,34 +164,11 @@ def demonstrate_workflow_execution(ctx, md):
         return False
 
 
-def demonstrate_results_inspection(ctx, output_dir):
+def demonstrate_results_inspection(output_dir):
     """Demonstrate inspection of workflow results."""
     print("\n=== Results Inspection Demo ===")
 
-    print("1. Processing context after workflow:")
-    print(f"   Output directory: {ctx.output_dir}")
-    print(f"   Results FOVs: {list(ctx.results.keys()) if ctx.results else 'None'}")
-
-    if ctx.results:
-        for fov_id, result in ctx.results.items():
-            print(f"\n   FOV {fov_id} results:")
-            if result.pc:
-                print(f"     PC: Channel {result.pc[0]} -> {result.pc[1]}")
-            if result.fl:
-                print(f"     FL: {[(ch, path.name) for ch, path in result.fl]}")
-            if result.fl_background:
-                print(
-                    f"     FL_background: {[(ch, path.name) for ch, path in result.fl_background]}"
-                )
-            if result.seg:
-                print(f"     Segmentation: {result.seg[1]}")
-            if result.seg_labeled:
-                print(f"     Tracked segmentation: {result.seg_labeled[1]}")
-            if result.traces:
-                print(f"     Traces: {result.traces}")
-
-    # Check output files
-    print("\n2. Output directory contents:")
+    print("1. Output directory contents:")
     if output_dir.exists():
         for file_path in sorted(output_dir.rglob("*")):
             if file_path.is_file():
@@ -212,8 +178,8 @@ def demonstrate_results_inspection(ctx, output_dir):
     else:
         print("   Output directory does not exist")
 
-    yaml_path = output_dir / "processing_results.yaml"
-    print(f"\n3. processing_results.yaml exists: {yaml_path.exists()}")
+    traces_dir = output_dir / "traces"
+    print(f"\n2. traces directory exists: {traces_dir.exists()}")
 
 
 def main():
@@ -222,17 +188,16 @@ def main():
     print("===============================")
 
     # Step 1: Setup workflow
-    microscopy_path, ctx, md = demonstrate_workflow_setup()
-    if ctx is None:
+    microscopy_path, output_dir, config, md = demonstrate_workflow_setup()
+    if config is None:
         print("\n❌ Cannot proceed without valid setup")
         return
 
     # Step 2: Execute workflow
-    success = demonstrate_workflow_execution(ctx, md)
+    success = demonstrate_workflow_execution(output_dir, config, md)
 
     # Step 3: Inspect results
-    output_dir = ctx.output_dir
-    demonstrate_results_inspection(ctx, output_dir)
+    demonstrate_results_inspection(output_dir)
 
     print(f"\n{'=' * 50}")
     if success:

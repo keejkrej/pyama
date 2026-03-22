@@ -7,16 +7,166 @@ Demonstrates the complete processing pipeline from ND2 file to model fitting.
 
 from pathlib import Path
 import matplotlib.pyplot as plt
-from matplotlib.colors import TwoSlopeNorm
 import numpy as np
 import pandas as pd
+from scipy.ndimage import binary_closing, binary_fill_holes, binary_opening, uniform_filter
+from scipy.optimize import linear_sum_assignment
+from skimage.measure import label, regionprops
 from pyama.io import load_microscopy_file, get_microscopy_time_stack
-from pyama.apps.processing.segment import segment_cell
-from pyama.apps.processing.background import estimate_background
-from pyama.apps.processing.track import track_cell
-from pyama.apps.processing.extract import extract_trace
 from pyama.apps.modeling.fitting import fit_model
 from pyama.apps.modeling.models import get_model
+
+
+def _segment_frame(frame: np.ndarray) -> np.ndarray:
+    frame_f = np.asarray(frame, dtype=np.float32)
+    mask_size = 3
+    mean = uniform_filter(frame_f, size=mask_size)
+    mean_sq = uniform_filter(frame_f * frame_f, size=mask_size)
+    var = mean_sq - mean * mean
+    logstd = np.zeros_like(frame_f, dtype=np.float32)
+    positive = var > 0
+    logstd[positive] = 0.5 * np.log(var[positive])
+    flat = logstd.ravel()
+    counts, edges = np.histogram(flat, bins=200)
+    bins = (edges[:-1] + edges[1:]) * 0.5
+    hist_max = bins[int(np.argmax(counts))]
+    background_vals = flat[flat <= hist_max]
+    sigma = np.std(background_vals) if background_vals.size else 0.0
+    thresh = float(hist_max + (3.0 * sigma))
+    binary = binary_fill_holes(logstd > thresh)
+    struct = np.ones((7, 7))
+    binary = binary_opening(binary, iterations=3, structure=struct)
+    binary = binary_closing(binary, iterations=3, structure=struct)
+    return np.asarray(label(binary, connectivity=1), dtype=bool)
+
+
+def _track_stack(image: np.ndarray, out: np.ndarray, progress_callback=None) -> None:
+    image = image.astype(np.uint16, copy=False)
+    out = out.astype(np.uint16, copy=False)
+    n_frames = image.shape[0]
+
+    regions_all = []
+    for t in range(n_frames):
+        frame_regions = {}
+        for prop in regionprops(image[t]):
+            frame_regions[int(prop.label)] = {
+                "bbox": tuple(int(v) for v in prop.bbox),
+                "coords": prop.coords,
+            }
+        regions_all.append(frame_regions)
+
+    seed_frame = 0
+    while seed_frame < n_frames and not regions_all[seed_frame]:
+        seed_frame += 1
+    if seed_frame >= n_frames:
+        return
+
+    traces = [{seed_frame: label} for label in regions_all[seed_frame]]
+    prev_map = {label: idx for idx, label in enumerate(regions_all[seed_frame])}
+    prev_regions = regions_all[seed_frame]
+
+    for t in range(seed_frame + 1, n_frames):
+        prev_labels = list(prev_map.keys())
+        curr_labels = list(regions_all[t].keys())
+        if not prev_labels or not curr_labels:
+            prev_map = {}
+            prev_regions = {}
+            continue
+
+        cost = np.ones((len(prev_labels), len(curr_labels)), dtype=float)
+        valid = np.zeros_like(cost, dtype=bool)
+        for i, prev_label in enumerate(prev_labels):
+            ay0, ax0, ay1, ax1 = prev_regions[prev_label]["bbox"]
+            for j, curr_label in enumerate(curr_labels):
+                by0, bx0, by1, bx1 = regions_all[t][curr_label]["bbox"]
+                inter_y0 = max(ay0, by0)
+                inter_x0 = max(ax0, bx0)
+                inter_y1 = min(ay1, by1)
+                inter_x1 = min(ax1, bx1)
+                inter_h = inter_y1 - inter_y0
+                inter_w = inter_x1 - inter_x0
+                if inter_h <= 0 or inter_w <= 0:
+                    continue
+                inter_area = inter_h * inter_w
+                a_area = max(0, (ay1 - ay0) * (ax1 - ax0))
+                b_area = max(0, (by1 - by0) * (bx1 - bx0))
+                union = a_area + b_area - inter_area
+                if union <= 0:
+                    continue
+                iou = float(inter_area) / float(union)
+                if iou >= 0.1:
+                    cost[i, j] = 1.0 - iou
+                    valid[i, j] = True
+
+        row_ind, col_ind = linear_sum_assignment(cost)
+        new_prev_map = {}
+        new_prev_regions = {}
+        for row, col in zip(row_ind, col_ind):
+            if not valid[row, col]:
+                continue
+            prev_label = prev_labels[row]
+            curr_label = curr_labels[col]
+            trace_id = prev_map.get(prev_label)
+            if trace_id is None:
+                continue
+            traces[trace_id][t] = curr_label
+            new_prev_map[curr_label] = trace_id
+            new_prev_regions[curr_label] = regions_all[t][curr_label]
+        prev_map = new_prev_map
+        prev_regions = new_prev_regions
+        if progress_callback is not None:
+            progress_callback(t, n_frames, "Tracking")
+
+    out[...] = 0
+    for roi_id, trace in enumerate(traces, start=1):
+        for frame_idx, roi_label in trace.items():
+            region = regions_all[frame_idx].get(roi_label)
+            if region is None:
+                continue
+            ys = region["coords"][:, 0]
+            xs = region["coords"][:, 1]
+            out[frame_idx, ys, xs] = roi_id
+
+
+def _extract_trace_dataframe_local(
+    image: np.ndarray,
+    seg_labeled: np.ndarray,
+    background: np.ndarray,
+    progress_callback=None,
+    background_weight: float = 1.0,
+) -> pd.DataFrame:
+    rows = []
+    n_frames = image.shape[0]
+    for frame_idx in range(n_frames):
+        roi_ids = np.unique(seg_labeled[frame_idx])
+        roi_ids = roi_ids[roi_ids > 0]
+        for roi_id in roi_ids:
+            mask = seg_labeled[frame_idx] == roi_id
+            ys, xs = np.where(mask)
+            if ys.size == 0 or xs.size == 0:
+                continue
+            rows.append(
+                {
+                    "cell": int(roi_id),
+                    "frame": int(frame_idx),
+                    "area": float(np.count_nonzero(mask)),
+                    "intensity": float(
+                        (
+                            image[frame_idx].astype(np.float32)
+                            - (float(background_weight) * background[frame_idx].astype(np.float32))
+                        )[np.asarray(mask, dtype=bool)].sum()
+                    ),
+                }
+            )
+        if progress_callback is not None:
+            progress_callback(frame_idx, n_frames, "Extract")
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["time"] = df["frame"].astype(float)
+    df.set_index(["cell", "time"], inplace=True)
+    return df
 
 
 def progress_callback(current, total, message):
@@ -55,8 +205,8 @@ def demonstrate_nd2_loading():
             return None, None, None
 
         print("Extracting time stacks for channels 0 and 1...")
-        phc_data = get_microscopy_time_stack(img, fov=0, channel=0)
-        fluor_data = get_microscopy_time_stack(img, fov=0, channel=1)
+        phc_data = get_microscopy_time_stack(img, position=0, channel=0)
+        fluor_data = get_microscopy_time_stack(img, position=0, channel=1)
 
         print(f"✓ Phase contrast shape: {phc_data.shape}")
         print(f"✓ Fluorescence shape: {fluor_data.shape}")
@@ -103,7 +253,10 @@ def demonstrate_segmentation(phc_data, output_dir):
     else:
         print("Running cell segmentation...")
         seg_data = np.empty_like(phc_data, dtype=bool)
-        segment_cell(phc_data, seg_data, progress_callback)
+        n_frames = phc_data.shape[0]
+        for time_idx, frame in enumerate(phc_data):
+            seg_data[time_idx] = _segment_frame(frame)
+            progress_callback(time_idx, n_frames, "Segmentation")
         np.save(seg_path, seg_data)
         print(f"✓ Segmentation completed and saved to: {seg_path}")
 
@@ -125,56 +278,6 @@ def demonstrate_segmentation(phc_data, output_dir):
     return seg_data
 
 
-def demonstrate_background_estimation(fluor_data, seg_data, output_dir):
-    """Demonstrate background estimation functionality."""
-    print("\n=== Background Estimation Demo ===")
-
-    background_path = output_dir / "background_fluorescence.npy"
-
-    if background_path.exists():
-        print("Loading existing background estimation...")
-        background_data = np.load(background_path)
-        print(f"✓ Loaded background data from: {background_path}")
-    else:
-        print("Running background estimation...")
-        background_data = np.empty_like(fluor_data, dtype=np.float32)
-        estimate_background(fluor_data, seg_data, background_data, progress_callback)
-        np.save(background_path, background_data)
-        print(f"✓ Background estimation completed and saved to: {background_path}")
-
-    # Display background estimation result
-    time_idx = min(100, len(fluor_data) - 1)
-    fig, axs = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
-    vmin = fluor_data.min()
-    vmax = fluor_data.max()
-
-    im0 = axs[0].imshow(
-        fluor_data[time_idx],
-        cmap="hot",
-        norm=TwoSlopeNorm(vmin=vmin, vcenter=vmin + 1000, vmax=vmax),
-    )
-    axs[0].set_title("Original Fluorescence")
-
-    im1 = axs[1].imshow(
-        background_data[time_idx],
-        cmap="hot",
-        norm=TwoSlopeNorm(vmin=vmin, vcenter=vmin + 1000, vmax=vmax),
-    )
-    axs[1].set_title("Estimated Background")
-
-    axs[0].axis("off")
-    axs[1].axis("off")
-    fig.colorbar(im0, ax=axs[0], fraction=0.046, pad=0.04)
-    fig.colorbar(im1, ax=axs[1], fraction=0.046, pad=0.04)
-
-    output_path = output_dir / "background_estimation.png"
-    fig.savefig(output_path, dpi=300)
-    plt.close(fig)
-    print(f"✓ Saved background estimation visualization to: {output_path}")
-
-    return background_data
-
-
 def demonstrate_cell_tracking(seg_data, output_dir):
     """Demonstrate cell tracking functionality."""
     print("\n=== Cell Tracking Demo ===")
@@ -188,7 +291,7 @@ def demonstrate_cell_tracking(seg_data, output_dir):
     else:
         print("Running cell tracking...")
         tracked_data = np.zeros_like(seg_data, dtype=np.uint16)
-        track_cell(seg_data, tracked_data, progress_callback=progress_callback)
+        _track_stack(seg_data, tracked_data, progress_callback=progress_callback)
         np.save(labeled_path, tracked_data)
         print(f"✓ Cell tracking completed and saved to: {labeled_path}")
 
@@ -226,7 +329,7 @@ def demonstrate_feature_extraction(fluorescence_data, tracked_data, output_dir):
         print("Running feature extraction...")
         # Create zeros background for test (no background correction in demo)
         test_background = np.zeros_like(fluorescence_data, dtype=np.float32)
-        df = extract_trace(
+        df = _extract_trace_dataframe_local(
             fluorescence_data,
             tracked_data,
             test_background,
@@ -363,16 +466,13 @@ def main():
     # Step 3: Segmentation
     seg_data = demonstrate_segmentation(phc_data, output_dir)
 
-    # Step 4: Background estimation
-    demonstrate_background_estimation(fluor_data, seg_data, output_dir)
-
-    # Step 5: Cell tracking
+    # Step 4: Cell tracking
     tracked_data = demonstrate_cell_tracking(seg_data, output_dir)
 
-    # Step 6: Feature extraction (using raw fluorescence, not background)
+    # Step 5: Feature extraction (using raw fluorescence, not background)
     df = demonstrate_feature_extraction(fluor_data, tracked_data, output_dir)
 
-    # Step 7: Model fitting
+    # Step 6: Model fitting
     demonstrate_model_fitting(df, output_dir)
 
     print(f"\n{'=' * 50}")

@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from pyama.apps.statistics.discovery import discover_sample_pairs
 from pyama.apps.statistics.metrics import (
     compute_auc_results,
     compute_onset_shifted_relu_results,
 )
 from pyama.apps.statistics.normalization import load_normalized_sample
-from pyama.types.progress_payload import ProgressPayload
+from pyama.io.samples import discover_statistics_sample_pairs
+from pyama.types.tasks import ProgressPayload
 from pyama.utils.progress import emit_progress
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def run_folder_statistics(
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], Path]:
     """Run a statistics mode across all discovered samples in a folder."""
     folder = Path(folder_path)
-    sample_pairs = discover_sample_pairs(folder)
+    sample_pairs = discover_statistics_sample_pairs(folder)
     if not sample_pairs:
         raise ValueError(f"No valid intensity samples found in {folder}")
 

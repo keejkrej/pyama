@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any, cast
 
-from pyama.types.progress_payload import ProgressPayload
+from pyama.types.tasks import ProgressPayload
 
 
 def _compute_progress_percent(current: int | None, total: int | None) -> int | None:

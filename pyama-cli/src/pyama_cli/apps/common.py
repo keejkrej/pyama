@@ -7,13 +7,9 @@ from pathlib import Path
 
 import typer
 
-from pyama.tasks import (
-    list_fluorescence_features,
-    list_phase_features,
-    load_microscopy_file,
-    parse_fov_range,
-    parse_positions_field,
-)
+from pyama.apps.processing.extract import list_fluorescence_features, list_phase_features
+from pyama.apps.processing.merge import parse_positions_field
+from pyama.io.microscopy import load_microscopy_file
 
 PC_FEATURE_OPTIONS: list[str] = []
 FL_FEATURE_OPTIONS: list[str] = []

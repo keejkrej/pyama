@@ -34,11 +34,6 @@ def load_analysis_csv(
             "Legacy time-based analysis CSVs are not supported; expected 'frame' column"
         )
 
-    if "position" not in df.columns and "fov" in df.columns:
-        df = df.rename(columns={"fov": "position"})
-    if "roi" not in df.columns and "cell" in df.columns:
-        df = df.rename(columns={"cell": "roi"})
-
     required_cols = {"frame", "position", "roi", "value"}
     if not required_cols.issubset(df.columns):
         missing = required_cols - set(df.columns)

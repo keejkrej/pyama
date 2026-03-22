@@ -6,13 +6,9 @@ from pathlib import Path
 import pandas as pd
 from PySide6.QtCore import QObject, Signal
 
-from pyama.tasks import (
-    StatisticsTaskRequest,
-    TaskStatus,
-    discover_sample_pairs,
-    evaluate_onset_trace,
-    submit_statistics,
-)
+from pyama.apps.statistics.metrics import evaluate_onset_trace
+from pyama.io.samples import discover_statistics_sample_pairs
+from pyama.tasks import StatisticsTaskRequest, TaskStatus, submit_statistics
 from pyama.types import SamplePair
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.task_runner import TaskWorker, WorkerHandle, run_task
@@ -23,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 _METADATA_COLUMNS = {
     "sample",
-    "fov",
-    "cell",
+    "position",
+    "roi",
     "analysis_mode",
     "success",
     "success_auc",
@@ -112,7 +108,7 @@ class StatisticsWorker(TaskWorker):
     def _merge_results(auc_results: pd.DataFrame, onset_results: pd.DataFrame) -> pd.DataFrame:
         merged = auc_results.merge(
             onset_results,
-            on=["sample", "fov", "cell"],
+            on=["sample", "position", "roi"],
             how="outer",
             suffixes=("_auc", "_onset"),
         )
@@ -337,22 +333,22 @@ class StatisticsViewModel(QObject):
 
     @property
     def visible_trace_ids(self) -> list[tuple[int, int]]:
-        groups = self._current_sample_fov_groups()
-        fov_list = sorted(groups)
-        if self._detail_page >= len(fov_list):
+        groups = self._current_sample_position_groups()
+        position_list = sorted(groups)
+        if self._detail_page >= len(position_list):
             return []
-        return groups.get(fov_list[self._detail_page], [])
+        return groups.get(position_list[self._detail_page], [])
 
     @property
     def detail_page_label(self) -> str:
-        groups = self._current_sample_fov_groups()
-        fov_list = sorted(groups)
-        total_pages = max(1, len(fov_list))
-        if self._detail_page < len(fov_list):
-            current_fov = fov_list[self._detail_page]
-            cell_count = len(groups.get(current_fov, []))
+        groups = self._current_sample_position_groups()
+        position_list = sorted(groups)
+        total_pages = max(1, len(position_list))
+        if self._detail_page < len(position_list):
+            current_position = position_list[self._detail_page]
+            roi_count = len(groups.get(current_position, []))
             return (
-                f"FOV {current_fov} ({cell_count} cells) - "
+                f"Position {current_position} ({roi_count} ROIs) - "
                 f"Page {self._detail_page + 1} of {total_pages}"
             )
         return f"Page {self._detail_page + 1} of {total_pages}"
@@ -363,7 +359,7 @@ class StatisticsViewModel(QObject):
 
     @property
     def can_go_to_next_detail_page(self) -> bool:
-        return self._detail_page < max(0, len(self._current_sample_fov_groups()) - 1)
+        return self._detail_page < max(0, len(self._current_sample_position_groups()) - 1)
 
     @property
     def detail_stats_text(self) -> str:
@@ -395,9 +391,9 @@ class StatisticsViewModel(QObject):
         sample_results = self._sample_results()
         if trace_df is None or sample_results is None:
             return None
-        fov, cell = self._selected_cell
+        position, roi = self._selected_cell
         try:
-            cell_df = trace_df.loc[(fov, cell)].sort_values("frame")
+            cell_df = trace_df.loc[(position, roi)].sort_values("frame")
         except KeyError:
             return None
 
@@ -408,13 +404,13 @@ class StatisticsViewModel(QObject):
             {
                 "color": "blue",
                 "alpha": 0.8,
-                "label": f"FOV {fov}, Cell {cell}",
+                "label": f"Position {position}, ROI {roi}",
                 "linewidth": 1.5,
             }
         ]
 
-        row = self.result_row_for_cell(fov, cell)
-        title = f"{self._selected_sample}: FOV {fov}, Cell {cell}"
+        row = self.result_row_for_cell(position, roi)
+        title = f"{self._selected_sample}: Position {position}, ROI {roi}"
         if row is not None:
             title_parts = []
             if row.get("auc") is not None:
@@ -477,7 +473,10 @@ class StatisticsViewModel(QObject):
             self.load_workspace()
 
     def _sync_workspace_state(self) -> None:
-        self._folder_path = None if self._workspace_dir is None else self._workspace_dir / "merge_output"
+        if self._workspace_dir is None:
+            self._folder_path = None
+        else:
+            self._folder_path = self._workspace_dir / "traces_merged"
         self._sample_pairs = []
         self._normalization_available = False
         self._normalize_by_area = False
@@ -561,7 +560,7 @@ class StatisticsViewModel(QObject):
             self.app_view_model.set_status_message("Set a workspace folder first.")
             return
         try:
-            sample_pairs = discover_sample_pairs(self._folder_path)
+            sample_pairs = discover_statistics_sample_pairs(self._folder_path)
         except Exception as exc:
             logger.warning("Failed to load statistics folder %s: %s", self._folder_path, exc)
             self._sample_pairs = []
@@ -581,11 +580,11 @@ class StatisticsViewModel(QObject):
         self.state_changed.emit()
         if self._normalization_available:
             self.app_view_model.set_status_message(
-                f"Loaded statistics folder with {len(sample_pairs)} samples"
+                f"Loaded statistics folder {self._folder_path.name} with {len(sample_pairs)} samples"
             )
         else:
             self.app_view_model.set_status_message(
-                "Loaded statistics folder with "
+                f"Loaded statistics folder {self._folder_path.name} with "
                 f"{len(sample_pairs)} samples; area normalization disabled because at least one sample has no area CSV"
             )
 
@@ -648,12 +647,12 @@ class StatisticsViewModel(QObject):
         if message:
             self.app_view_model.set_status_message(f"{message} ({percent}%)")
 
-    def result_row_for_cell(self, fov: int, cell: int) -> dict[str, float | bool | str] | None:
+    def result_row_for_cell(self, position: int, roi: int) -> dict[str, float | bool | str] | None:
         sample_results = self._sample_results()
         if sample_results is None:
             return None
         row_df = sample_results[
-            (sample_results["fov"] == fov) & (sample_results["cell"] == cell)
+            (sample_results["position"] == position) & (sample_results["roi"] == roi)
         ]
         if row_df.empty:
             return None
@@ -673,17 +672,17 @@ class StatisticsViewModel(QObject):
             return None
         return self._results_df[self._results_df["sample"] == self._selected_sample]
 
-    def _current_sample_fov_groups(self) -> dict[int, list[tuple[int, int]]]:
+    def _current_sample_position_groups(self) -> dict[int, list[tuple[int, int]]]:
         sample_results = self._sample_results()
         groups: dict[int, list[tuple[int, int]]] = {}
         if sample_results is None or sample_results.empty:
             return groups
         for _, row in sample_results.iterrows():
-            fov = int(row["fov"])
-            cell = int(row["cell"])
-            groups.setdefault(fov, []).append((fov, cell))
-        for fov in groups:
-            groups[fov].sort(key=lambda value: value[1])
+            position = int(row["position"])
+            roi = int(row["roi"])
+            groups.setdefault(position, []).append((position, roi))
+        for position in groups:
+            groups[position].sort(key=lambda value: value[1])
         return groups
 
     def _preferred_metric(self) -> str | None:

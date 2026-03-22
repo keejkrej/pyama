@@ -15,7 +15,7 @@ class SamplePair:
 
 @dataclass(frozen=True, slots=True)
 class StatisticsRequest:
-    """Parameters for running a statistics job across a merge_output folder."""
+    """Parameters for running a statistics job across a traces_merged folder."""
 
     mode: str
     folder_path: Path

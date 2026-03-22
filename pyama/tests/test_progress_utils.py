@@ -1,4 +1,4 @@
-from pyama.types.progress_payload import ProgressPayload
+from pyama.types.tasks import ProgressPayload
 from pyama.utils.progress import (
     build_progress_payload,
     emit_progress,
@@ -37,7 +37,7 @@ def test_build_progress_payload_supports_frame_aliases() -> None:
     payload = build_progress_payload(
         step="copy",
         event="frame",
-        fov=2,
+        position=2,
         channel=1,
         current=5,
         total=10,
@@ -50,7 +50,7 @@ def test_build_progress_payload_supports_frame_aliases() -> None:
     assert payload == {
         "event": "frame",
         "step": "copy",
-        "fov": 2,
+        "position": 2,
         "channel": 1,
         "t": 5,
         "T": 10,
@@ -64,7 +64,7 @@ def test_build_progress_payload_omits_channel_when_not_set() -> None:
     payload = build_progress_payload(
         step="tracking",
         event="frame",
-        fov=1,
+        position=1,
         current=3,
         total=9,
         current_key="t",
@@ -87,7 +87,7 @@ def test_emit_helpers_noop_without_reporter() -> None:
         None,
         step="copy",
         event="frame",
-        fov=0,
+        position=0,
         current=0,
         total=5,
         current_key="t",
@@ -113,7 +113,7 @@ def test_emit_helpers_forward_payloads_to_reporter() -> None:
         step="segmentation",
         reporter=seen.append,
         event="frame",
-        fov=4,
+        position=4,
         current=7,
         total=10,
         current_key="t",

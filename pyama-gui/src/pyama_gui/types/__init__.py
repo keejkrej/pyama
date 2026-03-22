@@ -1,4 +1,4 @@
-"""Type definitions for pyama-pro."""
+"""Type definitions for pyama-gui."""
 
 from pyama_gui.types.common import AppState, ListRowState, OverlaySpec, PageState, PlotSpec
 from pyama_gui.types.modeling import FittingRequest

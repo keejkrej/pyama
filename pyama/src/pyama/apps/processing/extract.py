@@ -4,22 +4,16 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
-import zarr
 
 from pyama.io.config import ensure_config
-from pyama.types.microscopy import MicroscopyMetadata
-from pyama.types.pipeline import ProcessingConfig
-from pyama.utils.position import parse_position_range
+from pyama.io.zarr import open_rois_zarr
+from pyama.types.io import MicroscopyMetadata
+from pyama.types.processing import ProcessingConfig
+from pyama.utils.processing import resolve_processing_positions
 
 _ROIS_ZARR_OPEN_LOCK = Lock()
 
 _BASE_COLUMNS = ["position", "roi", "frame", "is_good", "x", "y", "w", "h"]
-
-
-def _resolve_positions(metadata: MicroscopyMetadata, config: ProcessingConfig) -> list[int]:
-    if config.params.positions.strip().lower() == "all":
-        return list(range(metadata.n_positions))
-    return parse_position_range(config.params.positions, length=metadata.n_positions)
 
 
 def _feature_column(feature_name: str, channel_id: int) -> str:
@@ -51,7 +45,212 @@ def list_fluorescence_features() -> list[str]:
     return ["intensity_total"]
 
 
-def extract_trace(
+def _resolve_feature_columns(
+    config: ProcessingConfig,
+) -> tuple[int, list[str], dict[int, list[str]], list[str]]:
+    channels = config.channels
+    if channels is None:
+        raise ValueError("Extraction requires channel configuration")
+
+    pc_channel = channels.get_pc_channel()
+    pc_features = sorted(dict.fromkeys(channels.get_pc_features()))
+    fl_feature_map = {
+        channel_id: sorted(dict.fromkeys(features))
+        for channel_id, features in channels.fl.items()
+    }
+
+    feature_columns = [
+        _feature_column(feature_name, pc_channel)
+        for feature_name in pc_features
+    ]
+    for channel_id in sorted(fl_feature_map):
+        feature_columns.extend(
+            _feature_column(feature_name, channel_id)
+            for feature_name in fl_feature_map[channel_id]
+        )
+    return pc_channel, pc_features, fl_feature_map, feature_columns
+
+
+def _load_seg_mask_frame(
+    rois_store,
+    *,
+    position_id: int,
+    pc_channel: int,
+    roi_id: int,
+    frame_idx: int,
+) -> np.ndarray | None:
+    try:
+        return rois_store.read_seg_mask_frame(position_id, pc_channel, roi_id, frame_idx)
+    except (KeyError, IndexError):
+        return None
+
+
+def _add_pc_features(
+    row: dict[str, float | int | bool],
+    *,
+    pc_channel: int,
+    pc_features: list[str],
+    seg_mask: np.ndarray | None,
+) -> None:
+    for feature_name in pc_features:
+        row[_feature_column(feature_name, pc_channel)] = np.nan if seg_mask is None else _pc_area(seg_mask)
+
+
+def _add_fluorescence_features(
+    row: dict[str, float | int | bool],
+    *,
+    rois_store,
+    position_id: int,
+    roi_id: int,
+    frame_idx: int,
+    fl_feature_map: dict[int, list[str]],
+    seg_mask: np.ndarray | None,
+    background_weight: float,
+) -> None:
+    for channel_id in sorted(fl_feature_map):
+        for feature_name in fl_feature_map[channel_id]:
+            col = _feature_column(feature_name, channel_id)
+            try:
+                raw_roi = np.asarray(
+                    rois_store.read_roi_raw_frame(position_id, channel_id, roi_id, frame_idx),
+                    dtype=np.float32,
+                )
+            except (KeyError, IndexError):
+                row[col] = np.nan
+                continue
+            try:
+                bg_roi = np.asarray(
+                    rois_store.read_roi_background_frame(position_id, channel_id, roi_id, frame_idx),
+                    dtype=np.float32,
+                )
+            except (KeyError, IndexError):
+                bg_roi = np.zeros_like(raw_roi, dtype=np.float32)
+            if seg_mask is None or seg_mask.shape != raw_roi.shape:
+                row[col] = np.nan
+                continue
+            row[col] = _fl_intensity_total(
+                raw_roi,
+                bg_roi,
+                seg_mask,
+                background_weight=background_weight,
+            )
+
+
+def _build_extract_row(
+    *,
+    rois_store,
+    position_id: int,
+    roi_id: int,
+    frame_idx: int,
+    bbox: np.ndarray,
+    pc_channel: int,
+    pc_features: list[str],
+    fl_feature_map: dict[int, list[str]],
+    background_weight: float,
+) -> dict[str, float | int | bool]:
+    x, y, w, h = [int(v) for v in bbox]
+    row: dict[str, float | int | bool] = {
+        "position": position_id,
+        "roi": roi_id,
+        "frame": int(frame_idx),
+        "is_good": True,
+        "x": x,
+        "y": y,
+        "w": w,
+        "h": h,
+    }
+    seg_mask = _load_seg_mask_frame(
+        rois_store,
+        position_id=position_id,
+        pc_channel=pc_channel,
+        roi_id=roi_id,
+        frame_idx=frame_idx,
+    )
+    _add_pc_features(
+        row,
+        pc_channel=pc_channel,
+        pc_features=pc_features,
+        seg_mask=seg_mask,
+    )
+    _add_fluorescence_features(
+        row,
+        rois_store=rois_store,
+        position_id=position_id,
+        roi_id=roi_id,
+        frame_idx=frame_idx,
+        fl_feature_map=fl_feature_map,
+        seg_mask=seg_mask,
+        background_weight=background_weight,
+    )
+    return row
+
+
+def _extract_position_rows(
+    *,
+    rois_store,
+    position_id: int,
+    pc_channel: int,
+    pc_features: list[str],
+    fl_feature_map: dict[int, list[str]],
+    background_weight: float,
+    cancel_event: Event | None,
+    progress_callback: Callable[[dict[str, int | str]], None] | None,
+    worker_id: int,
+    position_idx: int,
+    position_progress_index: int,
+    position_progress_total: int,
+) -> tuple[list[dict[str, float | int | bool]], int, bool]:
+    try:
+        roi_ids = rois_store.read_roi_ids(position_id)
+        roi_bboxes = rois_store.read_roi_bboxes(position_id)
+        roi_is_present = rois_store.read_roi_is_present(position_id)
+    except KeyError as exc:
+        raise FileNotFoundError(f"Missing roi metadata for extraction at position/{position_id}") from exc
+
+    rows: list[dict[str, float | int | bool]] = []
+    extracted_rows = 0
+    n_frames = int(roi_is_present.shape[1]) if roi_is_present.ndim == 2 else 0
+    n_rois = int(roi_ids.size)
+
+    for roi_idx, roi_id in enumerate(roi_ids):
+        roi_int = int(roi_id)
+        for frame_idx in range(n_frames):
+            if cancel_event and cancel_event.is_set():
+                return rows, extracted_rows, True
+            if not bool(roi_is_present[roi_idx, frame_idx]):
+                continue
+            rows.append(
+                _build_extract_row(
+                    rois_store=rois_store,
+                    position_id=position_id,
+                    roi_id=roi_int,
+                    frame_idx=frame_idx,
+                    bbox=roi_bboxes[roi_idx, frame_idx],
+                    pc_channel=pc_channel,
+                    pc_features=pc_features,
+                    fl_feature_map=fl_feature_map,
+                    background_weight=background_weight,
+                )
+            )
+            extracted_rows += 1
+        if progress_callback:
+            progress_callback(
+                {
+                    "worker_id": worker_id,
+                    "stage": "extract",
+                    "channel_id": pc_channel,
+                    "position_id": position_idx,
+                    "position_index": position_progress_index,
+                    "position_total": position_progress_total,
+                    "frame_index": roi_idx + 1,
+                    "frame_total": n_rois,
+                    "message": "",
+                }
+            )
+    return rows, extracted_rows, False
+
+
+def _extract_trace_dataframe(
     image: np.ndarray,
     seg_labeled: np.ndarray,
     background: np.ndarray,
@@ -130,23 +329,15 @@ def run_extract_to_csv(
             "extract_cancelled": False,
         }
 
-    resolved_positions = positions_subset if positions_subset is not None else _resolve_positions(metadata, config)
-    pc_channel = config.channels.get_pc_channel()
-    pc_features = sorted(dict.fromkeys(config.channels.get_pc_features()))
-    fl_feature_map = {
-        channel_id: sorted(dict.fromkeys(features))
-        for channel_id, features in config.channels.fl.items()
-    }
-
-    feature_columns: list[str] = []
-    for feature_name in pc_features:
-        feature_columns.append(_feature_column(feature_name, pc_channel))
-    for channel_id in sorted(fl_feature_map):
-        for feature_name in fl_feature_map[channel_id]:
-            feature_columns.append(_feature_column(feature_name, channel_id))
+    resolved_positions = (
+        positions_subset
+        if positions_subset is not None
+        else resolve_processing_positions(metadata, config)
+    )
+    pc_channel, pc_features, fl_feature_map, feature_columns = _resolve_feature_columns(config)
 
     with _ROIS_ZARR_OPEN_LOCK:
-        rois_store = zarr.open_group(output_dir / "rois.zarr", mode="r")
+        rois_store = open_rois_zarr(output_dir / "rois.zarr", mode="r")
 
     extracted_positions = 0
     skipped_positions = 0
@@ -184,117 +375,25 @@ def run_extract_to_csv(
                     }
                 )
             continue
-
-        metadata_prefix = f"position/{position_id}/metadata"
-        try:
-            roi_ids = np.asarray(rois_store[f"{metadata_prefix}/roi_ids"][:], dtype=np.int32)
-            roi_bboxes = np.asarray(rois_store[f"{metadata_prefix}/roi_bboxes"][:], dtype=np.int32)
-            roi_is_present = np.asarray(rois_store[f"{metadata_prefix}/roi_is_present"][:], dtype=bool)
-        except KeyError as exc:
-            raise FileNotFoundError(f"Missing roi metadata for extraction at position/{position_id}") from exc
-
-        rows: list[dict[str, float | int | bool]] = []
-        n_frames = int(roi_is_present.shape[1]) if roi_is_present.ndim == 2 else 0
-        n_rois = int(roi_ids.size)
-        for roi_idx, roi_id in enumerate(roi_ids):
-            roi_int = int(roi_id)
-            for frame_idx in range(n_frames):
-                if cancel_event and cancel_event.is_set():
-                    cancelled = True
-                    break
-                if not bool(roi_is_present[roi_idx, frame_idx]):
-                    continue
-
-                x, y, w, h = [int(v) for v in roi_bboxes[roi_idx, frame_idx]]
-                row: dict[str, float | int | bool] = {
-                    "position": position_id,
-                    "roi": roi_int,
-                    "frame": int(frame_idx),
-                    "is_good": True,
-                    "x": x,
-                    "y": y,
-                    "w": w,
-                    "h": h,
-                }
-                seg_mask: np.ndarray | None = None
-                seg_mask_loaded = False
-
-                def _load_seg_mask() -> np.ndarray | None:
-                    nonlocal seg_mask, seg_mask_loaded
-                    if seg_mask_loaded:
-                        return seg_mask
-                    try:
-                        seg_mask = np.asarray(
-                            rois_store[
-                                f"position/{position_id}/channel/{pc_channel}/roi/{roi_int}/seg_mask/frame/{frame_idx}"
-                            ][:],
-                            dtype=bool,
-                        )
-                    except (KeyError, IndexError):
-                        seg_mask = None
-                    seg_mask_loaded = True
-                    return seg_mask
-
-                for feature_name in pc_features:
-                    col = _feature_column(feature_name, pc_channel)
-                    seg_mask = _load_seg_mask()
-                    row[col] = np.nan if seg_mask is None else _pc_area(seg_mask)
-
-                for channel_id in sorted(fl_feature_map):
-                    for feature_name in fl_feature_map[channel_id]:
-                        col = _feature_column(feature_name, channel_id)
-                        try:
-                            raw_roi = np.asarray(
-                                rois_store[
-                                    f"position/{position_id}/channel/{channel_id}/roi/{roi_int}/raw/frame/{frame_idx}"
-                                ][:],
-                                dtype=np.float32,
-                            )
-                        except (KeyError, IndexError):
-                            row[col] = np.nan
-                            continue
-                        try:
-                            bg_roi = np.asarray(
-                                rois_store[
-                                    f"position/{position_id}/channel/{channel_id}/roi/{roi_int}/fl_background/frame/{frame_idx}"
-                                ][:],
-                                dtype=np.float32,
-                            )
-                        except (KeyError, IndexError):
-                            bg_roi = np.zeros_like(raw_roi, dtype=np.float32)
-                        seg_mask = _load_seg_mask()
-                        if seg_mask is None or seg_mask.shape != raw_roi.shape:
-                            row[col] = np.nan
-                            continue
-                        row[col] = _fl_intensity_total(
-                            raw_roi,
-                            bg_roi,
-                            seg_mask,
-                            background_weight=background_weight,
-                        )
-
-                rows.append(row)
-                extracted_rows += 1
-            if cancelled:
-                break
-            if progress_callback:
-                progress_callback(
-                    {
-                        "worker_id": worker_id,
-                        "stage": "extract",
-                        "channel_id": pc_channel,
-                        "position_id": position_idx,
-                        "position_index": position_progress_index,
-                        "position_total": position_progress_total,
-                        "frame_index": roi_idx + 1,
-                        "frame_total": n_rois,
-                        "message": "",
-                    }
-                )
+        rows, position_rows, cancelled = _extract_position_rows(
+            rois_store=rois_store,
+            position_id=position_id,
+            pc_channel=pc_channel,
+            pc_features=pc_features,
+            fl_feature_map=fl_feature_map,
+            background_weight=background_weight,
+            cancel_event=cancel_event,
+            progress_callback=progress_callback,
+            worker_id=worker_id,
+            position_idx=position_idx,
+            position_progress_index=position_progress_index,
+            position_progress_total=position_progress_total,
+        )
+        extracted_rows += position_rows
         if cancelled:
             break
 
-        df = pd.DataFrame(rows, columns=[*_BASE_COLUMNS, *feature_columns])
+        df = pd.DataFrame(rows, columns=pd.Index([*_BASE_COLUMNS, *feature_columns]))
         if not df.empty:
             df.sort_values(["roi", "frame"], inplace=True)
         df.to_csv(output_csv, index=False, float_format="%.6f")
@@ -309,9 +408,4 @@ def run_extract_to_csv(
     }
 
 
-__all__ = [
-    "extract_trace",
-    "list_fluorescence_features",
-    "list_phase_features",
-    "run_extract_to_csv",
-]
+__all__ = ["list_fluorescence_features", "list_phase_features", "run_extract_to_csv"]

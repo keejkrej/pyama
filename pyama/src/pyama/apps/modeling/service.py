@@ -14,7 +14,7 @@ from pyama.apps.modeling.fitting import (
 from pyama.apps.modeling.models import MODELS, get_model, get_types, list_models
 from pyama.io.csv import load_analysis_csv
 from pyama.types.modeling import FittingResult, ModelParameter
-from pyama.types.progress_payload import ProgressPayload
+from pyama.types.tasks import ProgressPayload
 from pyama.utils.progress import emit_progress
 
 logger = logging.getLogger(__name__)

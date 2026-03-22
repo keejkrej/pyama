@@ -6,25 +6,28 @@ from pathlib import Path
 import yaml
 from PySide6.QtCore import QObject, Signal
 
+from pyama.apps.processing.extract import (
+    list_fluorescence_features,
+    list_phase_features,
+)
+from pyama.apps.processing.merge import normalize_samples
+from pyama.io.microscopy import load_microscopy_file
 from pyama.tasks import (
     MergeTaskRequest,
     ProcessingTaskRequest,
     TaskStatus,
-    list_fluorescence_features,
-    list_phase_features,
-    load_microscopy_file,
-    normalize_samples,
-    read_samples_yaml,
     submit_merge,
     submit_processing,
 )
+from pyama.io.samples import read_samples_yaml
 from pyama.types import (
     MergeSample,
     MergeSamplePayload,
     MicroscopyMetadata,
     ProcessingConfig,
+    ProcessingParams,
 )
-from pyama.types.pipeline import Channels
+from pyama.types.processing import Channels
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.task_runner import TaskWorker, WorkerHandle, run_task
 from pyama_gui.types.processing import ProcessingViewState
@@ -469,11 +472,11 @@ class ProcessingViewModel(QObject):
                     for channel, features in sorted(self._fl_features.items())
                 },
             ),
-            params={
-                "positions": f"{self._fov_start}:{self._fov_end + 1}",
-                "n_workers": self._n_workers,
-                "background_weight": self._background_weight,
-            },
+            params=ProcessingParams(
+                positions=f"{self._fov_start}:{self._fov_end + 1}",
+                n_workers=self._n_workers,
+                background_weight=self._background_weight,
+            ),
         )
 
         worker = WorkflowWorker(
@@ -596,13 +599,15 @@ class ProcessingViewModel(QObject):
         if self._metadata is None:
             return False
 
-        n_fovs = getattr(self._metadata, "n_positions", 0)
-        effective_fov_end = n_fovs - 1 if self._fov_end == -1 else self._fov_end
+        n_positions = getattr(self._metadata, "n_positions", 0)
+        effective_position_end = (
+            n_positions - 1 if self._fov_end == -1 else self._fov_end
+        )
         if self._fov_start < 0:
             return False
-        if effective_fov_end < self._fov_start:
+        if effective_position_end < self._fov_start:
             return False
-        if effective_fov_end >= n_fovs:
+        if effective_position_end >= n_positions:
             return False
         if self._n_workers <= 0:
             return False

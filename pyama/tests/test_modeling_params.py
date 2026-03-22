@@ -44,11 +44,11 @@ def test_fit_csv_file_serializes_renamed_parameter_columns(tmp_path: Path) -> No
     csv_path = tmp_path / "sample.csv"
     pd.DataFrame(
         [
-            {"frame": 0, "fov": 0, "cell": 0, "value": 0.5},
-            {"frame": 6, "fov": 0, "cell": 0, "value": 1.0},
-            {"frame": 12, "fov": 0, "cell": 0, "value": 2.0},
-            {"frame": 18, "fov": 0, "cell": 0, "value": 1.5},
-            {"frame": 24, "fov": 0, "cell": 0, "value": 1.0},
+            {"frame": 0, "position": 0, "roi": 0, "value": 0.5},
+            {"frame": 6, "position": 0, "roi": 0, "value": 1.0},
+            {"frame": 12, "position": 0, "roi": 0, "value": 2.0},
+            {"frame": 18, "position": 0, "roi": 0, "value": 1.5},
+            {"frame": 24, "position": 0, "roi": 0, "value": 1.0},
         ]
     ).to_csv(csv_path, index=False)
 

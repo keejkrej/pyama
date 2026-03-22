@@ -4,107 +4,15 @@ from threading import Event, Lock
 from typing import Callable
 
 import numpy as np
-import zarr
-from skimage.measure import regionprops
 
 from pyama.io.config import ensure_config
-from pyama.types.microscopy import MicroscopyMetadata
-from pyama.types.pipeline import ProcessingConfig
-from pyama.utils.position import parse_position_range
+from pyama.io.zarr import open_raw_zarr
+from pyama.types.io import MicroscopyMetadata
+from pyama.types.processing import ProcessingConfig
+from pyama.utils.processing import resolve_processing_positions
+from pyama.utils.roi import build_union_roi_metadata
 
 _RAW_ZARR_OPEN_LOCK = Lock()
-
-
-def _resolve_positions(metadata: MicroscopyMetadata, config: ProcessingConfig) -> list[int]:
-    if config.params.positions.strip().lower() == "all":
-        return list(range(metadata.n_positions))
-    return parse_position_range(config.params.positions, length=metadata.n_positions)
-
-
-def _estimate_background(frame: np.ndarray, background_weight: float) -> np.ndarray:
-    frame_f = frame.astype(np.float32, copy=False)
-    p10 = float(np.percentile(frame_f, 10.0))
-    bg_value = np.clip(p10 * background_weight, 0.0, 65535.0)
-    return np.full(frame.shape, bg_value, dtype=np.uint16)
-
-
-def estimate_background(
-    image: np.ndarray,
-    seg_labeled: np.ndarray,
-    out: np.ndarray,
-    progress_callback: Callable[[int, int, str], None] | None = None,
-    *,
-    background_weight: float = 1.0,
-    cancel_event=None,
-) -> None:
-    del seg_labeled
-    if image.ndim != 3 or out.ndim != 3:
-        raise ValueError("image and out must be 3D arrays")
-    if image.shape != out.shape:
-        raise ValueError("image and out must have the same shape (T, H, W)")
-    for time_idx in range(image.shape[0]):
-        if cancel_event and cancel_event.is_set():
-            return
-        out[time_idx] = _estimate_background(image[time_idx], background_weight)
-        if progress_callback is not None:
-            progress_callback(time_idx, image.shape[0], "Background")
-
-
-def _regions_from_labeled(labeled: np.ndarray) -> dict[int, tuple[int, int, int, int]]:
-    regions: dict[int, tuple[int, int, int, int]] = {}
-    for prop in regionprops(labeled):
-        regions[int(prop.label)] = (
-            int(prop.bbox[0]),
-            int(prop.bbox[1]),
-            int(prop.bbox[2]),
-            int(prop.bbox[3]),
-        )
-    return regions
-
-
-def _build_roi_metadata(seg_tracked: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    n_frames = seg_tracked.shape[0]
-    regions_all = [_regions_from_labeled(seg_tracked[t]) for t in range(n_frames)]
-    roi_ids = np.array(
-        sorted({roi_id for regions in regions_all for roi_id in regions.keys()}),
-        dtype=np.int32,
-    )
-    n_rois = int(roi_ids.size)
-
-    roi_bboxes = np.zeros((n_rois, n_frames, 4), dtype=np.int32)
-    roi_is_present = np.zeros((n_rois, n_frames), dtype=bool)
-    if n_rois == 0:
-        return roi_ids, roi_bboxes, roi_is_present
-
-    roi_union_bboxes = np.zeros((n_rois, 4), dtype=np.int32)
-    for roi_idx, roi_id in enumerate(roi_ids):
-        y0s: list[int] = []
-        x0s: list[int] = []
-        y1s: list[int] = []
-        x1s: list[int] = []
-        for frame_idx, regions in enumerate(regions_all):
-            bbox = regions.get(int(roi_id))
-            if bbox is None:
-                continue
-            roi_is_present[roi_idx, frame_idx] = True
-            y0s.append(bbox[0])
-            x0s.append(bbox[1])
-            y1s.append(bbox[2])
-            x1s.append(bbox[3])
-        if y0s:
-            x0 = min(x0s)
-            y0 = min(y0s)
-            x1 = max(x1s)
-            y1 = max(y1s)
-            roi_union_bboxes[roi_idx] = np.array([x0, y0, x1 - x0, y1 - y0], dtype=np.int32)
-
-    for roi_idx in range(n_rois):
-        for frame_idx in range(n_frames):
-            if roi_is_present[roi_idx, frame_idx]:
-                roi_bboxes[roi_idx, frame_idx] = roi_union_bboxes[roi_idx]
-
-    return roi_ids, roi_bboxes, roi_is_present
-
 
 def _compute_background_sample_pad(*, roi_h: int, roi_w: int, roi_pixels: int, min_samples: int) -> int:
     c = (roi_h * roi_w) - roi_pixels - min_samples
@@ -124,17 +32,16 @@ def _estimate_bbox_background_value(
     x0: int,
     y1: int,
     x1: int,
-    background_weight: float,
     background_min_samples: int,
 ) -> int:
     roi = np.asarray(raw_frame[y0:y1, x0:x1], dtype=np.uint16)
     seg_roi = np.asarray(seg_frame[y0:y1, x0:x1], dtype=np.uint16)
     if roi.size == 0:
-        return int(np.clip(np.percentile(np.asarray(raw_frame, dtype=np.float32), 10.0) * background_weight, 0.0, 65535.0))
+        return 0
 
     base_samples = roi[seg_roi != int(roi_id)]
     if int(base_samples.size) >= int(background_min_samples):
-        return int(np.clip(float(np.median(base_samples)) * float(background_weight), 0.0, 65535.0))
+        return int(np.clip(float(np.median(base_samples)), 0.0, 65535.0))
 
     frame_h, frame_w = raw_frame.shape
     roi_h = max(0, y1 - y0)
@@ -157,8 +64,8 @@ def _estimate_bbox_background_value(
     if int(samples.size) > 0:
         background_value = float(np.median(samples))
     else:
-        background_value = float(np.percentile(np.asarray(raw_frame, dtype=np.float32), 10.0))
-    return int(np.clip(background_value * float(background_weight), 0.0, 65535.0))
+        background_value = 0.0
+    return int(np.clip(background_value, 0.0, 65535.0))
 
 
 def run_background_to_raw_zarr(
@@ -179,7 +86,7 @@ def run_background_to_raw_zarr(
     method = "mvp"
     raw_zarr_path = output_dir / "raw.zarr"
     with _RAW_ZARR_OPEN_LOCK:
-        store = zarr.open_group(raw_zarr_path, mode="a")
+        store = open_raw_zarr(raw_zarr_path, mode="a")
 
     if not config.channels or not config.channels.fl:
         return {
@@ -190,7 +97,11 @@ def run_background_to_raw_zarr(
             "background_cancelled": False,
         }
 
-    resolved_positions = positions_subset if positions_subset is not None else _resolve_positions(metadata, config)
+    resolved_positions = (
+        positions_subset
+        if positions_subset is not None
+        else resolve_processing_positions(metadata, config)
+    )
     pc_channel = config.channels.get_pc_channel()
     fl_channels = sorted(config.channels.fl.keys())
     background_datasets = 0
@@ -207,27 +118,24 @@ def run_background_to_raw_zarr(
         )
         position_progress_total = global_position_total if global_position_total is not None else len(resolved_positions)
         position_id = metadata.position_list[position_idx]
-        seg_path = f"position/{position_id}/channel/{pc_channel}/seg_tracked"
+        seg_path = store.seg_tracked_path(position_id, pc_channel)
         try:
-            seg_tracked = np.asarray(store[seg_path][:], dtype=np.uint16)
+            seg_tracked = store.read_uint16_3d(seg_path)
         except KeyError as exc:
             raise FileNotFoundError(f"Missing seg_tracked dataset for background estimation: {seg_path}") from exc
-        roi_ids, roi_bboxes, roi_is_present = _build_roi_metadata(seg_tracked)
+        roi_ids, roi_bboxes, roi_is_present = build_union_roi_metadata(seg_tracked)
 
         for channel_id in fl_channels:
             if cancel_event and cancel_event.is_set():
                 cancelled = True
                 break
-            raw_path = f"position/{position_id}/channel/{channel_id}/raw"
-            background_path = f"position/{position_id}/channel/{channel_id}/fl_background"
+            raw_path = store.raw_path(position_id, channel_id)
+            background_path = store.fl_background_path(position_id, channel_id)
 
-            try:
-                raw_ds = store[raw_path]
-            except KeyError as exc:
-                raise FileNotFoundError(f"Missing raw dataset for background estimation: {raw_path}") from exc
+            if not store.dataset_exists(raw_path):
+                raise FileNotFoundError(f"Missing raw dataset for background estimation: {raw_path}")
 
-            try:
-                store[background_path]
+            if store.dataset_exists(background_path):
                 skipped_datasets += 1
                 if progress_callback:
                     progress_callback(
@@ -244,37 +152,21 @@ def run_background_to_raw_zarr(
                         }
                     )
                 continue
-            except KeyError:
-                pass
 
-            bg_ds = store.create_array(
-                name=background_path,
-                shape=(metadata.n_frames, metadata.height, metadata.width),
-                chunks=(1, metadata.height, metadata.width),
-                dtype="uint16",
-                compressors=[zarr.codecs.BloscCodec(cname="zstd", clevel=5, shuffle="shuffle")],
-            )
-            bg_ds.attrs.update(
-                {
-                    "source_file_path": str(metadata.file_path),
-                    "source_file_type": metadata.file_type,
-                    "position_id": int(position_id),
-                    "position_index": int(position_idx),
-                    "channel_id": int(channel_id),
-                    "background_method": method,
-                    "background_weight": float(config.params.background_weight),
-                    "n_frames": int(metadata.n_frames),
-                    "height": int(metadata.height),
-                    "width": int(metadata.width),
-                }
+            store.create_fl_background_dataset(
+                metadata=metadata,
+                position_id=position_id,
+                position_index=position_idx,
+                channel_id=channel_id,
+                method=method,
             )
 
             for time_idx in range(metadata.n_frames):
                 if cancel_event and cancel_event.is_set():
                     cancelled = True
                     break
-                frame = np.asarray(raw_ds[time_idx], dtype=np.uint16)
-                bg_frame = _estimate_background(frame, config.params.background_weight)
+                frame = store.read_raw_frame(position_id, channel_id, time_idx)
+                bg_frame = np.zeros(frame.shape, dtype=np.uint16)
                 for roi_idx, roi_id in enumerate(roi_ids):
                     if not bool(roi_is_present[roi_idx, time_idx]):
                         continue
@@ -293,11 +185,10 @@ def run_background_to_raw_zarr(
                         x0=x0,
                         y1=y1,
                         x1=x1,
-                        background_weight=float(config.params.background_weight),
                         background_min_samples=int(config.params.background_min_samples),
                     )
                     bg_frame[y0:y1, x0:x1] = np.uint16(bg_value)
-                bg_ds[time_idx] = bg_frame
+                store.write_fl_background_frame(position_id, channel_id, time_idx, bg_frame)
                 background_frames += 1
                 if progress_callback:
                     progress_callback(
@@ -328,4 +219,4 @@ def run_background_to_raw_zarr(
     }
 
 
-__all__ = ["estimate_background", "run_background_to_raw_zarr"]
+__all__ = ["run_background_to_raw_zarr"]

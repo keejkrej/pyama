@@ -4,11 +4,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypedDict
 
-from pyama.io.microscopy import MicroscopyMetadata
-from pyama.types.pipeline import ProcessingConfig
-from pyama.types.processing import MergeSample
+from pyama.types.io import MicroscopyMetadata
+from pyama.types.processing import MergeSample, ProcessingConfig
 from pyama.types.statistics import StatisticsRequest
 
 
@@ -28,6 +27,39 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ProgressPayload(TypedDict, total=False):
+    step: str
+    message: str
+    progress: int | None
+    current: int | None
+    total: int | None
+    event: Literal["frame"]
+    position: int
+    channel: int
+    t: int
+    T: int
+    worker_id: int
+    file: str
+    mode: str
+    sample: str
+    source_path: str
+    cached_path: str
+    step_current: int
+    step_total: int
+    overall_current: int
+    overall_total: int
+    overall_percent: int | None
+
+
+class FrameProgressPayload(ProgressPayload, total=False):
+    event: Literal["frame"]
+    position: int
+    channel: int
+    t: int
+    T: int
+    worker_id: int
+
+
 @dataclass(frozen=True, slots=True)
 class TaskProgress:
     task_id: str
@@ -43,12 +75,8 @@ class TaskProgress:
 @dataclass(slots=True)
 class ProcessingTaskRequest:
     metadata: MicroscopyMetadata
-    config: ProcessingConfig | None = None
-    output_dir: Path | None = None
-    context: Any = None
-    fov_start: int | None = None
-    fov_end: int | None = None
-    n_workers: int | None = None
+    config: ProcessingConfig
+    output_dir: Path
 
 
 @dataclass(slots=True)
@@ -91,9 +119,11 @@ class TaskRecord:
 
 
 __all__ = [
+    "FrameProgressPayload",
     "MergeTaskRequest",
     "ModelFitTaskRequest",
     "ProcessingTaskRequest",
+    "ProgressPayload",
     "StatisticsTaskRequest",
     "TaskKind",
     "TaskProgress",

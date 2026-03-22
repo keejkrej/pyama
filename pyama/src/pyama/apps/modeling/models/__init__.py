@@ -1,6 +1,6 @@
 """Simple functional models for curve fitting."""
 
-from pyama.apps.modeling.models import base
+from . import base
 
 MODELS = {
     "base": base,

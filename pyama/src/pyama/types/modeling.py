@@ -26,10 +26,6 @@ class ModelParameter:
     ub: float | None = None
     presets: tuple[ParameterPreset, ...] = ()
 
-    @property
-    def has_presets(self) -> bool:
-        return bool(self.presets)
-
     def clone(
         self,
         *,

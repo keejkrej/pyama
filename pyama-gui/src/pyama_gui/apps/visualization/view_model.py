@@ -1,6 +1,7 @@
 """View-model for the visualization tab."""
 
 import logging
+from dataclasses import asdict, is_dataclass
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import cast
@@ -9,18 +10,10 @@ import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, Signal
 
-from pyama.tasks import (
-    TaskStatus,
-    VisualizationTaskRequest,
-    extract_all_cells_data,
-    get_dataframe,
-    resolve_trace_path,
-    scan_processing_results,
-    submit_visualization,
-    update_cell_quality,
-    write_dataframe,
-)
-from pyama.types import Result
+from pyama.io.csv import extract_all_rois_data, get_dataframe, update_roi_quality, write_dataframe
+from pyama.io.results import resolve_trace_path, scan_processing_results
+from pyama.tasks import TaskStatus, VisualizationTaskRequest, submit_visualization
+from pyama.types import RoiOverlay
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.task_runner import TaskWorker, WorkerHandle, run_task
 from pyama_gui.types.common import ListRowState, OverlaySpec, PageState, PlotSpec
@@ -39,7 +32,15 @@ class ProjectLoaderWorker(TaskWorker):
     def run(self) -> None:
         try:
             project_results = scan_processing_results(self._project_path)
-            self.emit_success(project_results.to_dict())
+            if is_dataclass(project_results):
+                payload = asdict(project_results)
+            else:
+                to_dict = getattr(project_results, "to_dict", None)
+                if callable(to_dict):
+                    payload = to_dict()
+                else:
+                    raise TypeError("Project results must be a dataclass or expose to_dict()")
+            self.emit_success(payload)
         except Exception as exc:  # pragma: no cover - worker boundary
             logger.exception("Failed to load project")
             self.emit_failure(str(exc))
@@ -355,7 +356,7 @@ class VisualizationViewModel(QObject):
             columns=pd.Index(["roi", "is_good"]),
         )
         updated_quality["roi"] = updated_quality["roi"].astype(int)
-        updated_df = update_cell_quality(self._processing_df, updated_quality)
+        updated_df = update_roi_quality(self._processing_df, updated_quality)
         if self._inspected_path and self._inspected_path.name.endswith(
             "_inspected.csv"
         ):
@@ -466,7 +467,7 @@ class VisualizationViewModel(QObject):
             return
         try:
             df = get_dataframe(csv_path)
-            base_fields = ["position"] + [field.name for field in dataclass_fields(Result)]
+            base_fields = ["position"] + [field.name for field in dataclass_fields(RoiOverlay)]
             missing = [col for col in base_fields if col not in df.columns]
             if missing:
                 raise ValueError(
@@ -481,7 +482,7 @@ class VisualizationViewModel(QObject):
             self._processing_df = df[ordered_columns].copy()
             self._traces_csv_path = candidate_paths[0]
             self._inspected_path = csv_path
-            cells_data = extract_all_cells_data(self._processing_df)
+            cells_data = extract_all_rois_data(self._processing_df)
             for cell_id, data in cells_data.items():
                 self._good_status[cell_id] = data["quality"]
                 frame = data["features"]["frame"]

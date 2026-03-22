@@ -1,59 +1,57 @@
-"""I/O-related dataclasses to avoid circular imports."""
+"""I/O-related value objects."""
 
-from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+
+from pyama.types.processing import Channels
+
+
+@dataclass(frozen=True, slots=True)
+class MicroscopyMetadata:
+    file_path: Path
+    base_name: str
+    file_type: str
+    height: int
+    width: int
+    n_frames: int
+    channel_names: tuple[str, ...]
+    dtype: str
+    timepoints: tuple[float, ...] = ()
+    position_list: tuple[int, ...] = (0,)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "channel_names", tuple(self.channel_names))
+        object.__setattr__(self, "timepoints", tuple(float(value) for value in self.timepoints))
+        object.__setattr__(self, "position_list", tuple(int(value) for value in self.position_list))
+        if self.height < 0 or self.width < 0 or self.n_frames < 0:
+            raise ValueError("MicroscopyMetadata dimensions must be >= 0")
+
+    @property
+    def n_positions(self) -> int:
+        return len(self.position_list)
+
+    @property
+    def n_channels(self) -> int:
+        return len(self.channel_names)
+
+type PositionArtifacts = dict[str, Path | str]
 
 
 @dataclass(slots=True)
-class ProcessingResults(Mapping[str, Any]):
+class ProcessingResults:
     project_path: Path
     n_positions: int
-    position_data: dict[int, dict[str, object]]
-    channels: dict[str, object]
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    def __getitem__(self, key: str) -> Any:
-        core = self._core_mapping()
-        if key in core:
-            return core[key]
-        if key in self.extra:
-            return self.extra[key]
-        raise KeyError(key)
-
-    def __iter__(self) -> Iterator[str]:
-        yielded = set()
-        for key in self._core_mapping():
-            yielded.add(key)
-            yield key
-        for key in self.extra:
-            if key not in yielded:
-                yield key
-
-    def __len__(self) -> int:
-        return len(set(self._core_mapping()) | set(self.extra))
-
-    def get(self, key: str, default: Any = None) -> Any:
-        try:
-            return self[key]
-        except KeyError:
-            return default
-
-    def to_dict(self) -> dict[str, Any]:
-        combined = dict(self._core_mapping())
-        combined.update(self.extra)
-        return combined
-
-    def _core_mapping(self) -> dict[str, Any]:
-        return {
-            "project_path": self.project_path,
-            "n_positions": self.n_positions,
-            "position_data": self.position_data,
-            "channels": self.channels,
-        }
+    position_data: dict[int, PositionArtifacts]
+    channels: Channels | None = None
+    config_path: Path | None = None
+    raw_zarr_path: Path | None = None
+    rois_zarr_path: Path | None = None
+    traces_dir: Path | None = None
+    traces_merged_dir: Path | None = None
 
 
 __all__ = [
+    "MicroscopyMetadata",
+    "PositionArtifacts",
     "ProcessingResults",
 ]

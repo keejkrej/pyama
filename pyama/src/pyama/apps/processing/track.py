@@ -4,31 +4,31 @@ from threading import Event, Lock
 from typing import Callable
 
 import numpy as np
-import zarr
 from scipy.optimize import linear_sum_assignment
 from skimage.measure import regionprops
 
 from pyama.io.config import ensure_config
-from pyama.types.microscopy import MicroscopyMetadata
-from pyama.types.pipeline import ProcessingConfig
-from pyama.utils.position import parse_position_range
+from pyama.io.zarr import open_raw_zarr
+from pyama.types.io import MicroscopyMetadata
+from pyama.types.processing import ProcessingConfig
+from pyama.utils.processing import resolve_processing_positions
 
 _RAW_ZARR_OPEN_LOCK = Lock()
 
 
 @dataclass
-class Region:
+class _Region:
     bbox: tuple[int, int, int, int]
     coords: np.ndarray
 
 
-LabeledRegions = dict[int, Region]
+LabeledRegions = dict[int, _Region]
 Trace = dict[int, int]
 TraceMap = dict[int, int]
 
 
 @dataclass
-class IterationState:
+class _IterationState:
     traces: list[Trace]
     prev_map: TraceMap
     prev_regions: LabeledRegions
@@ -37,7 +37,7 @@ class IterationState:
 def _regions_from_labeled(labeled: np.ndarray) -> LabeledRegions:
     regions: LabeledRegions = {}
     for prop in regionprops(labeled):
-        regions[int(prop.label)] = Region(
+        regions[int(prop.label)] = _Region(
             bbox=(
                 int(prop.bbox[0]),
                 int(prop.bbox[1]),
@@ -70,8 +70,8 @@ def _iou_from_bboxes(a: tuple[int, int, int, int], b: tuple[int, int, int, int])
 
 
 def _build_cost_matrix(
-    prev_regions: list[Region],
-    curr_regions: list[Region],
+    prev_regions: list[_Region],
+    curr_regions: list[_Region],
     min_iou: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     n_prev = len(prev_regions)
@@ -90,7 +90,7 @@ def _build_cost_matrix(
     return cost, valid
 
 
-def _process_frame(state: IterationState, regions_all: list[LabeledRegions], min_iou: float, frame: int) -> None:
+def _process_frame(state: _IterationState, regions_all: list[LabeledRegions], min_iou: float, frame: int) -> None:
     prev_labels = list(state.prev_map.keys())
     prev_regions = [state.prev_regions[label] for label in prev_labels]
     curr_regions_by_label = regions_all[frame]
@@ -124,7 +124,7 @@ def _process_frame(state: IterationState, regions_all: list[LabeledRegions], min
     state.prev_regions = new_prev_regions
 
 
-def track_cell(
+def _track_labeled_stack(
     image: np.ndarray,
     out: np.ndarray,
     min_iou: float = 0.1,
@@ -155,7 +155,7 @@ def track_cell(
         return
 
     init_labels = list(regions_all[seed_frame].keys())
-    state = IterationState(
+    state = _IterationState(
         traces=[{seed_frame: label} for label in init_labels],
         prev_map={label: idx for idx, label in enumerate(init_labels)},
         prev_regions=regions_all[seed_frame],
@@ -178,13 +178,6 @@ def track_cell(
             xs = region.coords[:, 1]
             out[frame_idx, ys, xs] = roi_id
 
-
-def _resolve_positions(metadata: MicroscopyMetadata, config: ProcessingConfig) -> list[int]:
-    if config.params.positions.strip().lower() == "all":
-        return list(range(metadata.n_positions))
-    return parse_position_range(config.params.positions, length=metadata.n_positions)
-
-
 def run_track_to_raw_zarr(
     *,
     reader,
@@ -200,24 +193,24 @@ def run_track_to_raw_zarr(
 ) -> dict[str, int | str | bool]:
     del reader
     config = ensure_config(config)
-    method = config.params.tracking_method.value
     raw_zarr_path = output_dir / "raw.zarr"
     with _RAW_ZARR_OPEN_LOCK:
-        store = zarr.open_group(raw_zarr_path, mode="a")
+        store = open_raw_zarr(raw_zarr_path, mode="a")
 
     if not config.channels:
         return {
-            "tracking_method": method,
             "tracked_datasets": 0,
             "tracking_skipped_datasets": 0,
             "tracked_frames": 0,
             "tracking_cancelled": False,
         }
 
-    resolved_positions = positions_subset if positions_subset is not None else _resolve_positions(metadata, config)
+    resolved_positions = (
+        positions_subset
+        if positions_subset is not None
+        else resolve_processing_positions(metadata, config)
+    )
     pc_channel = config.channels.get_pc_channel()
-    if method not in {"iou", "btrack"}:
-        raise ValueError(f"Unknown tracking method: {method}")
 
     tracked_datasets = 0
     skipped_datasets = 0
@@ -233,16 +226,15 @@ def run_track_to_raw_zarr(
         )
         position_progress_total = global_position_total if global_position_total is not None else len(resolved_positions)
         position_id = metadata.position_list[position_idx]
-        seg_path = f"position/{position_id}/channel/{pc_channel}/seg_labeled"
-        tracked_path = f"position/{position_id}/channel/{pc_channel}/seg_tracked"
+        seg_path = store.seg_labeled_path(position_id, pc_channel)
+        tracked_path = store.seg_tracked_path(position_id, pc_channel)
 
         try:
-            seg_ds = store[seg_path]
+            store.get_required_array(seg_path)
         except KeyError as exc:
             raise FileNotFoundError(f"Missing seg_labeled dataset for tracking: {seg_path}") from exc
 
-        try:
-            store[tracked_path]
+        if store.dataset_exists(tracked_path):
             skipped_datasets += 1
             if progress_callback:
                 progress_callback(
@@ -259,31 +251,15 @@ def run_track_to_raw_zarr(
                     }
                 )
             continue
-        except KeyError:
-            pass
 
-        tracked_ds = store.create_array(
-            name=tracked_path,
-            shape=(metadata.n_frames, metadata.height, metadata.width),
-            chunks=(1, metadata.height, metadata.width),
-            dtype="uint16",
-            compressors=[zarr.codecs.BloscCodec(cname="zstd", clevel=5, shuffle="shuffle")],
-        )
-        tracked_ds.attrs.update(
-            {
-                "source_file_path": str(metadata.file_path),
-                "source_file_type": metadata.file_type,
-                "position_id": int(position_id),
-                "position_index": int(position_idx),
-                "channel_id": int(pc_channel),
-                "tracking_method": method,
-                "n_frames": int(metadata.n_frames),
-                "height": int(metadata.height),
-                "width": int(metadata.width),
-            }
+        store.create_seg_tracked_dataset(
+            metadata=metadata,
+            position_id=position_id,
+            position_index=position_idx,
+            channel_id=pc_channel,
         )
 
-        seg = np.asarray(seg_ds[:], dtype=np.uint16)
+        seg = store.read_seg_labeled_3d(position_id, pc_channel)
         tracked = np.zeros_like(seg, dtype=np.uint16)
 
         def _track_progress_callback(frame_idx: int, frame_total: int, _message: str) -> None:
@@ -304,7 +280,7 @@ def run_track_to_raw_zarr(
                     }
                 )
 
-        track_cell(
+        _track_labeled_stack(
             image=seg,
             out=tracked,
             progress_callback=_track_progress_callback,
@@ -314,11 +290,10 @@ def run_track_to_raw_zarr(
             cancelled = True
             break
 
-        tracked_ds[:] = tracked
+        store.write_seg_tracked_3d(position_id, pc_channel, tracked)
         tracked_datasets += 1
 
     return {
-        "tracking_method": method,
         "tracked_datasets": tracked_datasets,
         "tracking_skipped_datasets": skipped_datasets,
         "tracked_frames": tracked_frames,
@@ -326,4 +301,4 @@ def run_track_to_raw_zarr(
     }
 
 
-__all__ = ["run_track_to_raw_zarr", "track_cell"]
+__all__ = ["run_track_to_raw_zarr"]

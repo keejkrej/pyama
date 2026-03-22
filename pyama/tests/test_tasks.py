@@ -7,13 +7,12 @@ from time import sleep, time
 import numpy as np
 
 import pyama.tasks.manager as task_manager_module
-from pyama.tasks import CachedStack
+from pyama.types.visualization import CachedStack
 from pyama.tasks.manager import TaskManager
 from pyama.types import (
-    ChannelSelection,
     Channels,
     MicroscopyMetadata,
-    ProcessingContext,
+    ProcessingConfig,
     ProcessingParams,
 )
 from pyama.types.tasks import (
@@ -103,7 +102,7 @@ def test_processing_task_converts_raw_progress_into_overall_progress(
             {
                 "event": "frame",
                 "step": "copy",
-                "fov": 0,
+                "position": 0,
                 "channel": 0,
                 "t": 4,
                 "T": 10,
@@ -116,7 +115,7 @@ def test_processing_task_converts_raw_progress_into_overall_progress(
             {
                 "event": "frame",
                 "step": "tracking",
-                "fov": 0,
+                "position": 0,
                 "t": 9,
                 "T": 10,
                 "message": "Tracking",
@@ -143,19 +142,13 @@ def test_processing_task_converts_raw_progress_into_overall_progress(
             channel_names=("PC",),
             dtype="uint16",
             timepoints=tuple(float(index) for index in range(10)),
-            fov_list=(0,),
+            position_list=(0,),
         ),
-        context=ProcessingContext(
-            output_dir=tmp_path,
-            channels=Channels(
-                pc=ChannelSelection(channel=0, features=["area"]),
-                fl=[],
-            ),
+        config=ProcessingConfig(
+            channels=Channels(pc={0: ["area"]}, fl={}),
             params=ProcessingParams(),
         ),
-        fov_start=0,
-        fov_end=0,
-        n_workers=1,
+        output_dir=tmp_path,
     )
     record = manager.submit_processing(request)
     snapshots = _collect_snapshots(manager, record.id)
@@ -168,10 +161,10 @@ def test_processing_task_converts_raw_progress_into_overall_progress(
         progress for progress in progress_states if progress.step == "tracking"
     )
 
-    assert copy_progress.percent == 12
-    assert copy_progress.details["overall_total"] == 40
+    assert copy_progress.percent == 7
+    assert copy_progress.details["overall_total"] == 70
     assert copy_progress.details["step_current"] == 5
-    assert tracking_progress.percent == 37
+    assert tracking_progress.percent == 21
     assert tracking_progress.details["overall_current"] == 15
     assert snapshots[-1].status == TaskStatus.COMPLETED
 

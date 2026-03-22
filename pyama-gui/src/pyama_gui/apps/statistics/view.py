@@ -239,10 +239,10 @@ class StatisticsView(QWidget):
 
         self._trace_list.blockSignals(True)
         self._trace_list.clear()
-        for fov, cell in state.visible_trace_ids:
-            item = QListWidgetItem(f"Cell {cell}")
-            item.setData(Qt.ItemDataRole.UserRole, (fov, cell))
-            color = self._row_color(fov, cell)
+        for position, roi in state.visible_trace_ids:
+            item = QListWidgetItem(f"ROI {roi}")
+            item.setData(Qt.ItemDataRole.UserRole, (position, roi))
+            color = self._row_color(position, roi)
             if color is not None:
                 item.setForeground(color)
             self._trace_list.addItem(item)
@@ -277,8 +277,8 @@ class StatisticsView(QWidget):
                     row_index, col_index, QTableWidgetItem(text)
                 )
 
-    def _row_color(self, fov: int, cell: int) -> QColor | None:
-        row = self.view_model.result_row_for_cell(fov, cell)
+    def _row_color(self, position: int, roi: int) -> QColor | None:
+        row = self.view_model.result_row_for_cell(position, roi)
         if row is None:
             return None
         success = bool(row.get("success", False))

@@ -10,15 +10,12 @@ from uuid import uuid4
 import yaml
 
 from pyama.apps.modeling.service import fit_csv_file as fit_csv_file_impl
-from pyama.apps.processing.service import (
-    run_complete_workflow,
-    run_merge_traces as run_merge_impl,
-)
+from pyama.apps.processing.merge import run_merge_traces as run_merge_impl
+from pyama.apps.processing.service import run_complete_workflow
 from pyama.apps.statistics.service import run_folder_statistics as run_folder_statistics_impl
-from pyama.apps.visualization.service import get_or_build_uint8 as get_or_build_uint8_impl
+from pyama.io.visualization_cache import build_uint8_cache as get_or_build_uint8_impl
 from pyama.tasks.broker import TaskBroker
-from pyama.types.pipeline import Channels, ProcessingConfig
-from pyama.types.progress_payload import ProgressPayload
+from pyama.types.tasks import ProgressPayload
 from pyama.types.tasks import (
     MergeTaskRequest,
     ModelFitTaskRequest,
@@ -38,57 +35,6 @@ TERMINAL_TASK_STATUSES = {
     TaskStatus.CANCELLED,
 }
 
-
-def _config_from_request(request: ProcessingTaskRequest) -> ProcessingConfig:
-    if request.config is not None:
-        return request.config
-
-    context = request.context
-    if context is None:
-        return ProcessingConfig()
-
-    channels_obj = getattr(context, "channels", None)
-    params_obj = getattr(context, "params", None)
-    pc_selection = getattr(channels_obj, "pc", None)
-    fl_selections = list(getattr(channels_obj, "fl", [])) if channels_obj is not None else []
-
-    channels = None
-    if pc_selection is not None:
-        channels = Channels(
-            pc={int(pc_selection.channel): sorted(list(getattr(pc_selection, "features", [])))},
-            fl={
-                int(selection.channel): sorted(list(getattr(selection, "features", [])))
-                for selection in fl_selections
-            },
-        )
-
-    if request.fov_start is None or request.fov_start < 0:
-        start = 0
-    else:
-        start = request.fov_start
-    if request.fov_end is None or request.fov_end < 0:
-        end = request.metadata.n_positions - 1
-    else:
-        end = request.fov_end
-
-    return ProcessingConfig(
-        channels=channels,
-        params={
-            "positions": f"{start}:{end + 1}",
-            "n_workers": max(1, int(request.n_workers or 1)),
-            "background_weight": float(getattr(params_obj, "background_weight", 1.0)),
-            "copy_only": bool(getattr(params_obj, "copy_only", False)),
-        },
-    )
-
-
-def _output_dir_from_request(request: ProcessingTaskRequest):
-    if request.output_dir is not None:
-        return request.output_dir
-    context = request.context
-    if context is not None:
-        return getattr(context, "output_dir", None)
-    return None
 
 def _clone_progress(progress: TaskProgress | None) -> TaskProgress | None:
     if progress is None:
@@ -288,10 +234,8 @@ class TaskManager:
         request: ProcessingTaskRequest,
         cancel_event: Event,
     ) -> dict:
-        config = _config_from_request(request)
-        output_dir = _output_dir_from_request(request)
-        if output_dir is None:
-            raise RuntimeError("Processing output_dir is required")
+        config = request.config
+        output_dir = request.output_dir
 
         if config.params.positions.strip().lower() == "all":
             selected_positions = list(range(request.metadata.n_positions))
@@ -319,7 +263,7 @@ class TaskManager:
 
         def progress_reporter(payload: ProgressPayload) -> None:
             step = str(payload.get("step", "workflow"))
-            fov = int(payload.get("fov", -1))
+            position = int(payload.get("position", -1))
             channel = payload.get("channel")
             channel_id = int(channel) if isinstance(channel, (int, str)) else None
             current = int(payload.get("t", 0)) + 1
@@ -328,7 +272,7 @@ class TaskManager:
 
             progress_key = (
                 step,
-                fov,
+                position,
                 channel_id if step in {"copy", "background_estimation", "extraction"} else None,
             )
             previous = stage_progress.get(progress_key, 0)
@@ -359,10 +303,6 @@ class TaskManager:
             metadata=request.metadata,
             config=config,
             output_dir=output_dir,
-            context=request.context,
-            fov_start=request.fov_start,
-            fov_end=request.fov_end,
-            n_workers=request.n_workers,
             cancel_event=cancel_event,
             progress_reporter=progress_reporter,
         )

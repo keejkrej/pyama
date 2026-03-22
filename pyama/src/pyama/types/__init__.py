@@ -1,31 +1,30 @@
 """Consumer-facing type definitions for the pyama library."""
 
-from pyama.types.io import ProcessingResults
-from pyama.types.microscopy import MicroscopyMetadata
+from pyama.types.io import (
+    MicroscopyMetadata,
+    PositionArtifacts,
+    ProcessingResults,
+)
 from pyama.types.modeling import (
     FittingResult,
     ModelParameter,
     ParameterPreset,
 )
-from pyama.types.pipeline import (
-    Channels,
-    ProcessingConfig,
-    ProcessingParams,
-    SegmentationMethod,
-    TrackingMethod,
-)
 from pyama.types.processing import (
+    Channels,
     MergeSample,
     MergeSamplePayload,
-    Result,
+    ProcessingConfig,
+    ProcessingParams,
     SamplesFilePayload,
 )
-from pyama.types.progress_payload import FrameProgressPayload, ProgressPayload
 from pyama.types.statistics import SamplePair, StatisticsRequest
 from pyama.types.tasks import (
+    FrameProgressPayload,
     MergeTaskRequest,
     ModelFitTaskRequest,
     ProcessingTaskRequest,
+    ProgressPayload,
     StatisticsTaskRequest,
     TaskKind,
     TaskProgress,
@@ -33,8 +32,10 @@ from pyama.types.tasks import (
     TaskStatus,
     VisualizationTaskRequest,
 )
+from pyama.types.visualization import CachedStack, RoiOverlay
 
 __all__ = [
+    "CachedStack",
     "Channels",
     "FittingResult",
     "FrameProgressPayload",
@@ -45,21 +46,20 @@ __all__ = [
     "ModelFitTaskRequest",
     "ModelParameter",
     "ParameterPreset",
+    "PositionArtifacts",
     "ProcessingConfig",
     "ProcessingParams",
     "ProcessingResults",
     "ProcessingTaskRequest",
     "ProgressPayload",
-    "Result",
+    "RoiOverlay",
     "SamplePair",
     "SamplesFilePayload",
-    "SegmentationMethod",
     "StatisticsRequest",
     "StatisticsTaskRequest",
     "TaskKind",
     "TaskProgress",
     "TaskRecord",
     "TaskStatus",
-    "TrackingMethod",
     "VisualizationTaskRequest",
 ]

@@ -1,5 +1,6 @@
 """Processing-domain commands for pyama-cli."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import typer
@@ -18,14 +19,14 @@ from pyama.tasks import (
     ProcessingTaskRequest,
     TaskProgress,
     TaskStatus,
-    normalize_samples,
     submit_merge,
     submit_processing,
     subscribe,
     unsubscribe,
 )
+from pyama.apps.processing.merge import normalize_samples
 from pyama.types import ProcessingConfig
-from pyama.types.pipeline import Channels
+from pyama.types.processing import Channels
 from pyama.types.processing import MergeSamplePayload
 from pyama_cli.apps.common import (
     collect_samples_interactively,
@@ -155,15 +156,13 @@ def register_commands(app: typer.Typer) -> None:
         position_end = prompt_int("Position end", default_position_end, minimum=position_start)
         n_workers = prompt_int("Number of workers", 1, minimum=1)
 
-        config = ProcessingConfig.model_validate(
-            {
-                **config.model_dump(mode="python"),
-                "params": {
-                    **config.params.model_dump(mode="python"),
-                    "positions": f"{position_start}:{position_end + 1}",
-                    "n_workers": n_workers,
-                },
-            }
+        config = replace(
+            config,
+            params=replace(
+                config.params,
+                positions=f"{position_start}:{position_end + 1}",
+                n_workers=n_workers,
+            ),
         )
 
         typer.secho("\nStarting workflow...", bold=True)

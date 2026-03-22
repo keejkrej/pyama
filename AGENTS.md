@@ -1,12 +1,13 @@
 # AGENTS.md
 
-Repository guidelines for AI agents. PyAMA: pyama-core (processing, modeling, statistics, I/O) + pyama-pro (Qt GUI).
+Repository guidelines for AI agents. PyAMA: `pyama` core library + `pyama-gui` Qt GUI + `pyama-cli`.
 
 ## Commands
 
 ```bash
 uv sync
-uv run pyama-pro
+uv run pyama-gui
+uv run pyama-cli --help
 uv run pytest
 uv run ruff check && uv run ruff format
 uv run ty check
@@ -14,10 +15,9 @@ uv run ty check
 
 ## Architecture
 
-- **Workflow**: `pyama_core.processing.workflow.run_complete_workflow` – Copying → Segmentation → Correction → Tracking → Extraction
-- **Context**: `ProcessingContext` in `pyama_core.types.processing` – channels, results, params
-- **Qt**: ProcessingTab, ModelingTab, StatisticsTab, VisualizationTab in `pyama_pro.{processing,modeling,statistics,visualization}.main_tab`
-- **Signals**: `operation_started()`, `operation_finished(bool, str)`; workers emit `finished(bool, str|object)`
+- **Workflow**: `pyama.apps.processing.service.run_complete_workflow` – Copying → Segmentation → Tracking → Background → ROI → Extraction
+- **Config**: canonical internal processing config lives in `pyama.types.pipeline`
+- **Qt**: app shell is `pyama_gui.main_window.MainWindow`; tabs live under `pyama_gui.apps.*.{view,view_model}`
 - **Binding**: UI→Model only; no model→UI auto-sync
 
 ## Conventions
@@ -29,10 +29,8 @@ uv run ty check
 
 ## CSV Formats
 
-- **Analysis**: `time,fov,cell,value`; `load_analysis_csv()` → MultiIndex `(fov, cell)`
-- **Fitted**: `fov,cell,model_type,success,r_squared,{params}`
-- **Traces**: `fov,cell,frame,time,good,position_*,bbox_*,{feature}_ch_{id}`
+- **Analysis**: `frame,position,roi,value`; `load_analysis_csv()` returns MultiIndex `(position, roi)`
+- **Fitted**: `position,roi,model_type,success,r_squared,{params}`
+- **Traces**: `position,roi,frame,is_good,x,y,w,h,{feature}_c{id}`
 
 See [docs/](docs/) for usage, core API, and protocol.
-
-

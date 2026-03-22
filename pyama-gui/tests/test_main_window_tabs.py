@@ -21,7 +21,7 @@ from pyama_gui.apps.visualization.view_model import VisualizationViewModel
 
 
 def _write_analysis_csv(path: Path, rows: list[dict[str, float | int]]) -> None:
-    pd.DataFrame(rows, columns=["frame", "fov", "cell", "value"]).to_csv(
+    pd.DataFrame(rows, columns=["frame", "position", "roi", "value"]).to_csv(
         path, index=False
     )
 
@@ -133,15 +133,15 @@ def test_workspace_bar_button_sets_workspace() -> None:
 def test_statistics_tab_loads_existing_workspace_when_lazy_created(tmp_path: Path) -> None:
     app = QApplication.instance() or QApplication([])
     workspace = tmp_path / "workspace"
-    merge_output = workspace / "merge_output"
-    merge_output.mkdir(parents=True)
+    traces_merged = workspace / "traces_merged"
+    traces_merged.mkdir(parents=True)
     _write_analysis_csv(
-        merge_output / "sample_a_intensity_ch_1.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        traces_merged / "sample_a_intensity_ch_1.csv",
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
     _write_analysis_csv(
-        merge_output / "sample_a_area_ch_0.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        traces_merged / "sample_a_area_ch_0.csv",
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
 
     window = MainWindow()
@@ -244,19 +244,19 @@ def test_processing_view_model_reports_missing_inputs() -> None:
 def test_statistics_view_model_enables_area_normalization_only_for_complete_samples(
     tmp_path: Path,
 ) -> None:
-    mixed_folder = tmp_path / "merge_output"
+    mixed_folder = tmp_path / "traces_merged"
     mixed_folder.mkdir()
     _write_analysis_csv(
         mixed_folder / "sample_a_intensity_ch_1.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         mixed_folder / "sample_a_area_ch_0.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         mixed_folder / "sample_b_intensity_ch_1.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
 
     app_view_model = AppViewModel()
@@ -268,15 +268,15 @@ def test_statistics_view_model_enables_area_normalization_only_for_complete_samp
     assert view_model.frame_interval_minutes == 10.0
     assert view_model.fit_window_min == 240.0
 
-    complete_folder = tmp_path / "complete_workspace" / "merge_output"
+    complete_folder = tmp_path / "complete_workspace" / "traces_merged"
     complete_folder.mkdir(parents=True)
     _write_analysis_csv(
         complete_folder / "sample_a_intensity_ch_1.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
     _write_analysis_csv(
         complete_folder / "sample_a_area_ch_0.csv",
-        [{"frame": 0, "fov": 0, "cell": 0, "value": 1.0}],
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
 
     app_view_model.set_workspace_dir(tmp_path / "complete_workspace")
@@ -304,10 +304,31 @@ def test_gui_feature_packages_only_live_under_apps() -> None:
 
 
 def test_visualization_view_model_loads_workspace_on_workspace_change(
-    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "visualization_workspace"
     workspace.mkdir()
+
+    monkeypatch.setattr(
+        "pyama_gui.apps.visualization.view_model.run_task",
+        lambda worker, **kwargs: worker.run(),
+    )
+    monkeypatch.setattr(
+        "pyama_gui.apps.visualization.view_model.scan_processing_results",
+        lambda path: type(
+            "Result",
+            (),
+            {
+                "to_dict": staticmethod(
+                    lambda: {
+                        "project_path": str(path),
+                        "n_positions": 0,
+                        "position_data": {},
+                    }
+                )
+            },
+        )(),
+    )
 
     app_view_model = AppViewModel()
     view_model = VisualizationViewModel(app_view_model)
@@ -315,7 +336,7 @@ def test_visualization_view_model_loads_workspace_on_workspace_change(
     app_view_model.set_workspace_dir(workspace)
 
     assert view_model.workspace_dir == workspace
-    assert view_model.state.loading_project is True or "Workspace:" in view_model.details_text
+    assert "Project Path:" in view_model.details_text or "Workspace:" in view_model.details_text
 
 
 def test_statistics_view_model_populates_first_sample_immediately() -> None:
@@ -324,8 +345,8 @@ def test_statistics_view_model_populates_first_sample_immediately() -> None:
         [
             {
                 "sample": "sample_a",
-                "fov": 0,
-                "cell": 1,
+                "position": 0,
+                "roi": 1,
                 "success": True,
                 "auc": 2.5,
             }
@@ -333,10 +354,10 @@ def test_statistics_view_model_populates_first_sample_immediately() -> None:
     )
     trace_df = pd.DataFrame(
         [
-            {"fov": 0, "cell": 1, "frame": 0, "time_min": 0.0, "value": 1.0},
-            {"fov": 0, "cell": 1, "frame": 6, "time_min": 60.0, "value": 2.0},
+            {"position": 0, "roi": 1, "frame": 0, "time_min": 0.0, "value": 1.0},
+            {"position": 0, "roi": 1, "frame": 6, "time_min": 60.0, "value": 2.0},
         ]
-    ).set_index(["fov", "cell"])
+    ).set_index(["position", "roi"])
 
     view_model = StatisticsViewModel(AppViewModel())
     view_model._results_df = results_df

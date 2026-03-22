@@ -3,7 +3,6 @@ from threading import Event, Lock
 from typing import Callable
 
 import numpy as np
-import zarr
 from scipy.ndimage import (
     binary_closing,
     binary_fill_holes,
@@ -13,9 +12,10 @@ from scipy.ndimage import (
 from skimage.measure import label
 
 from pyama.io.config import ensure_config
-from pyama.types.microscopy import MicroscopyMetadata
-from pyama.types.pipeline import ProcessingConfig
-from pyama.utils.position import parse_position_range
+from pyama.io.zarr import open_raw_zarr
+from pyama.types.io import MicroscopyMetadata
+from pyama.types.processing import ProcessingConfig
+from pyama.utils.processing import resolve_processing_positions
 
 _RAW_ZARR_OPEN_LOCK = Lock()
 
@@ -49,54 +49,12 @@ def _morph_cleanup(mask: np.ndarray, size: int = 7, iterations: int = 3) -> np.n
     return out
 
 
-def segment_frame_logstd(frame: np.ndarray) -> np.ndarray:
+def _segment_frame_logstd(frame: np.ndarray) -> np.ndarray:
     frame_f = np.asarray(frame, dtype=np.float32)
     logstd = _compute_logstd_2d(frame_f)
     thresh = _threshold_by_histogram(logstd)
     binary = _morph_cleanup(logstd > thresh)
     return np.asarray(label(binary, connectivity=1), dtype=np.uint16)
-
-
-def segment_cell(
-    image: np.ndarray,
-    out: np.ndarray,
-    progress_callback: Callable[[int, int, str], None] | None = None,
-    cancel_event=None,
-) -> None:
-    if image.ndim != 3 or out.ndim != 3:
-        raise ValueError("image and out must be 3D arrays")
-    if image.shape != out.shape:
-        raise ValueError("image and out must have the same shape (T, H, W)")
-
-    n_frames = image.shape[0]
-    for time_idx in range(n_frames):
-        if cancel_event and cancel_event.is_set():
-            return
-        segmented = segment_frame_logstd(image[time_idx])
-        if out.dtype == bool:
-            out[time_idx] = segmented > 0
-        else:
-            out[time_idx] = segmented.astype(out.dtype, copy=False)
-        if progress_callback is not None:
-            progress_callback(time_idx, n_frames, "Segmentation")
-
-
-def segment_frame_cellpose(frame: np.ndarray) -> np.ndarray:
-    try:
-        from cellpose import models
-    except Exception as exc:  # pragma: no cover - optional dependency
-        raise RuntimeError("cellpose is unavailable in this environment") from exc
-
-    model = models.Cellpose(model_type="cyto")
-    masks, _flows, _styles, _diams = model.eval(np.asarray(frame, dtype=np.float32), channels=[0, 0])
-    return np.asarray(masks, dtype=np.uint16)
-
-
-def _resolve_positions(metadata: MicroscopyMetadata, config: ProcessingConfig) -> list[int]:
-    if config.params.positions.strip().lower() == "all":
-        return list(range(metadata.n_positions))
-    return parse_position_range(config.params.positions, length=metadata.n_positions)
-
 
 def run_segment_to_raw_zarr(
     *,
@@ -113,28 +71,24 @@ def run_segment_to_raw_zarr(
 ) -> dict[str, int | str | bool]:
     del reader
     config = ensure_config(config)
-    method = config.params.segmentation_method.value
     raw_zarr_path = output_dir / "raw.zarr"
     with _RAW_ZARR_OPEN_LOCK:
-        store = zarr.open_group(raw_zarr_path, mode="a")
+        store = open_raw_zarr(raw_zarr_path, mode="a")
 
     if not config.channels:
         return {
-            "segmentation_method": method,
             "segmented_datasets": 0,
             "segmentation_skipped_datasets": 0,
             "segmented_frames": 0,
             "segmentation_cancelled": False,
         }
 
-    resolved_positions = positions_subset if positions_subset is not None else _resolve_positions(metadata, config)
+    resolved_positions = (
+        positions_subset
+        if positions_subset is not None
+        else resolve_processing_positions(metadata, config)
+    )
     pc_channel = config.channels.get_pc_channel()
-    if method == "logstd":
-        segment_frame = segment_frame_logstd
-    elif method == "cellpose":
-        segment_frame = segment_frame_cellpose
-    else:
-        raise ValueError(f"Unknown segmentation method: {method}")
 
     segmented_datasets = 0
     skipped_datasets = 0
@@ -150,16 +104,13 @@ def run_segment_to_raw_zarr(
         )
         position_progress_total = global_position_total if global_position_total is not None else len(resolved_positions)
         position_id = metadata.position_list[position_idx]
-        raw_path = f"position/{position_id}/channel/{pc_channel}/raw"
-        seg_path = f"position/{position_id}/channel/{pc_channel}/seg_labeled"
+        raw_path = store.raw_path(position_id, pc_channel)
+        seg_path = store.seg_labeled_path(position_id, pc_channel)
 
-        try:
-            raw_ds = store[raw_path]
-        except KeyError as exc:
-            raise FileNotFoundError(f"Missing raw dataset for segmentation: {raw_path}") from exc
+        if not store.dataset_exists(raw_path):
+            raise FileNotFoundError(f"Missing raw dataset for segmentation: {raw_path}")
 
-        try:
-            store[seg_path]
+        if store.dataset_exists(seg_path):
             skipped_datasets += 1
             if progress_callback:
                 progress_callback(
@@ -176,36 +127,20 @@ def run_segment_to_raw_zarr(
                     }
                 )
             continue
-        except KeyError:
-            pass
 
-        seg_ds = store.create_array(
-            name=seg_path,
-            shape=(metadata.n_frames, metadata.height, metadata.width),
-            chunks=(1, metadata.height, metadata.width),
-            dtype="uint16",
-            compressors=[zarr.codecs.BloscCodec(cname="zstd", clevel=5, shuffle="shuffle")],
-        )
-        seg_ds.attrs.update(
-            {
-                "source_file_path": str(metadata.file_path),
-                "source_file_type": metadata.file_type,
-                "position_id": int(position_id),
-                "position_index": int(position_idx),
-                "channel_id": int(pc_channel),
-                "segmentation_method": method,
-                "n_frames": int(metadata.n_frames),
-                "height": int(metadata.height),
-                "width": int(metadata.width),
-            }
+        store.create_seg_labeled_dataset(
+            metadata=metadata,
+            position_id=position_id,
+            position_index=position_idx,
+            channel_id=pc_channel,
         )
 
         for time_idx in range(metadata.n_frames):
             if cancel_event and cancel_event.is_set():
                 cancelled = True
                 break
-            frame = np.asarray(raw_ds[time_idx], dtype=np.uint16)
-            seg_ds[time_idx] = segment_frame(frame)
+            frame = store.read_raw_frame(position_id, pc_channel, time_idx)
+            store.write_seg_labeled_frame(position_id, pc_channel, time_idx, _segment_frame_logstd(frame))
             segmented_frames += 1
             if progress_callback:
                 progress_callback(
@@ -226,7 +161,6 @@ def run_segment_to_raw_zarr(
         segmented_datasets += 1
 
     return {
-        "segmentation_method": method,
         "segmented_datasets": segmented_datasets,
         "segmentation_skipped_datasets": skipped_datasets,
         "segmented_frames": segmented_frames,
@@ -236,7 +170,4 @@ def run_segment_to_raw_zarr(
 
 __all__ = [
     "run_segment_to_raw_zarr",
-    "segment_cell",
-    "segment_frame_cellpose",
-    "segment_frame_logstd",
 ]
