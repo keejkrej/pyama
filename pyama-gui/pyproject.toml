@@ -13,7 +13,7 @@ dependencies = [
     "pyyaml",
 ]
 
-[project.scripts]
+[project.gui-scripts]
 pyama-gui = "pyama_gui.main:main"
 
 [tool.uv]
