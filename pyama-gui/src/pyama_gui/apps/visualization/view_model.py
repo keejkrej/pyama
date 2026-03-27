@@ -9,9 +9,16 @@ from typing import cast
 import numpy as np
 import pandas as pd
 from PySide6.QtCore import QObject, Signal
+from skimage.measure import find_contours
 
-from pyama.io.csv import extract_all_rois_data, get_dataframe, update_roi_quality, write_dataframe
+from pyama.io.csv import (
+    extract_all_rois_data,
+    get_dataframe,
+    update_roi_quality,
+    write_dataframe,
+)
 from pyama.io.results import resolve_trace_path, scan_processing_results
+from pyama.io.zarr import RoisZarrStore, open_rois_zarr
 from pyama.tasks import TaskStatus, VisualizationTaskRequest, submit_visualization
 from pyama.types import RoiOverlay
 from pyama_gui.app_view_model import AppViewModel
@@ -39,7 +46,9 @@ class ProjectLoaderWorker(TaskWorker):
                 if callable(to_dict):
                     payload = to_dict()
                 else:
-                    raise TypeError("Project results must be a dataclass or expose to_dict()")
+                    raise TypeError(
+                        "Project results must be a dataclass or expose to_dict()"
+                    )
             self.emit_success(payload)
         except Exception as exc:  # pragma: no cover - worker boundary
             logger.exception("Failed to load project")
@@ -61,7 +70,9 @@ class VisualizationLoaderWorker(TaskWorker):
         try:
             position_data = self._project_data["position_data"].get(self._position_id)
             if not position_data:
-                self.emit_failure(f"Position {self._position_id} not found in project data")
+                self.emit_failure(
+                    f"Position {self._position_id} not found in project data"
+                )
                 return
 
             image_map: dict[str, np.ndarray] = {}
@@ -69,33 +80,34 @@ class VisualizationLoaderWorker(TaskWorker):
             for index, channel in enumerate(self._selected_channels, start=1):
                 if channel not in position_data:
                     continue
-                path = Path(position_data[channel])
-                if path.exists():
-                    record = submit_visualization(
-                        VisualizationTaskRequest(
-                            source_path=path,
-                            channel_id=channel,
-                        )
+                source_ref = position_data[channel]
+                if not isinstance(source_ref, str | Path):
+                    continue
+                record = submit_visualization(
+                    VisualizationTaskRequest(
+                        source_path=source_ref,
+                        channel_id=channel,
                     )
-                    snapshot = self.wait_for_task(
-                        record,
-                        progress_handler=lambda progress, idx=index: self.forward_progress(
-                            int(
-                                ((idx - 1) + (progress.percent or 0) / 100)
-                                / total_channels
-                                * 100
-                            ),
-                            progress.message,
+                )
+                snapshot = self.wait_for_task(
+                    record,
+                    progress_handler=lambda progress, idx=index: self.forward_progress(
+                        int(
+                            ((idx - 1) + (progress.percent or 0) / 100)
+                            / total_channels
+                            * 100
                         ),
+                        progress.message,
+                    ),
+                )
+                if snapshot.status != TaskStatus.COMPLETED:
+                    self.emit_failure(
+                        snapshot.error_message
+                        or f"Visualization task failed for {channel}"
                     )
-                    if snapshot.status != TaskStatus.COMPLETED:
-                        self.emit_failure(
-                            snapshot.error_message
-                            or f"Visualization task failed for {channel}"
-                        )
-                        return
-                    cached = snapshot.result
-                    image_map[channel] = np.load(cached.path)
+                    return
+                cached = snapshot.result
+                image_map[channel] = np.load(cached.path)
 
             if not image_map:
                 self.emit_failure("No image data found for selected channels")
@@ -150,7 +162,7 @@ class VisualizationViewModel(QObject):
         self._selected_position = 0
         self._min_position = 0
         self._max_position = 0
-        self._details_text = "Workspace: Not set"
+        self._details_text = ""
         self._loading_project = False
         self._loading_visualization = False
         self._project_handle: WorkerHandle | None = None
@@ -171,6 +183,13 @@ class VisualizationViewModel(QObject):
         self._trace_page = 0
         self._items_per_page = 10
         self._selected_feature = ""
+        self._roi_store: RoisZarrStore | None = None
+        self._roi_pc_channel: int | None = None
+        self._roi_ids = np.array([], dtype=np.int32)
+        self._roi_bboxes: np.ndarray | None = None
+        self._roi_is_present: np.ndarray | None = None
+        self._roi_index_by_id: dict[int, int] = {}
+        self._contour_cache: dict[tuple[int, int, int], np.ndarray | None] = {}
         self.app_view_model.workspace_changed.connect(self._on_workspace_changed)
         self._sync_workspace_state()
         if self._workspace_dir is not None:
@@ -227,11 +246,7 @@ class VisualizationViewModel(QObject):
         self._selected_position = 0
         self._min_position = 0
         self._max_position = 0
-        self._details_text = (
-            "Workspace: Not set"
-            if self._workspace_dir is None
-            else f"Workspace: {self._workspace_dir}"
-        )
+        self._details_text = ""
         self._clear_visualization_state()
         self.state_changed.emit()
 
@@ -439,6 +454,7 @@ class VisualizationViewModel(QObject):
             default=0,
         )
         self._current_frame_index = 0
+        self._load_roi_state()
         self._load_trace_data(payload.get("traces", {}))
         self.state_changed.emit()
 
@@ -467,7 +483,9 @@ class VisualizationViewModel(QObject):
             return
         try:
             df = get_dataframe(csv_path)
-            base_fields = ["position"] + [field.name for field in dataclass_fields(RoiOverlay)]
+            base_fields = ["position"] + [
+                field.name for field in dataclass_fields(RoiOverlay)
+            ]
             missing = [col for col in base_fields if col not in df.columns]
             if missing:
                 raise ValueError(
@@ -604,9 +622,6 @@ class VisualizationViewModel(QObject):
             matches = np.where(pos_data["frames"] == self._current_frame_index)[0]
             if len(matches) == 0:
                 continue
-            idx = matches[0]
-            x = pos_data["x"][idx]
-            y = pos_data["y"][idx]
             is_good = self._good_status.get(trace_id, False)
             is_active = trace_id == self._active_trace_id and is_good
             if not is_good:
@@ -615,15 +630,16 @@ class VisualizationViewModel(QObject):
                 color = "red"
             else:
                 color = "blue"
+            contour = self._get_trace_contour(trace_id, self._current_frame_index)
+            if contour is None:
+                continue
             overlays.append(
                 OverlaySpec(
                     overlay_id=f"trace_{trace_id}",
                     properties={
-                        "type": "circle",
-                        "xy": (x, y),
-                        "radius": 40,
+                        "type": "polygon",
+                        "xy": contour,
                         "edgecolor": color,
-                        "facecolor": "none",
                         "linewidth": 2.0,
                         "alpha": 1.0,
                         "zorder": 10,
@@ -631,6 +647,98 @@ class VisualizationViewModel(QObject):
                 )
             )
         return overlays
+
+    def _load_roi_state(self) -> None:
+        self._clear_roi_state()
+        if self._project_data is None:
+            return
+
+        rois_zarr_path = self._resolve_rois_zarr_path(self._project_data)
+        pc_channel = self._resolve_pc_channel(self._project_data)
+        if rois_zarr_path is None or pc_channel is None:
+            return
+
+        try:
+            roi_store = open_rois_zarr(rois_zarr_path, mode="r")
+            roi_ids = roi_store.read_roi_ids(self._selected_position)
+            roi_bboxes = roi_store.read_roi_bboxes(self._selected_position)
+            roi_is_present = roi_store.read_roi_is_present(self._selected_position)
+        except Exception as exc:
+            logger.debug(
+                "ROI contour data unavailable for position %s: %s",
+                self._selected_position,
+                exc,
+            )
+            return
+
+        self._roi_store = roi_store
+        self._roi_pc_channel = pc_channel
+        self._roi_ids = np.asarray(roi_ids, dtype=np.int32)
+        self._roi_bboxes = np.asarray(roi_bboxes, dtype=np.int32)
+        self._roi_is_present = np.asarray(roi_is_present, dtype=bool)
+        self._roi_index_by_id = {
+            int(roi_id): index for index, roi_id in enumerate(self._roi_ids.tolist())
+        }
+
+    def _get_trace_contour(self, trace_id: str, frame_idx: int) -> np.ndarray | None:
+        roi_id = int(trace_id)
+        cache_key = (self._selected_position, roi_id, int(frame_idx))
+        if cache_key in self._contour_cache:
+            return self._contour_cache[cache_key]
+
+        contour = self._read_trace_contour(roi_id, frame_idx)
+        self._contour_cache[cache_key] = contour
+        return contour
+
+    def _read_trace_contour(self, roi_id: int, frame_idx: int) -> np.ndarray | None:
+        if (
+            self._roi_store is None
+            or self._roi_bboxes is None
+            or self._roi_is_present is None
+            or self._roi_pc_channel is None
+        ):
+            return None
+
+        roi_index = self._roi_index_by_id.get(int(roi_id))
+        if roi_index is None:
+            return None
+        if frame_idx < 0 or frame_idx >= self._roi_is_present.shape[1]:
+            return None
+        if not bool(self._roi_is_present[roi_index, frame_idx]):
+            return None
+
+        try:
+            mask = self._roi_store.read_seg_mask_frame(
+                self._selected_position,
+                self._roi_pc_channel,
+                roi_id,
+                frame_idx,
+            )
+        except Exception as exc:
+            logger.debug(
+                "ROI mask unavailable for position=%s roi=%s frame=%s: %s",
+                self._selected_position,
+                roi_id,
+                frame_idx,
+                exc,
+            )
+            return None
+
+        if mask.size == 0 or not np.any(mask):
+            return None
+
+        padded_mask = np.pad(
+            mask.astype(float), 1, mode="constant", constant_values=0.0
+        )
+        contours = find_contours(padded_mask, 0.5)
+        if not contours:
+            return None
+
+        contour = max(contours, key=len)
+        bbox = self._roi_bboxes[roi_index, frame_idx]
+        x0, y0 = float(bbox[0]), float(bbox[1])
+        points = np.column_stack((contour[:, 1] + x0 - 1.0, contour[:, 0] + y0 - 1.0))
+        return np.asarray(points, dtype=float)
 
     def _clear_project_handle(self) -> None:
         self._project_handle = None
@@ -643,7 +751,9 @@ class VisualizationViewModel(QObject):
         if not project_data.get("position_data"):
             return []
         first_position = next(iter(project_data["position_data"].values()))
-        channels = [key for key in first_position.keys() if not key.startswith("traces")]
+        channels = [
+            key for key in first_position.keys() if not key.startswith("traces")
+        ]
         return sorted(channels)
 
     @staticmethod
@@ -654,8 +764,20 @@ class VisualizationViewModel(QObject):
         ]
         if project_data.get("position_data"):
             first_position = next(iter(project_data["position_data"].values()))
-            details.append("Available Data:")
-            details.extend([f"   * {data_type}" for data_type in first_position.keys()])
+            channels = [
+                key for key in first_position.keys() if not key.startswith("traces")
+            ]
+            if channels:
+                details.append("Available Data:")
+                details.extend([f"   * {data_type}" for data_type in channels])
+            else:
+                details.append("Available Data: none")
+                details.append("No image datasets were found in this workspace.")
+                details.append(
+                    "Expected raw.zarr datasets such as raw_ch_0 or seg_tracked_ch_0."
+                )
+        else:
+            details.append("Available Data: none")
         return "\n".join(details)
 
     @staticmethod
@@ -680,4 +802,35 @@ class VisualizationViewModel(QObject):
         self._selected_data_type = ""
         self._current_frame_index = 0
         self._max_frame_index = 0
+        self._clear_roi_state()
         self._clear_trace_state()
+
+    def _clear_roi_state(self) -> None:
+        self._roi_store = None
+        self._roi_pc_channel = None
+        self._roi_ids = np.array([], dtype=np.int32)
+        self._roi_bboxes = None
+        self._roi_is_present = None
+        self._roi_index_by_id.clear()
+        self._contour_cache.clear()
+
+    @staticmethod
+    def _resolve_rois_zarr_path(project_data: dict) -> Path | None:
+        path_value = project_data.get("rois_zarr_path")
+        if not isinstance(path_value, str | Path):
+            return None
+        path = Path(path_value)
+        return path if path.exists() else None
+
+    @staticmethod
+    def _resolve_pc_channel(project_data: dict) -> int | None:
+        channels = project_data.get("channels")
+        if not isinstance(channels, dict):
+            return None
+        pc_channels = channels.get("pc")
+        if not isinstance(pc_channels, dict) or not pc_channels:
+            return None
+        try:
+            return int(next(iter(pc_channels.keys())))
+        except (StopIteration, TypeError, ValueError):
+            return None

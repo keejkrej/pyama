@@ -27,6 +27,7 @@ class MplCanvas(QWidget):
 
     artist_picked = Signal(str)
     artist_right_clicked = Signal(str)
+    plot_right_clicked = Signal()
 
     def __init__(
         self,
@@ -46,6 +47,7 @@ class MplCanvas(QWidget):
 
         self._build_ui()
         self._fig.canvas.mpl_connect("pick_event", self._on_pick)
+        self._fig.canvas.mpl_connect("button_press_event", self._on_button_press)
         self._set_content_visible(False)
 
     def _build_ui(self) -> None:
@@ -68,6 +70,10 @@ class MplCanvas(QWidget):
                     self.artist_right_clicked.emit(label)
                 else:
                     self.artist_picked.emit(label)
+
+    def _on_button_press(self, event) -> None:
+        if event.button == 3 and event.inaxes == self._axes and self._has_content:
+            self.plot_right_clicked.emit()
 
     def _set_content_visible(self, visible: bool) -> None:
         self._has_content = visible

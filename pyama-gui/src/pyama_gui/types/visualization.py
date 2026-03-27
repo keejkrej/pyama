@@ -34,7 +34,7 @@ class FeatureData:
 class VisualizationViewState:
     """Render state for the visualization tab."""
 
-    details_text: str = "Workspace: Not set"
+    details_text: str = ""
     available_channels: list[str] = field(default_factory=list)
     selected_channels: list[str] = field(default_factory=list)
     min_position: int = 0

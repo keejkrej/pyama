@@ -66,16 +66,11 @@ class ModelingView(QWidget):
         group = QGroupBox("Modeling")
         layout = QVBoxLayout(group)
 
-        data_group = QGroupBox("Data Visualization")
-        data_layout = QVBoxLayout(data_group)
         self._load_button = QPushButton("Load CSV")
-        data_layout.addWidget(self._load_button)
+        layout.addWidget(self._load_button)
         self._canvas = MplCanvas(self)
-        data_layout.addWidget(self._canvas)
-        layout.addWidget(data_group)
-
-        fitting_group = QGroupBox("Fitting")
-        fitting_layout = QVBoxLayout(fitting_group)
+        self._canvas.setToolTip("Right-click to save this plot as a PNG.")
+        layout.addWidget(self._canvas)
 
         form = QFormLayout()
         self._model_combo = QComboBox()
@@ -84,7 +79,7 @@ class ModelingView(QWidget):
         self._interval_spin.setRange(0.1, 1000.0)
         self._interval_spin.setSingleStep(0.5)
         form.addRow("Time interval (min):", self._interval_spin)
-        fitting_layout.addLayout(form)
+        layout.addLayout(form)
 
         self._param_table = QTableWidget()
         self._param_table.setColumnCount(7)
@@ -96,26 +91,26 @@ class ModelingView(QWidget):
         )
         self._param_table.verticalHeader().setVisible(False)
         self._param_table.setAlternatingRowColors(True)
-        fitting_layout.addWidget(self._param_table)
+        layout.addWidget(self._param_table)
 
         self._load_fitted_results_button = QPushButton("Load Fitted Results")
-        fitting_layout.addWidget(self._load_fitted_results_button)
+        layout.addWidget(self._load_fitted_results_button)
         self._start_button = QPushButton("Start Fitting")
-        fitting_layout.addWidget(self._start_button)
+        layout.addWidget(self._start_button)
 
         self._progress_bar = QProgressBar()
         self._progress_bar.setTextVisible(False)
         self._progress_bar.hide()
-        fitting_layout.addWidget(self._progress_bar)
+        layout.addWidget(self._progress_bar)
 
-        layout.addWidget(fitting_group)
         return group
 
     def _build_quality_section(self) -> QGroupBox:
-        group = QGroupBox("Fitted Traces")
+        group = QGroupBox("Trace")
         layout = QVBoxLayout(group)
 
         self._quality_canvas = MplCanvas(self)
+        self._quality_canvas.setToolTip("Right-click to save this plot as a PNG.")
         layout.addWidget(self._quality_canvas)
 
         self._quality_stats_label = QLabel("Good: 0%, Mid: 0%, Bad: 0%")
@@ -138,7 +133,7 @@ class ModelingView(QWidget):
         return group
 
     def _build_parameter_section(self) -> QGroupBox:
-        group = QGroupBox("Parameter Analysis")
+        group = QGroupBox("Parameter")
         layout = QVBoxLayout(group)
 
         top_controls = QHBoxLayout()
@@ -147,21 +142,17 @@ class ModelingView(QWidget):
         layout.addLayout(top_controls)
 
         hist_controls = QHBoxLayout()
-        hist_controls.addWidget(QLabel("Single Parameter:"))
+        hist_controls.addWidget(QLabel("Single:"))
         self._param_combo = QComboBox()
         hist_controls.addWidget(self._param_combo)
         layout.addLayout(hist_controls)
 
         self._param_canvas = MplCanvas(self)
+        self._param_canvas.setToolTip("Right-click to save this plot as a PNG.")
         layout.addWidget(self._param_canvas)
 
-        hist_save_layout = QHBoxLayout()
-        self._hist_save_button = QPushButton("Save Histogram")
-        hist_save_layout.addWidget(self._hist_save_button)
-        layout.addLayout(hist_save_layout)
-
         scatter_controls = QHBoxLayout()
-        scatter_controls.addWidget(QLabel("Double Parameter:"))
+        scatter_controls.addWidget(QLabel("Double:"))
         self._x_param_combo = QComboBox()
         self._y_param_combo = QComboBox()
         scatter_controls.addWidget(self._x_param_combo)
@@ -169,12 +160,8 @@ class ModelingView(QWidget):
         layout.addLayout(scatter_controls)
 
         self._scatter_canvas = MplCanvas(self)
+        self._scatter_canvas.setToolTip("Right-click to save this plot as a PNG.")
         layout.addWidget(self._scatter_canvas)
-
-        scatter_save_layout = QHBoxLayout()
-        self._scatter_save_button = QPushButton("Save Scatter Plot")
-        scatter_save_layout.addWidget(self._scatter_save_button)
-        layout.addLayout(scatter_save_layout)
 
         return group
 
@@ -188,6 +175,16 @@ class ModelingView(QWidget):
             self._on_load_fitted_results_clicked
         )
         self._start_button.clicked.connect(self._on_start_clicked)
+        self._canvas.plot_right_clicked.connect(self._on_raw_plot_right_clicked)
+        self._quality_canvas.plot_right_clicked.connect(
+            self._on_trace_plot_right_clicked
+        )
+        self._param_canvas.plot_right_clicked.connect(
+            self._on_parameter_plot_right_clicked
+        )
+        self._scatter_canvas.plot_right_clicked.connect(
+            self._on_double_plot_right_clicked
+        )
         self._interval_spin.valueChanged.connect(self._on_interval_changed)
         self._model_combo.currentTextChanged.connect(self.view_model.set_model_type)
         self._quality_list.itemClicked.connect(self._on_quality_item_clicked)
@@ -197,8 +194,6 @@ class ModelingView(QWidget):
         self._param_combo.currentTextChanged.connect(self._on_param_changed)
         self._x_param_combo.currentTextChanged.connect(self._on_x_param_changed)
         self._y_param_combo.currentTextChanged.connect(self._on_y_param_changed)
-        self._hist_save_button.clicked.connect(self._on_hist_save_clicked)
-        self._scatter_save_button.clicked.connect(self._on_scatter_save_clicked)
 
     @Slot()
     def _refresh_state(self) -> None:
@@ -240,8 +235,6 @@ class ModelingView(QWidget):
         self._render_histogram(state.histogram_plot)
         self._render_plot(self._scatter_canvas, state.scatter_plot)
         self._sync_parameter_combos(state)
-        self._hist_save_button.setEnabled(state.can_save_histogram)
-        self._scatter_save_button.setEnabled(state.can_save_scatter)
 
     @Slot(object)
     def _on_raw_data_changed(self, df: pd.DataFrame) -> None:
@@ -267,6 +260,15 @@ class ModelingView(QWidget):
     @Slot(float)
     def _on_interval_changed(self, value: float) -> None:
         self.view_model.set_frame_interval_minutes(float(value))
+
+    def _save_canvas_plot(
+        self, canvas: MplCanvas, dialog_title: str, default_filename: str
+    ) -> None:
+        path = self.view_model.request_plot_export_path(dialog_title, default_filename)
+        if path is None:
+            return
+        canvas.figure.savefig(path, dpi=300, bbox_inches="tight")
+        self.view_model.notify_export_saved(path)
 
     def _render_plot(self, canvas: MplCanvas, plot_spec) -> None:
         if plot_spec is None:
@@ -438,7 +440,9 @@ class ModelingView(QWidget):
                 f"Page {self._fit_page + 1} of {total_pages}"
             )
         else:
-            self._quality_page_label.setText(f"Page {self._fit_page + 1} of {total_pages}")
+            self._quality_page_label.setText(
+                f"Page {self._fit_page + 1} of {total_pages}"
+            )
         self._quality_prev_button.setEnabled(self._fit_page > 0)
         self._quality_next_button.setEnabled(self._fit_page < total_pages - 1)
 
@@ -552,7 +556,9 @@ class ModelingView(QWidget):
         self._x_param_combo.blockSignals(False)
         self._y_param_combo.blockSignals(False)
 
-        self._selected_parameter = self._parameter_names[0] if self._parameter_names else None
+        self._selected_parameter = (
+            self._parameter_names[0] if self._parameter_names else None
+        )
         self._x_parameter = self._parameter_names[0] if self._parameter_names else None
         self._y_parameter = (
             self._parameter_names[1]
@@ -567,7 +573,9 @@ class ModelingView(QWidget):
         if self._x_parameter is not None:
             self._x_param_combo.setCurrentIndex(0)
         if self._y_parameter is not None and self._y_parameter in self._parameter_names:
-            self._y_param_combo.setCurrentIndex(self._parameter_names.index(self._y_parameter))
+            self._y_param_combo.setCurrentIndex(
+                self._parameter_names.index(self._y_parameter)
+            )
 
         self._update_histogram()
         self._update_scatter_plot()
@@ -627,6 +635,44 @@ class ModelingView(QWidget):
         data = self._combo_data(self._y_param_combo)
         if data is not None:
             self.view_model.set_y_parameter(data)
+
+    @Slot()
+    def _on_raw_plot_right_clicked(self) -> None:
+        self._save_canvas_plot(self._canvas, "Save Plot", "raw_traces.png")
+
+    @Slot()
+    def _on_trace_plot_right_clicked(self) -> None:
+        if self.view_model.selected_fit_cell is None:
+            return
+        position, roi = self.view_model.selected_fit_cell
+        self._save_canvas_plot(
+            self._quality_canvas,
+            "Save Plot",
+            f"trace_position_{position}_roi_{roi}.png",
+        )
+
+    @Slot()
+    def _on_parameter_plot_right_clicked(self) -> None:
+        parameter_name = self.view_model.selected_parameter
+        if parameter_name is None:
+            return
+        self._save_canvas_plot(
+            self._param_canvas,
+            "Save Plot",
+            f"parameter_{parameter_name}.png",
+        )
+
+    @Slot()
+    def _on_double_plot_right_clicked(self) -> None:
+        x_parameter = self.view_model.x_parameter
+        y_parameter = self.view_model.y_parameter
+        if x_parameter is None or y_parameter is None:
+            return
+        self._save_canvas_plot(
+            self._scatter_canvas,
+            "Save Plot",
+            f"double_{x_parameter}_vs_{y_parameter}.png",
+        )
 
     def _update_histogram(self) -> None:
         df = self.view_model.results_df
@@ -692,20 +738,6 @@ class ModelingView(QWidget):
             x_label=self._x_parameter,
             y_label=self._y_parameter,
         )
-
-    @Slot()
-    def _on_hist_save_clicked(self) -> None:
-        path = self.view_model.request_histogram_export_path()
-        if path is not None:
-            self._param_canvas.figure.savefig(path, dpi=300, bbox_inches="tight")
-            self.view_model.notify_export_saved(path)
-
-    @Slot()
-    def _on_scatter_save_clicked(self) -> None:
-        path = self.view_model.request_scatter_export_path()
-        if path is not None:
-            self._scatter_canvas.figure.savefig(path, dpi=300, bbox_inches="tight")
-            self.view_model.notify_export_saved(path)
 
     def _populate_parameter_table(self, parameters) -> None:
         self._param_table.blockSignals(True)
@@ -811,7 +843,9 @@ class ModelingView(QWidget):
         value = combo.currentData()
         return None if value is None else str(value)
 
-    def _get_histogram_series(self, df: pd.DataFrame, param_name: str) -> pd.Series | None:
+    def _get_histogram_series(
+        self, df: pd.DataFrame, param_name: str
+    ) -> pd.Series | None:
         data = pd.to_numeric(df.get(param_name), errors="coerce").dropna()
         if data.empty:
             return None

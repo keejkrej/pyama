@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from pyama_gui.app_view_model import AppViewModel
+from pyama_gui.components import PyQtGraphImageView
 from pyama_gui.types.visualization import VisualizationViewState
 from pyama_gui.apps.visualization.view_model import VisualizationViewModel
 from pyama_gui.widgets import MplCanvas
@@ -52,9 +53,6 @@ class VisualizationView(QWidget):
         self._project_details_text.setReadOnly(True)
         layout.addWidget(self._project_details_text)
 
-        selection_group = QGroupBox("Visualization Settings")
-        selection_layout = QVBoxLayout(selection_group)
-
         position_row = QHBoxLayout()
         self._position_spinbox = QSpinBox()
         self._position_max_label = QLabel("/ 0")
@@ -62,22 +60,20 @@ class VisualizationView(QWidget):
         position_row.addStretch()
         position_row.addWidget(self._position_spinbox)
         position_row.addWidget(self._position_max_label)
-        selection_layout.addLayout(position_row)
+        layout.addLayout(position_row)
 
         self._channels_list = QListWidget()
         self._channels_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         self._channels_list.setEditTriggers(QListWidget.EditTrigger.NoEditTriggers)
-        selection_layout.addWidget(self._channels_list)
+        layout.addWidget(self._channels_list)
 
         self._visualize_button = QPushButton("Start Visualization")
-        selection_layout.addWidget(self._visualize_button)
+        layout.addWidget(self._visualize_button)
 
         self._progress_bar = QProgressBar()
         self._progress_bar.setTextVisible(False)
         self._progress_bar.hide()
-        selection_layout.addWidget(self._progress_bar)
-
-        layout.addWidget(selection_group)
+        layout.addWidget(self._progress_bar)
         return group
 
     def _build_image_section(self) -> QGroupBox:
@@ -106,8 +102,8 @@ class VisualizationView(QWidget):
         controls_layout.addLayout(second_row)
         layout.addLayout(controls_layout)
 
-        self._image_canvas = MplCanvas(self)
-        layout.addWidget(self._image_canvas)
+        self._image_viewer = PyQtGraphImageView(self)
+        layout.addWidget(self._image_viewer)
         return group
 
     def _build_trace_section(self) -> QGroupBox:
@@ -123,12 +119,10 @@ class VisualizationView(QWidget):
         self._trace_canvas = MplCanvas(self)
         outer_layout.addWidget(self._trace_canvas)
 
-        list_group = QGroupBox("Trace Selection")
-        list_layout = QVBoxLayout(list_group)
         self._trace_list = QListWidget()
         self._trace_list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
         self._trace_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        list_layout.addWidget(self._trace_list)
+        outer_layout.addWidget(self._trace_list)
 
         pagination_row = QHBoxLayout()
         self._trace_page_label = QLabel("Page 1 of 1")
@@ -137,31 +131,44 @@ class VisualizationView(QWidget):
         pagination_row.addWidget(self._trace_page_label)
         pagination_row.addWidget(self._trace_prev_button)
         pagination_row.addWidget(self._trace_next_button)
-        list_layout.addLayout(pagination_row)
+        outer_layout.addLayout(pagination_row)
 
         self._save_button = QPushButton("Save Inspected CSV")
-        list_layout.addWidget(self._save_button)
-        outer_layout.addWidget(list_group)
+        outer_layout.addWidget(self._save_button)
         return group
 
     def _connect_signals(self) -> None:
         self.view_model.state_changed.connect(self._refresh_state)
         self._visualize_button.clicked.connect(self.view_model.start_visualization)
-        self._data_type_combo.currentTextChanged.connect(self.view_model.set_selected_data_type)
+        self._data_type_combo.currentTextChanged.connect(
+            self.view_model.set_selected_data_type
+        )
         self._prev_frame_button.clicked.connect(lambda: self.view_model.step_frame(-1))
         self._next_frame_button.clicked.connect(lambda: self.view_model.step_frame(1))
-        self._prev_frame_10_button.clicked.connect(lambda: self.view_model.step_frame(-10))
-        self._next_frame_10_button.clicked.connect(lambda: self.view_model.step_frame(10))
-        self._image_canvas.artist_picked.connect(self._on_artist_picked)
-        self._image_canvas.artist_right_clicked.connect(self._on_artist_right_clicked)
-        self._feature_dropdown.currentTextChanged.connect(self.view_model.set_selected_feature)
+        self._prev_frame_10_button.clicked.connect(
+            lambda: self.view_model.step_frame(-10)
+        )
+        self._next_frame_10_button.clicked.connect(
+            lambda: self.view_model.step_frame(10)
+        )
+        self._image_viewer.overlay_clicked.connect(self._on_overlay_clicked)
+        self._image_viewer.overlay_right_clicked.connect(self._on_overlay_right_clicked)
+        self._feature_dropdown.currentTextChanged.connect(
+            self.view_model.set_selected_feature
+        )
         self._trace_list.itemClicked.connect(self._on_trace_item_clicked)
-        self._trace_list.customContextMenuRequested.connect(self._on_trace_list_right_clicked)
+        self._trace_list.customContextMenuRequested.connect(
+            self._on_trace_list_right_clicked
+        )
         self._trace_prev_button.clicked.connect(self.view_model.previous_trace_page)
         self._trace_next_button.clicked.connect(self.view_model.next_trace_page)
         self._save_button.clicked.connect(self.view_model.save_inspected_csv)
-        self._channels_list.itemSelectionChanged.connect(self._on_channel_selection_changed)
-        self._position_spinbox.valueChanged.connect(self.view_model.set_selected_position)
+        self._channels_list.itemSelectionChanged.connect(
+            self._on_channel_selection_changed
+        )
+        self._position_spinbox.valueChanged.connect(
+            self.view_model.set_selected_position
+        )
 
     @Slot()
     def _refresh_state(self) -> None:
@@ -178,10 +185,12 @@ class VisualizationView(QWidget):
             self._channels_list.addItem(item)
         self._channels_list.blockSignals(False)
 
-        self._channels_list.setVisible(bool(state.available_channels))
-        self._visualize_button.setVisible(bool(state.available_channels))
-        self._visualize_button.setEnabled(not state.loading_visualization and state.can_visualize)
-        self._visualize_button.setText("Loading..." if state.loading_visualization else "Start Visualization")
+        self._visualize_button.setEnabled(
+            not state.loading_visualization and state.can_visualize
+        )
+        self._visualize_button.setText(
+            "Loading..." if state.loading_visualization else "Start Visualization"
+        )
 
         self._progress_bar.setVisible(state.loading_visualization)
         if state.loading_visualization:
@@ -222,12 +231,10 @@ class VisualizationView(QWidget):
 
     def _render_image_state(self, state: VisualizationViewState) -> None:
         if state.current_image is None:
-            self._image_canvas.clear()
+            self._image_viewer.clear()
             return
-        self._image_canvas.plot_image(state.current_image, cmap="gray", vmin=0, vmax=255)
-        self._image_canvas.clear_overlays()
-        for overlay in state.overlays:
-            self._image_canvas.plot_overlay(overlay.overlay_id, overlay.properties)
+        self._image_viewer.set_image(state.current_image)
+        self._image_viewer.set_overlays(state.overlays)
 
     def _render_trace_plot(self, state: VisualizationViewState) -> None:
         if state.trace_plot is None:
@@ -261,14 +268,14 @@ class VisualizationView(QWidget):
         self.view_model.set_selected_channels(selected_channels)
 
     @Slot(str)
-    def _on_artist_picked(self, artist_id: str) -> None:
-        if artist_id.startswith("trace_"):
-            self.view_model.select_trace(artist_id.split("_", 1)[1])
+    def _on_overlay_clicked(self, overlay_id: str) -> None:
+        if overlay_id.startswith("trace_"):
+            self.view_model.select_trace(overlay_id.split("_", 1)[1])
 
     @Slot(str)
-    def _on_artist_right_clicked(self, artist_id: str) -> None:
-        if artist_id.startswith("trace_"):
-            self.view_model.toggle_trace_quality(artist_id.split("_", 1)[1])
+    def _on_overlay_right_clicked(self, overlay_id: str) -> None:
+        if overlay_id.startswith("trace_"):
+            self.view_model.toggle_trace_quality(overlay_id.split("_", 1)[1])
 
     @Slot(QListWidgetItem)
     def _on_trace_item_clicked(self, item: QListWidgetItem) -> None:

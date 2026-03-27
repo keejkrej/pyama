@@ -61,5 +61,3 @@ class ModelingViewState:
     x_parameter: str | None = None
     y_parameter: str | None = None
     filter_good_only: bool = False
-    can_save_histogram: bool = False
-    can_save_scatter: bool = False

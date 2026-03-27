@@ -2,29 +2,42 @@
 
 import logging
 from pathlib import Path
+import re
 
 import numpy as np
 
+from pyama.io.visualization_source import (
+    load_visualization_source,
+    parse_visualization_source,
+    resolve_visualization_source_path,
+)
 from pyama.types.visualization import CachedStack
 from pyama.utils.visualization import preprocess_visualization_data
 
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_cache_token(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("_")
+
+
 def resolve_cache_path(
-    source_path: Path,
+    source_path: str | Path,
     channel_id: str,
     cache_root: Path | None = None,
 ) -> Path:
-    base_dir = cache_root if cache_root is not None else source_path.parent
+    _, dataset_path = parse_visualization_source(source_path)
+    resolved_source_path = resolve_visualization_source_path(source_path)
+    base_dir = cache_root if cache_root is not None else resolved_source_path.parent
     base_dir.mkdir(parents=True, exist_ok=True)
-    stem = source_path.stem
-    suffix = source_path.suffix or ".npy"
-    return base_dir / f"{stem}_{channel_id}_uint8{suffix}"
+    dataset_token = _sanitize_cache_token(dataset_path)
+    channel_token = _sanitize_cache_token(channel_id)
+    stem = _sanitize_cache_token(resolved_source_path.stem)
+    return base_dir / f"{stem}_{dataset_token}_{channel_token}_uint8.npy"
 
 
 def build_uint8_cache(
-    source_path: Path,
+    source_path: str | Path,
     channel_id: str,
     cache_root: Path | None = None,
     force_rebuild: bool = False,
@@ -49,7 +62,7 @@ def build_uint8_cache(
         channel_id,
         force_rebuild,
     )
-    raw = np.load(source_path)
+    raw = load_visualization_source(source_path)
     processed = preprocess_visualization_data(raw, channel_id)
     np.save(cache_path, processed)
     logger.debug(

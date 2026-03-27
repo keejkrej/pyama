@@ -9,6 +9,7 @@ dependencies = [
     "matplotlib",
     "numpy",
     "pandas<3",
+    "pyqtgraph",
     "pyside6",
     "pyyaml",
 ]

@@ -101,7 +101,7 @@ StatisticsTaskRequest = StatisticsRequest
 
 @dataclass(slots=True)
 class VisualizationTaskRequest:
-    source_path: Path
+    source_path: str | Path
     channel_id: str
     cache_root: Path | None = None
     force_rebuild: bool = False

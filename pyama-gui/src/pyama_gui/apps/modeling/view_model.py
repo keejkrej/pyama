@@ -141,6 +141,22 @@ class ModelingViewModel(QObject):
         return self._running
 
     @property
+    def selected_fit_cell(self) -> tuple[int, int] | None:
+        return self._selected_fit_cell
+
+    @property
+    def selected_parameter(self) -> str | None:
+        return self._selected_parameter
+
+    @property
+    def x_parameter(self) -> str | None:
+        return self._x_parameter
+
+    @property
+    def y_parameter(self) -> str | None:
+        return self._y_parameter
+
+    @property
     def state(self) -> ModelingViewState:
         return ModelingViewState(
             model_names=list(self._model_names),
@@ -160,8 +176,6 @@ class ModelingViewModel(QObject):
             x_parameter=self._x_parameter,
             y_parameter=self._y_parameter,
             filter_good_only=self._filter_good_only,
-            can_save_histogram=self.histogram_plot is not None,
-            can_save_scatter=self.scatter_plot is not None,
         )
 
     @property
@@ -626,28 +640,14 @@ class ModelingViewModel(QObject):
         self._y_parameter = parameter_name
         self.state_changed.emit()
 
-    def request_histogram_export_path(self) -> Path | None:
-        if (
-            self._selected_parameter is None
-            or self.app_view_model.dialog_service is None
-        ):
+    def request_plot_export_path(
+        self, dialog_title: str, default_filename: str
+    ) -> Path | None:
+        if self.app_view_model.dialog_service is None:
             return None
         return self.app_view_model.dialog_service.select_save_file(
-            "Save Histogram",
-            str(Path.cwd() / f"{self._selected_parameter}.png"),
-            "PNG Files (*.png)",
-        )
-
-    def request_scatter_export_path(self) -> Path | None:
-        if (
-            self._x_parameter is None
-            or self._y_parameter is None
-            or self.app_view_model.dialog_service is None
-        ):
-            return None
-        return self.app_view_model.dialog_service.select_save_file(
-            "Save Scatter Plot",
-            str(Path.cwd() / f"{self._x_parameter}_vs_{self._y_parameter}.png"),
+            dialog_title,
+            str(Path.cwd() / default_filename),
             "PNG Files (*.png)",
         )
 

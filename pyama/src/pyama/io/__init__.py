@@ -19,6 +19,12 @@ from pyama.io.microscopy import (
     get_microscopy_time_stack,
     load_microscopy_file,
 )
+from pyama.io.visualization_source import (
+    load_visualization_source,
+    parse_visualization_source,
+    resolve_visualization_source_path,
+    visualization_source_exists,
+)
 from pyama.types.io import MicroscopyMetadata
 
 __all__ = [
@@ -34,6 +40,10 @@ __all__ = [
     "load_analysis_csv",
     "load_config",
     "load_microscopy_file",
+    "load_visualization_source",
+    "parse_visualization_source",
+    "resolve_visualization_source_path",
     "save_config",
+    "visualization_source_exists",
     "write_analysis_csv",
 ]

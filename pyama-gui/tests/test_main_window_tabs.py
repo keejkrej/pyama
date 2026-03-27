@@ -3,14 +3,17 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import numpy as np
 import pandas as pd
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton
 
+from pyama.io.zarr import open_raw_zarr, open_rois_zarr
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.apps.modeling.view_model import ModelingViewModel
 from pyama_gui.main_window import MainWindow
 from pyama_gui.services import FileDialogService
+from pyama_gui.components import PyQtGraphImageView
 from pyama_gui.apps.modeling.view import ModelingView
 from pyama_gui.apps.processing.view import ProcessingView
 from pyama_gui.apps.processing.view_model import ProcessingViewModel
@@ -26,8 +29,35 @@ def _write_analysis_csv(path: Path, rows: list[dict[str, float | int]]) -> None:
     )
 
 
+def _write_roi_mask(
+    workspace: Path,
+    *,
+    position_id: int,
+    channel_id: int,
+    roi_id: int,
+    frame_idx: int,
+    bbox: tuple[int, int, int, int],
+    mask: np.ndarray | None,
+) -> None:
+    store = open_rois_zarr(workspace / "rois.zarr", mode="a")
+    roi_ids = np.array([roi_id], dtype=np.int32)
+    roi_bboxes = np.array([[bbox]], dtype=np.int32)
+    roi_is_present = np.array([[True]], dtype=bool)
+    store.write_roi_ids(position_id, roi_ids)
+    store.write_roi_bboxes(position_id, roi_bboxes)
+    store.write_roi_is_present(position_id, roi_is_present)
+    if mask is not None:
+        store.write_seg_mask_frame(position_id, channel_id, roi_id, frame_idx, mask)
+
+
 class StubDialogService(FileDialogService):
-    def __init__(self, *, directory: Path | None = None, open_file: Path | None = None, save_file: Path | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        directory: Path | None = None,
+        open_file: Path | None = None,
+        save_file: Path | None = None,
+    ) -> None:
         self.directory = directory
         self.open_file = open_file
         self.save_file = save_file
@@ -96,8 +126,7 @@ def test_main_window_loads_non_processing_tabs_lazily() -> None:
         app.processEvents()
 
 
-def test_main_window_startup_prompt_sets_workspace(
-) -> None:
+def test_main_window_startup_prompt_sets_workspace() -> None:
     app = QApplication.instance() or QApplication([])
     workspace = Path("/tmp/startup-workspace")
 
@@ -105,7 +134,9 @@ def test_main_window_startup_prompt_sets_workspace(
     window.prompt_for_workspace_on_startup()
 
     assert window.app_view_model.workspace_dir == workspace
-    assert window.app_view_model.status_message == f"Workspace folder set to {workspace}"
+    assert (
+        window.app_view_model.status_message == f"Workspace folder set to {workspace}"
+    )
     assert window.workspace_bar._path_label.text() == str(workspace)
     assert window.workspace_bar.change_button.text() == "Change..."
 
@@ -130,7 +161,9 @@ def test_workspace_bar_button_sets_workspace() -> None:
         app.processEvents()
 
 
-def test_statistics_tab_loads_existing_workspace_when_lazy_created(tmp_path: Path) -> None:
+def test_statistics_tab_loads_existing_workspace_when_lazy_created(
+    tmp_path: Path,
+) -> None:
     app = QApplication.instance() or QApplication([])
     workspace = tmp_path / "workspace"
     traces_merged = workspace / "traces_merged"
@@ -150,9 +183,10 @@ def test_statistics_tab_loads_existing_workspace_when_lazy_created(tmp_path: Pat
     app.processEvents()
 
     assert isinstance(window.statistics_tab, StatisticsView)
-    assert [window.statistics_tab._sample_list.item(i).text() for i in range(window.statistics_tab._sample_list.count())] == [
-        "sample_a"
-    ]
+    assert [
+        window.statistics_tab._sample_list.item(i).text()
+        for i in range(window.statistics_tab._sample_list.count())
+    ] == ["sample_a"]
 
     window.close()
     if QApplication.instance() is app:
@@ -188,8 +222,12 @@ def test_visualization_tab_loads_existing_workspace_when_lazy_created(
                 "to_dict": staticmethod(
                     lambda: {
                         "project_path": str(path),
-                        "n_fov": 1,
-                        "fov_data": {0: {"raw_ch_0": str(path / 'raw.tif')}},
+                        "n_positions": 1,
+                        "position_data": {
+                            0: {
+                                "raw_ch_0": f"{path / 'raw.zarr'}::position/0/channel/0/raw"
+                            }
+                        },
                     }
                 )
             },
@@ -204,6 +242,7 @@ def test_visualization_tab_loads_existing_workspace_when_lazy_created(
     assert isinstance(window.visualization_tab, VisualizationView)
     assert window.visualization_tab.view_model.workspace_dir == workspace
     assert "Project Path:" in window.visualization_tab.view_model.details_text
+    assert isinstance(window.visualization_tab._image_viewer, PyQtGraphImageView)
 
     window.close()
     if QApplication.instance() is app:
@@ -304,7 +343,8 @@ def test_gui_feature_packages_only_live_under_apps() -> None:
 
 
 def test_visualization_view_model_loads_workspace_on_workspace_change(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "visualization_workspace"
     workspace.mkdir()
@@ -336,7 +376,191 @@ def test_visualization_view_model_loads_workspace_on_workspace_change(
     app_view_model.set_workspace_dir(workspace)
 
     assert view_model.workspace_dir == workspace
-    assert "Project Path:" in view_model.details_text or "Workspace:" in view_model.details_text
+    assert "Project Path:" in view_model.details_text or view_model.details_text == ""
+
+
+def test_visualization_view_model_loads_real_scanned_workspace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "visualization_workspace"
+    workspace.mkdir()
+    store = open_raw_zarr(workspace / "raw.zarr", mode="a")
+    dataset = store.create_uint16_timeseries(
+        "position/0/channel/0/raw",
+        n_frames=2,
+        height=3,
+        width=4,
+    )
+    dataset[:] = np.arange(24, dtype=np.uint16).reshape(2, 3, 4)
+    traces_dir = workspace / "traces"
+    traces_dir.mkdir()
+    _write_roi_mask(
+        workspace,
+        position_id=0,
+        channel_id=0,
+        roi_id=1,
+        frame_idx=0,
+        bbox=(1, 0, 2, 2),
+        mask=np.array([[True, True], [True, True]], dtype=bool),
+    )
+    pd.DataFrame(
+        [
+            {
+                "position": 0,
+                "roi": 1,
+                "frame": 0,
+                "is_good": True,
+                "x": 1.0,
+                "y": 2.0,
+                "w": 3.0,
+                "h": 4.0,
+                "area_c0": 10.0,
+            }
+        ]
+    ).to_csv(traces_dir / "position_0.csv", index=False)
+
+    monkeypatch.setattr(
+        "pyama_gui.apps.visualization.view_model.run_task",
+        lambda worker, **kwargs: worker.run(),
+    )
+
+    app_view_model = AppViewModel()
+    view_model = VisualizationViewModel(app_view_model)
+    app_view_model.set_workspace_dir(workspace)
+    view_model.set_selected_channels(["raw_ch_0"])
+    view_model.start_visualization()
+
+    assert view_model.state.current_image is not None
+    assert view_model.state.current_image.shape == (3, 4)
+    assert view_model.state.data_types == ["raw_ch_0"]
+    assert view_model.state.trace_rows
+    assert len(view_model.state.overlays) == 1
+    assert view_model.state.overlays[0].properties["type"] == "polygon"
+
+    if QApplication.instance() is app:
+        app.processEvents()
+
+
+def test_visualization_view_model_omits_overlays_without_rois_zarr(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "visualization_workspace"
+    workspace.mkdir()
+    store = open_raw_zarr(workspace / "raw.zarr", mode="a")
+    dataset = store.create_uint16_timeseries(
+        "position/0/channel/0/raw",
+        n_frames=1,
+        height=3,
+        width=4,
+    )
+    dataset[:] = np.arange(12, dtype=np.uint16).reshape(1, 3, 4)
+    traces_dir = workspace / "traces"
+    traces_dir.mkdir()
+    pd.DataFrame(
+        [
+            {
+                "position": 0,
+                "roi": 1,
+                "frame": 0,
+                "is_good": True,
+                "x": 1.0,
+                "y": 2.0,
+                "w": 3.0,
+                "h": 4.0,
+                "area_c0": 10.0,
+            }
+        ]
+    ).to_csv(traces_dir / "position_0.csv", index=False)
+
+    monkeypatch.setattr(
+        "pyama_gui.apps.visualization.view_model.run_task",
+        lambda worker, **kwargs: worker.run(),
+    )
+
+    view_model = VisualizationViewModel(AppViewModel())
+    view_model.app_view_model.set_workspace_dir(workspace)
+    view_model.set_selected_channels(["raw_ch_0"])
+    view_model.start_visualization()
+
+    assert view_model.state.current_image is not None
+    assert view_model.state.overlays == []
+
+
+def test_visualization_view_model_omits_overlay_when_mask_is_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "visualization_workspace"
+    workspace.mkdir()
+    store = open_raw_zarr(workspace / "raw.zarr", mode="a")
+    dataset = store.create_uint16_timeseries(
+        "position/0/channel/0/raw",
+        n_frames=1,
+        height=3,
+        width=4,
+    )
+    dataset[:] = np.arange(12, dtype=np.uint16).reshape(1, 3, 4)
+    traces_dir = workspace / "traces"
+    traces_dir.mkdir()
+    _write_roi_mask(
+        workspace,
+        position_id=0,
+        channel_id=0,
+        roi_id=1,
+        frame_idx=0,
+        bbox=(1, 0, 2, 2),
+        mask=None,
+    )
+    pd.DataFrame(
+        [
+            {
+                "position": 0,
+                "roi": 1,
+                "frame": 0,
+                "is_good": True,
+                "x": 1.0,
+                "y": 2.0,
+                "w": 3.0,
+                "h": 4.0,
+                "area_c0": 10.0,
+            }
+        ]
+    ).to_csv(traces_dir / "position_0.csv", index=False)
+
+    monkeypatch.setattr(
+        "pyama_gui.apps.visualization.view_model.run_task",
+        lambda worker, **kwargs: worker.run(),
+    )
+
+    view_model = VisualizationViewModel(AppViewModel())
+    view_model.app_view_model.set_workspace_dir(workspace)
+    view_model.set_selected_channels(["raw_ch_0"])
+    view_model.start_visualization()
+
+    assert view_model.state.current_image is not None
+    assert view_model.state.overlays == []
+
+
+def test_visualization_view_routes_image_overlay_interactions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = QApplication.instance() or QApplication([])
+    view = VisualizationView(AppViewModel())
+    selected: list[str] = []
+    toggled: list[str] = []
+
+    monkeypatch.setattr(view.view_model, "select_trace", selected.append)
+    monkeypatch.setattr(view.view_model, "toggle_trace_quality", toggled.append)
+
+    view._image_viewer.overlay_clicked.emit("trace_7")
+    view._image_viewer.overlay_right_clicked.emit("trace_7")
+
+    assert selected == ["7"]
+    assert toggled == ["7"]
+
+    view.close()
+    if QApplication.instance() is app:
+        app.processEvents()
 
 
 def test_statistics_view_model_populates_first_sample_immediately() -> None:
@@ -390,3 +614,66 @@ def test_modeling_view_model_defaults_to_base_and_10_minute_interval() -> None:
     ]
     protein_param = view_model.state.parameters[0]
     assert [option.key for option in protein_param.preset_options] == ["gfp", "dsred"]
+
+
+def test_modeling_view_uses_updated_section_labels() -> None:
+    app = QApplication.instance() or QApplication([])
+
+    view = ModelingView(AppViewModel(dialog_service=StubDialogService()))
+
+    group_titles = [group.title() for group in view.findChildren(QGroupBox)]
+    button_texts = [button.text() for button in view.findChildren(QPushButton)]
+    labels = [label.text() for label in view.findChildren(QLabel)]
+
+    assert "Trace" in group_titles
+    assert "Parameter" in group_titles
+    assert "Fitted Traces" not in group_titles
+    assert "Parameter Analysis" not in group_titles
+    assert "Save Histogram" not in button_texts
+    assert "Save Scatter Plot" not in button_texts
+    assert "Single:" in labels
+    assert "Double:" in labels
+
+    view.close()
+    if QApplication.instance() is app:
+        app.processEvents()
+
+
+def test_modeling_parameter_plot_can_be_saved_from_right_click(tmp_path: Path) -> None:
+    app = QApplication.instance() or QApplication([])
+    save_path = tmp_path / "parameter_time_onset_min.png"
+    dialog_service = StubDialogService(save_file=save_path)
+    view = ModelingView(AppViewModel(dialog_service=dialog_service))
+
+    view.view_model._results_df = pd.DataFrame(
+        [
+            {
+                "position": 0,
+                "roi": 1,
+                "model_type": "base",
+                "success": True,
+                "r_squared": 0.95,
+                "time_onset_min": 120.0,
+                "mrna_degradation_rate_min": 0.001,
+            },
+            {
+                "position": 0,
+                "roi": 2,
+                "model_type": "base",
+                "success": True,
+                "r_squared": 0.91,
+                "time_onset_min": 140.0,
+                "mrna_degradation_rate_min": 0.002,
+            },
+        ]
+    )
+    view.view_model._refresh_results_state()
+    view._refresh_state()
+
+    view._param_canvas.plot_right_clicked.emit()
+
+    assert save_path.exists()
+
+    view.close()
+    if QApplication.instance() is app:
+        app.processEvents()
