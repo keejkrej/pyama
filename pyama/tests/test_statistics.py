@@ -10,10 +10,9 @@ from pyama.io.samples import discover_statistics_sample_pairs
 from pyama.types.statistics import SamplePair
 
 
-def _write_analysis_csv(path: Path, rows: list[dict]) -> None:
-    pd.DataFrame(rows, columns=["frame", "position", "roi", "value"]).to_csv(
-        path, index=False
-    )
+def _write_analysis_csv(path: Path, rows: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame.from_records(rows).to_csv(path, index=False)
 
 
 def _write_sample_pair(
@@ -22,8 +21,11 @@ def _write_sample_pair(
     intensity_rows: list[dict],
     area_rows: list[dict],
 ) -> None:
-    _write_analysis_csv(folder / f"{sample_name}_intensity_ch_1.csv", intensity_rows)
-    _write_analysis_csv(folder / f"{sample_name}_area_ch_0.csv", area_rows)
+    _write_analysis_csv(
+        folder / "intensity_total_c1" / f"{sample_name}.csv",
+        intensity_rows,
+    )
+    _write_analysis_csv(folder / "area_c0" / f"{sample_name}.csv", area_rows)
 
 
 def test_discover_statistics_sample_pairs_returns_intensity_samples_with_optional_area(
@@ -36,11 +38,11 @@ def test_discover_statistics_sample_pairs_returns_intensity_samples_with_optiona
         [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
     _write_analysis_csv(
-        tmp_path / "sample_b_intensity_ch_1.csv",
+        tmp_path / "intensity_total_c1" / "sample_b.csv",
         [{"frame": 0, "position": 0, "roi": 0, "value": 3.0}],
     )
     _write_analysis_csv(
-        tmp_path / "sample_c_area_ch_0.csv",
+        tmp_path / "area_c0" / "sample_c.csv",
         [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
     )
     _write_analysis_csv(
@@ -55,11 +57,26 @@ def test_discover_statistics_sample_pairs_returns_intensity_samples_with_optiona
     assert pairs[1].area_csv is None
 
 
+def test_discover_statistics_sample_pairs_ignores_legacy_flat_layout(
+    tmp_path: Path,
+) -> None:
+    _write_analysis_csv(
+        tmp_path / "sample_a_intensity_ch_1.csv",
+        [{"frame": 0, "position": 0, "roi": 0, "value": 2.0}],
+    )
+    _write_analysis_csv(
+        tmp_path / "sample_a_area_ch_0.csv",
+        [{"frame": 0, "position": 0, "roi": 0, "value": 1.0}],
+    )
+
+    assert discover_statistics_sample_pairs(tmp_path) == []
+
+
 def test_load_normalized_sample_applies_area_median_filter(tmp_path: Path) -> None:
     pair = SamplePair(
         sample_name="sample",
-        intensity_csv=tmp_path / "sample_intensity_ch_1.csv",
-        area_csv=tmp_path / "sample_area_ch_0.csv",
+        intensity_csv=tmp_path / "intensity_total_c1" / "sample.csv",
+        area_csv=tmp_path / "area_c0" / "sample.csv",
     )
     _write_analysis_csv(
         pair.intensity_csv,
@@ -69,7 +86,7 @@ def test_load_normalized_sample_applies_area_median_filter(tmp_path: Path) -> No
         ],
     )
     _write_analysis_csv(
-        pair.area_csv,
+        pair.area_csv or tmp_path / "area_c0" / "sample.csv",
         [
             {"frame": frame, "position": 0, "roi": 0, "value": float(value)}
             for frame, value in enumerate([10, 10, 100, 10, 10])
@@ -84,8 +101,8 @@ def test_load_normalized_sample_applies_area_median_filter(tmp_path: Path) -> No
 def test_load_normalized_sample_marks_non_positive_area_invalid(tmp_path: Path) -> None:
     pair = SamplePair(
         sample_name="sample",
-        intensity_csv=tmp_path / "sample_intensity_ch_1.csv",
-        area_csv=tmp_path / "sample_area_ch_0.csv",
+        intensity_csv=tmp_path / "intensity_total_c1" / "sample.csv",
+        area_csv=tmp_path / "area_c0" / "sample.csv",
     )
     _write_analysis_csv(
         pair.intensity_csv,
@@ -96,7 +113,7 @@ def test_load_normalized_sample_marks_non_positive_area_invalid(tmp_path: Path) 
         ],
     )
     _write_analysis_csv(
-        pair.area_csv,
+        pair.area_csv or tmp_path / "area_c0" / "sample.csv",
         [
             {"frame": 0, "position": 0, "roi": 0, "value": 2.0},
             {"frame": 1, "position": 0, "roi": 0, "value": 0.0},
@@ -112,8 +129,8 @@ def test_load_normalized_sample_marks_non_positive_area_invalid(tmp_path: Path) 
 def test_load_normalized_sample_can_skip_area_normalization(tmp_path: Path) -> None:
     pair = SamplePair(
         sample_name="sample",
-        intensity_csv=tmp_path / "sample_intensity_ch_1.csv",
-        area_csv=tmp_path / "sample_area_ch_0.csv",
+        intensity_csv=tmp_path / "intensity_total_c1" / "sample.csv",
+        area_csv=tmp_path / "area_c0" / "sample.csv",
     )
     _write_analysis_csv(
         pair.intensity_csv,
@@ -123,7 +140,7 @@ def test_load_normalized_sample_can_skip_area_normalization(tmp_path: Path) -> N
         ],
     )
     _write_analysis_csv(
-        pair.area_csv,
+        pair.area_csv or tmp_path / "area_c0" / "sample.csv",
         [
             {"frame": 0, "position": 0, "roi": 0, "value": 10.0},
             {"frame": 1, "position": 0, "roi": 0, "value": 10.0},
@@ -220,7 +237,7 @@ def test_run_folder_statistics_normalized_requires_area_for_every_sample(
     tmp_path: Path,
 ) -> None:
     _write_analysis_csv(
-        tmp_path / "sample_intensity_ch_1.csv",
+        tmp_path / "intensity_total_c1" / "sample.csv",
         [
             {"frame": 0, "position": 0, "roi": 0, "value": 1.0},
             {"frame": 1, "position": 0, "roi": 0, "value": 2.0},
@@ -360,9 +377,8 @@ def test_load_analysis_csv_derives_time_min_from_frame(tmp_path: Path) -> None:
 
 def test_load_analysis_csv_rejects_legacy_time_schema(tmp_path: Path) -> None:
     csv_path = tmp_path / "legacy.csv"
-    pd.DataFrame(
-        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}],
-        columns=["time", "fov", "cell", "value"],
+    pd.DataFrame.from_records(
+        [{"time": 0.0, "fov": 0, "cell": 0, "value": 1.0}]
     ).to_csv(csv_path, index=False)
 
     try:

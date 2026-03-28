@@ -20,6 +20,10 @@ def _feature_column(feature_name: str, channel_id: int) -> str:
     return f"{feature_name}_c{channel_id}"
 
 
+def _bbox_area(*, w: int, h: int) -> float:
+    return float(max(0, int(w)) * max(0, int(h)))
+
+
 def _pc_area(seg_mask: np.ndarray) -> float:
     return float(np.count_nonzero(seg_mask))
 
@@ -27,13 +31,15 @@ def _pc_area(seg_mask: np.ndarray) -> float:
 def _fl_intensity_total(
     raw_roi: np.ndarray,
     bg_roi: np.ndarray,
-    seg_mask: np.ndarray,
     *,
     background_weight: float,
+    seg_mask: np.ndarray | None = None,
 ) -> float:
     corrected = raw_roi.astype(np.float32) - (
         float(background_weight) * bg_roi.astype(np.float32)
     )
+    if seg_mask is None:
+        return float(corrected.sum())
     return float(corrected[np.asarray(seg_mask, dtype=bool)].sum())
 
 
@@ -71,29 +77,17 @@ def _resolve_feature_columns(
     return pc_channel, pc_features, fl_feature_map, feature_columns
 
 
-def _load_seg_mask_frame(
-    rois_store,
-    *,
-    position_id: int,
-    pc_channel: int,
-    roi_id: int,
-    frame_idx: int,
-) -> np.ndarray | None:
-    try:
-        return rois_store.read_seg_mask_frame(position_id, pc_channel, roi_id, frame_idx)
-    except (KeyError, IndexError):
-        return None
-
-
 def _add_pc_features(
     row: dict[str, float | int | bool],
     *,
     pc_channel: int,
     pc_features: list[str],
-    seg_mask: np.ndarray | None,
+    bbox: np.ndarray,
 ) -> None:
+    x, y, w, h = [int(v) for v in bbox]
+    del x, y
     for feature_name in pc_features:
-        row[_feature_column(feature_name, pc_channel)] = np.nan if seg_mask is None else _pc_area(seg_mask)
+        row[_feature_column(feature_name, pc_channel)] = _bbox_area(w=w, h=h)
 
 
 def _add_fluorescence_features(
@@ -104,7 +98,6 @@ def _add_fluorescence_features(
     roi_id: int,
     frame_idx: int,
     fl_feature_map: dict[int, list[str]],
-    seg_mask: np.ndarray | None,
     background_weight: float,
 ) -> None:
     for channel_id in sorted(fl_feature_map):
@@ -125,13 +118,9 @@ def _add_fluorescence_features(
                 )
             except (KeyError, IndexError):
                 bg_roi = np.zeros_like(raw_roi, dtype=np.float32)
-            if seg_mask is None or seg_mask.shape != raw_roi.shape:
-                row[col] = np.nan
-                continue
             row[col] = _fl_intensity_total(
                 raw_roi,
                 bg_roi,
-                seg_mask,
                 background_weight=background_weight,
             )
 
@@ -159,18 +148,11 @@ def _build_extract_row(
         "w": w,
         "h": h,
     }
-    seg_mask = _load_seg_mask_frame(
-        rois_store,
-        position_id=position_id,
-        pc_channel=pc_channel,
-        roi_id=roi_id,
-        frame_idx=frame_idx,
-    )
     _add_pc_features(
         row,
         pc_channel=pc_channel,
         pc_features=pc_features,
-        seg_mask=seg_mask,
+        bbox=bbox,
     )
     _add_fluorescence_features(
         row,
@@ -179,7 +161,6 @@ def _build_extract_row(
         roi_id=roi_id,
         frame_idx=frame_idx,
         fl_feature_map=fl_feature_map,
-        seg_mask=seg_mask,
         background_weight=background_weight,
     )
     return row
@@ -193,6 +174,7 @@ def _extract_position_rows(
     pc_features: list[str],
     fl_feature_map: dict[int, list[str]],
     background_weight: float,
+    n_frames: int,
     cancel_event: Event | None,
     progress_callback: Callable[[dict[str, int | str]], None] | None,
     worker_id: int,
@@ -203,13 +185,11 @@ def _extract_position_rows(
     try:
         roi_ids = rois_store.read_roi_ids(position_id)
         roi_bboxes = rois_store.read_roi_bboxes(position_id)
-        roi_is_present = rois_store.read_roi_is_present(position_id)
     except KeyError as exc:
         raise FileNotFoundError(f"Missing roi metadata for extraction at position/{position_id}") from exc
 
     rows: list[dict[str, float | int | bool]] = []
     extracted_rows = 0
-    n_frames = int(roi_is_present.shape[1]) if roi_is_present.ndim == 2 else 0
     n_rois = int(roi_ids.size)
 
     for roi_idx, roi_id in enumerate(roi_ids):
@@ -217,15 +197,13 @@ def _extract_position_rows(
         for frame_idx in range(n_frames):
             if cancel_event and cancel_event.is_set():
                 return rows, extracted_rows, True
-            if not bool(roi_is_present[roi_idx, frame_idx]):
-                continue
             rows.append(
                 _build_extract_row(
                     rois_store=rois_store,
                     position_id=position_id,
                     roi_id=roi_int,
                     frame_idx=frame_idx,
-                    bbox=roi_bboxes[roi_idx, frame_idx],
+                    bbox=roi_bboxes[roi_idx],
                     pc_channel=pc_channel,
                     pc_features=pc_features,
                     fl_feature_map=fl_feature_map,
@@ -297,8 +275,8 @@ def _extract_trace_dataframe(
                 row["intensity_total_c1"] = _fl_intensity_total(
                     image[frame_idx],
                     background[frame_idx],
-                    mask,
                     background_weight=background_weight,
+                    seg_mask=mask,
                 )
             rows.append(row)
         if progress_callback is not None:
@@ -382,6 +360,7 @@ def run_extract_to_csv(
             pc_features=pc_features,
             fl_feature_map=fl_feature_map,
             background_weight=background_weight,
+            n_frames=int(metadata.n_frames),
             cancel_event=cancel_event,
             progress_callback=progress_callback,
             worker_id=worker_id,

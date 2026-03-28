@@ -2,13 +2,18 @@
 
 import logging
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pandas as pd
 from PySide6.QtCore import QObject, Signal
 
 from pyama.apps.statistics.metrics import evaluate_onset_trace
 from pyama.io.samples import discover_statistics_sample_pairs
-from pyama.tasks import StatisticsTaskRequest, TaskStatus, submit_statistics
+from pyama.tasks import (
+    StatisticsTaskRequest,
+    TaskStatus,
+    submit_statistics,
+)
 from pyama.types import SamplePair
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.task_runner import TaskWorker, WorkerHandle, run_task
@@ -37,6 +42,13 @@ _METADATA_COLUMNS = {
     "time_end_min",
 }
 _ONSET_METRICS = {"onset_time_min", "slope_min", "offset", "r_squared"}
+
+
+class TracePlotData(TypedDict):
+    lines_data: list[tuple[object, object]]
+    styles_data: list[dict[str, object]]
+    title: str
+    y_label: str
 
 
 class StatisticsWorker(TaskWorker):
@@ -71,7 +83,9 @@ class StatisticsWorker(TaskWorker):
                 progress_span=50,
             )
             merged_results = self._merge_results(auc_results, onset_results)
-            self.emit_success((merged_results, traces_by_sample, [auc_path, onset_path]))
+            self.emit_success(
+                (merged_results, traces_by_sample, [auc_path, onset_path])
+            )
         except Exception as exc:  # pragma: no cover - worker boundary
             logger.exception("Statistics processing failed")
             self.emit_failure(str(exc))
@@ -105,7 +119,9 @@ class StatisticsWorker(TaskWorker):
         return snapshot.result
 
     @staticmethod
-    def _merge_results(auc_results: pd.DataFrame, onset_results: pd.DataFrame) -> pd.DataFrame:
+    def _merge_results(
+        auc_results: pd.DataFrame, onset_results: pd.DataFrame
+    ) -> pd.DataFrame:
         merged = auc_results.merge(
             onset_results,
             on=["sample", "position", "roi"],
@@ -135,10 +151,9 @@ class StatisticsWorker(TaskWorker):
             )
             merged[column] = left.combine_first(right)
         if "success_auc" in merged.columns and "success_onset" in merged.columns:
-            merged["success"] = (
-                merged["success_auc"].fillna(False).astype(bool)
-                & merged["success_onset"].fillna(False).astype(bool)
-            )
+            merged["success"] = merged["success_auc"].fillna(False).astype(
+                bool
+            ) & merged["success_onset"].fillna(False).astype(bool)
         return merged
 
 
@@ -211,18 +226,7 @@ class StatisticsViewModel(QObject):
                 can_next=self.can_go_to_next_detail_page,
             ),
             visible_trace_ids=list(self.visible_trace_ids),
-            trace_plot=(
-                None
-                if self.selected_trace_plot_data is None
-                else PlotSpec(
-                    kind="lines",
-                    lines_data=self.selected_trace_plot_data["lines_data"],
-                    styles_data=self.selected_trace_plot_data["styles_data"],
-                    title=self.selected_trace_plot_data["title"],
-                    x_label="Time (min)",
-                    y_label=self.selected_trace_plot_data["y_label"],
-                )
-            ),
+            trace_plot=self.selected_trace_plot,
             comparison_plot=comparison_plot,
             summary_rows=list(self.summary_rows),
         )
@@ -305,7 +309,9 @@ class StatisticsViewModel(QObject):
         grouped_values: dict[str, list[float]] = {}
         for sample_name, sample_df in self._results_df.groupby("sample", sort=True):
             values = self._sample_metric_values(sample_df, self._selected_metric)
-            grouped_values[sample_name] = values.tolist()
+            grouped_values[str(sample_name)] = [
+                float(value) for value in values.tolist()
+            ]
         return grouped_values
 
     @property
@@ -321,7 +327,7 @@ class StatisticsViewModel(QObject):
             q3 = float(values.quantile(0.75))
             rows.append(
                 (
-                    sample_name,
+                    str(sample_name),
                     int(len(values)),
                     float(values.mean()),
                     float(values.std(ddof=0)),
@@ -359,12 +365,18 @@ class StatisticsViewModel(QObject):
 
     @property
     def can_go_to_next_detail_page(self) -> bool:
-        return self._detail_page < max(0, len(self._current_sample_position_groups()) - 1)
+        return self._detail_page < max(
+            0, len(self._current_sample_position_groups()) - 1
+        )
 
     @property
     def detail_stats_text(self) -> str:
         sample_results = self._sample_results()
-        if sample_results is None or sample_results.empty or self._selected_sample is None:
+        if (
+            sample_results is None
+            or sample_results.empty
+            or self._selected_sample is None
+        ):
             return ""
         auc_values = pd.to_numeric(sample_results["auc"], errors="coerce").dropna()
         if "onset_time_min" in sample_results.columns:
@@ -374,7 +386,9 @@ class StatisticsViewModel(QObject):
         else:
             onset_values = pd.Series(dtype=float)
         auc_text = (
-            f"AUC median={auc_values.median():.3f}" if not auc_values.empty else "AUC median=n/a"
+            f"AUC median={auc_values.median():.3f}"
+            if not auc_values.empty
+            else "AUC median=n/a"
         )
         onset_text = (
             f"Onset median={onset_values.median():.3f} min"
@@ -384,7 +398,7 @@ class StatisticsViewModel(QObject):
         return f"Sample {self._selected_sample}: {auc_text}, {onset_text}"
 
     @property
-    def selected_trace_plot_data(self) -> dict[str, object] | None:
+    def selected_trace_plot_data(self) -> TracePlotData | None:
         if self._selected_sample is None or self._selected_cell is None:
             return None
         trace_df = self._traces_by_sample.get(self._selected_sample)
@@ -399,8 +413,8 @@ class StatisticsViewModel(QObject):
 
         time_values = cell_df["time_min"].to_numpy()
         trace_values = cell_df["value"].to_numpy()
-        lines_data = [(time_values, trace_values)]
-        styles_data = [
+        lines_data: list[tuple[object, object]] = [(time_values, trace_values)]
+        styles_data: list[dict[str, object]] = [
             {
                 "color": "blue",
                 "alpha": 0.8,
@@ -461,6 +475,20 @@ class StatisticsViewModel(QObject):
                 else "Intensity total"
             ),
         }
+
+    @property
+    def selected_trace_plot(self) -> PlotSpec | None:
+        plot_data = self.selected_trace_plot_data
+        if plot_data is None:
+            return None
+        return PlotSpec(
+            kind="lines",
+            lines_data=plot_data["lines_data"],
+            styles_data=plot_data["styles_data"],
+            title=plot_data["title"],
+            x_label="Time (min)",
+            y_label=plot_data["y_label"],
+        )
 
     @property
     def running(self) -> bool:
@@ -531,7 +559,9 @@ class StatisticsViewModel(QObject):
         if self._detail_page <= 0:
             return
         self._detail_page -= 1
-        self._selected_cell = self.visible_trace_ids[0] if self.visible_trace_ids else None
+        self._selected_cell = (
+            self.visible_trace_ids[0] if self.visible_trace_ids else None
+        )
         self.results_changed.emit()
         self.state_changed.emit()
 
@@ -539,7 +569,9 @@ class StatisticsViewModel(QObject):
         if not self.can_go_to_next_detail_page:
             return
         self._detail_page += 1
-        self._selected_cell = self.visible_trace_ids[0] if self.visible_trace_ids else None
+        self._selected_cell = (
+            self.visible_trace_ids[0] if self.visible_trace_ids else None
+        )
         self.results_changed.emit()
         self.state_changed.emit()
 
@@ -562,12 +594,16 @@ class StatisticsViewModel(QObject):
         try:
             sample_pairs = discover_statistics_sample_pairs(self._folder_path)
         except Exception as exc:
-            logger.warning("Failed to load statistics folder %s: %s", self._folder_path, exc)
+            logger.warning(
+                "Failed to load statistics folder %s: %s", self._folder_path, exc
+            )
             self._sample_pairs = []
             self._normalization_available = False
             self.clear_results()
             self.state_changed.emit()
-            self.app_view_model.set_status_message(f"Failed to load statistics folder: {exc}")
+            self.app_view_model.set_status_message(
+                f"Failed to load statistics folder: {exc}"
+            )
             return
 
         self._sample_pairs = sample_pairs
@@ -595,7 +631,9 @@ class StatisticsViewModel(QObject):
             self.app_view_model.set_status_message("Set a workspace folder first.")
             return
         if not self._sample_pairs:
-            self.app_view_model.set_status_message("No valid sample pairs were found in this folder.")
+            self.app_view_model.set_status_message(
+                "No valid sample pairs were found in this folder."
+            )
             return
 
         worker = StatisticsWorker(
@@ -617,7 +655,9 @@ class StatisticsViewModel(QObject):
         self.app_view_model.begin_busy()
         self.app_view_model.set_status_message("Running statistics...")
 
-    def _on_statistics_finished(self, success: bool, result: object, message: str) -> None:
+    def _on_statistics_finished(
+        self, success: bool, result: object, message: str
+    ) -> None:
         self._running = False
         self.state_changed.emit()
         self.app_view_model.end_busy()
@@ -626,7 +666,21 @@ class StatisticsViewModel(QObject):
             self.app_view_model.set_status_message(message)
             return
 
-        self._results_df, self._traces_by_sample, self._saved_csv_paths = result
+        if not (
+            isinstance(result, tuple)
+            and len(result) == 3
+            and isinstance(result[0], pd.DataFrame)
+            and isinstance(result[1], dict)
+            and isinstance(result[2], list)
+        ):
+            self.app_view_model.set_status_message(
+                "Statistics returned an invalid result."
+            )
+            return
+        self._results_df, self._traces_by_sample, self._saved_csv_paths = cast(
+            tuple[pd.DataFrame, dict[str, pd.DataFrame], list[Path]],
+            result,
+        )
         sample_names = self.sample_names
         self._selected_sample = sample_names[0] if sample_names else None
         self._selected_metric = self._preferred_metric()
@@ -647,7 +701,9 @@ class StatisticsViewModel(QObject):
         if message:
             self.app_view_model.set_status_message(f"{message} ({percent}%)")
 
-    def result_row_for_cell(self, position: int, roi: int) -> dict[str, float | bool | str] | None:
+    def result_row_for_cell(
+        self, position: int, roi: int
+    ) -> dict[str, float | bool | str] | None:
         sample_results = self._sample_results()
         if sample_results is None:
             return None

@@ -10,8 +10,11 @@ from pyama.apps.processing.extract import (
     list_fluorescence_features,
     list_phase_features,
 )
-from pyama.apps.processing.merge import normalize_samples
-from pyama.io.microscopy import load_microscopy_file
+from pyama.apps.processing.merge import (
+    normalize_samples,
+)
+from pyama.io.microscopy import inspect_microscopy_file
+from pyama.io.samples import read_samples_yaml
 from pyama.tasks import (
     MergeTaskRequest,
     ProcessingTaskRequest,
@@ -19,15 +22,14 @@ from pyama.tasks import (
     submit_merge,
     submit_processing,
 )
-from pyama.io.samples import read_samples_yaml
 from pyama.types import (
+    Channels,
     MergeSample,
     MergeSamplePayload,
     MicroscopyMetadata,
     ProcessingConfig,
     ProcessingParams,
 )
-from pyama.types.processing import Channels
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.task_runner import TaskWorker, WorkerHandle, run_task
 from pyama_gui.types.processing import ProcessingViewState
@@ -48,21 +50,11 @@ class MicroscopyLoaderWorker(TaskWorker):
                 self.emit_failure("Loading cancelled")
                 return
 
-            reader, metadata = load_microscopy_file(self._path)
-            try:
-                if self.cancelled:
-                    self.emit_failure("Loading cancelled")
-                    return
-                self.emit_success(metadata)
-            finally:
-                try:
-                    reader.close()
-                except Exception:
-                    logger.debug(
-                        "Failed to close microscopy reader after metadata load for %s",
-                        self._path,
-                        exc_info=True,
-                    )
+            metadata = inspect_microscopy_file(self._path)
+            if self.cancelled:
+                self.emit_failure("Loading cancelled")
+                return
+            self.emit_success(metadata)
         except Exception as exc:  # pragma: no cover - worker boundary
             logger.exception("Microscopy loading failed for %s", self._path)
             self.emit_failure(str(exc))
@@ -113,6 +105,7 @@ class WorkflowWorker(TaskWorker):
         except Exception as exc:  # pragma: no cover - worker boundary
             logger.exception("Workflow execution failed")
             self.emit_failure(f"Workflow error: {exc}")
+
 
 class MergeWorker(TaskWorker):
     """Run sample merge in the background."""
@@ -190,6 +183,9 @@ class ProcessingViewModel(QObject):
         self._workflow_runner: WorkerHandle | None = None
         self._merge_runner: WorkerHandle | None = None
         self.app_view_model.workspace_changed.connect(self._on_workspace_changed)
+        self.app_view_model.microscopy_changed.connect(self._on_microscopy_changed)
+        if self.app_view_model.microscopy_path is not None:
+            self._on_microscopy_changed(self.app_view_model.microscopy_path)
 
     @property
     def state(self) -> ProcessingViewState:
@@ -215,7 +211,9 @@ class ProcessingViewModel(QObject):
             for sample in self._samples
         ]
         return ProcessingViewState(
-            microscopy_path_label=self._microscopy_path.name if self._microscopy_path else "",
+            microscopy_path_label=str(self._microscopy_path)
+            if self._microscopy_path
+            else "",
             phase_channel_options=list(self._phase_channel_options),
             fluorescence_channel_options=list(self._fluorescence_channel_options),
             available_pc_features=list(self._available_pc_features),
@@ -295,22 +293,18 @@ class ProcessingViewModel(QObject):
         self._workspace_dir = path
         self.state_changed.emit()
 
-    def request_select_microscopy(self) -> None:
-        if self.app_view_model.dialog_service is None:
-            raise RuntimeError("No dialog service configured.")
-        path = self.app_view_model.dialog_service.select_open_file(
-            "Select Microscopy File",
-            str(self._workspace_dir or Path.cwd()),
-            "Microscopy Files (*.nd2 *.czi);;ND2 Files (*.nd2);;CZI Files (*.czi);;All Files (*)",
-        )
-        if path is not None:
-            self.select_microscopy(path)
-
-    def select_microscopy(self, path: Path) -> None:
+    def _on_microscopy_changed(self, path: Path | None) -> None:
+        if self._microscopy_path == path and (
+            path is None or self._metadata is not None
+        ):
+            return
         self._reset_microscopy_state(keep_samples=True)
         self._microscopy_path = path
         self.metadata_changed.emit()
         self.state_changed.emit()
+        if path is None:
+            return
+
         self.app_view_model.set_status_message("Loading microscopy file...")
         self.app_view_model.begin_busy()
 
@@ -323,20 +317,7 @@ class ProcessingViewModel(QObject):
         )
 
     def _reset_microscopy_state(self, *, keep_samples: bool) -> None:
-        if self._microscopy_loader:
-            self._microscopy_loader.cancel()
-            self._microscopy_loader = None
-            self.app_view_model.end_busy()
-        if self._workflow_runner:
-            self._workflow_runner.cancel()
-            self._workflow_runner = None
-            if self._workflow_running:
-                self.app_view_model.end_busy()
-        if self._merge_runner:
-            self._merge_runner.cancel()
-            self._merge_runner = None
-            if self._merge_running:
-                self.app_view_model.end_busy()
+        self._cancel_active_workers()
 
         self._metadata = None
         self._microscopy_path = None
@@ -360,6 +341,22 @@ class ProcessingViewModel(QObject):
         self.merge_state_changed.emit()
         self.metadata_changed.emit()
         self.state_changed.emit()
+
+    def _cancel_active_workers(self) -> None:
+        if self._microscopy_loader:
+            self._microscopy_loader.cancel()
+            self._microscopy_loader = None
+            self.app_view_model.end_busy()
+        if self._workflow_runner:
+            self._workflow_runner.cancel()
+            self._workflow_runner = None
+            if self._workflow_running:
+                self.app_view_model.end_busy()
+        if self._merge_runner:
+            self._merge_runner.cancel()
+            self._merge_runner = None
+            if self._merge_running:
+                self.app_view_model.end_busy()
 
     def set_channel_selection(
         self,
@@ -386,9 +383,7 @@ class ProcessingViewModel(QObject):
         features.append(feature_name)
         self.state_changed.emit()
 
-    def remove_fluorescence_features(
-        self, rows: list[tuple[int, str]]
-    ) -> None:
+    def remove_fluorescence_features(self, rows: list[tuple[int, str]]) -> None:
         if not rows:
             return
         changed = False
@@ -423,16 +418,16 @@ class ProcessingViewModel(QObject):
             fov_start=self._coerce_int(values.get("position_start"), 0),
             fov_end=self._coerce_int(values.get("position_end"), -1),
             n_workers=self._coerce_int(values.get("n_workers"), 2),
-            background_weight=self._coerce_float(
-                values.get("background_weight"), 1.0
-            ),
+            background_weight=self._coerce_float(values.get("background_weight"), 1.0),
         )
 
     def run_workflow(self) -> None:
         if self._workflow_running:
             return
         if self._microscopy_path is None:
-            self.app_view_model.set_status_message("Select a microscopy file first.")
+            self.app_view_model.set_status_message(
+                "Select a microscopy file from the Welcome tab first."
+            )
             return
         if self._workspace_dir is None:
             self.app_view_model.set_status_message("Set a workspace folder first.")

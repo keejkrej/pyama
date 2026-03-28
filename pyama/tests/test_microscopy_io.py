@@ -9,8 +9,10 @@ from pyama.io import (
     get_microscopy_channel_stack,
     get_microscopy_frame,
     get_microscopy_time_stack,
+    inspect_microscopy_file,
     load_microscopy_file,
 )
+from pyama.types import MicroscopyMetadata
 
 
 class _ComputedArray:
@@ -32,9 +34,9 @@ class _DaskLikeArray:
 class _FakeNd2File:
     def __init__(self, path: str) -> None:
         self.path = path
-        self.sizes = {"P": 2, "T": 3, "C": 2, "Y": 2, "X": 3}
-        self._array = np.arange(2 * 3 * 2 * 2 * 3, dtype=np.uint16).reshape(
-            2, 3, 2, 2, 3
+        self.sizes = {"P": 2, "T": 3, "C": 2, "Z": 2, "Y": 2, "X": 3}
+        self._array = np.arange(2 * 3 * 2 * 2 * 2 * 3, dtype=np.uint16).reshape(
+            2, 3, 2, 2, 2, 3
         )
         self.metadata = SimpleNamespace(
             channels=[
@@ -77,6 +79,7 @@ class _FakeCziReader:
         self.total_bounding_box_no_pyramid = {
             "T": (0, 3),
             "C": (0, 2),
+            "Z": (0, 2),
             "Y": (0, 2),
             "X": (0, 3),
         }
@@ -115,8 +118,9 @@ class _FakeCziReader:
         plane = plane or {}
         time_idx = plane.get("T", 0)
         channel_idx = plane.get("C", 0)
+        z_idx = plane.get("Z", 0)
         scene_value = 0 if scene is None else scene
-        value = scene_value + (10 * channel_idx) + time_idx
+        value = scene_value + (10 * channel_idx) + time_idx + (100 * z_idx)
         return np.full((2, 3), value, dtype=np.uint16)
 
     def close(self) -> None:
@@ -141,24 +145,29 @@ def test_load_nd2_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
     assert metadata.position_list == (0, 1)
     assert metadata.n_positions == 2
     assert metadata.n_channels == 2
+    assert metadata.n_z == 2
     assert metadata.channel_names == ("Phase", "GFP")
     assert metadata.timepoints == (0.0, 5.0, 10.0)
-    assert reader.shape == (2, 3, 2, 2, 3)
+    assert metadata.z_slices == (0, 1)
+    assert reader.shape == (2, 3, 2, 2, 2, 3)
 
-    frame = get_microscopy_frame(reader, 1, 1, 2)
+    frame = get_microscopy_frame(reader, 1, 1, 2, z=1)
     assert frame.shape == (2, 3)
-    assert np.array_equal(frame, np.array([[66, 67, 68], [69, 70, 71]], dtype=np.uint16))
+    assert np.array_equal(
+        frame,
+        np.array([[138, 139, 140], [141, 142, 143]], dtype=np.uint16),
+    )
 
     channel_stack = get_microscopy_channel_stack(reader, 0, 1)
     assert channel_stack.shape == (2, 2, 3)
     assert np.array_equal(
-        channel_stack[0], np.array([[12, 13, 14], [15, 16, 17]], dtype=np.uint16)
+        channel_stack[0], np.array([[24, 25, 26], [27, 28, 29]], dtype=np.uint16)
     )
 
     time_stack = get_microscopy_time_stack(reader, 0, 1)
     assert time_stack.shape == (3, 2, 3)
     assert np.array_equal(
-        time_stack[2], np.array([[30, 31, 32], [33, 34, 35]], dtype=np.uint16)
+        time_stack[2], np.array([[60, 61, 62], [63, 64, 65]], dtype=np.uint16)
     )
 
     reader.close()
@@ -174,6 +183,36 @@ def test_load_nd2_fallback_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     assert metadata.timepoints == (0.0, 1.0, 2.0)
 
 
+def test_inspect_microscopy_file_closes_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    reader = _FakeNd2File("sample.nd2")
+    metadata = MicroscopyMetadata(
+        file_path=Path("sample.nd2"),
+        base_name="sample",
+        file_type="nd2",
+        height=2,
+        width=3,
+        n_frames=3,
+        channel_names=("Phase", "GFP"),
+        dtype="uint16",
+        timepoints=(0.0, 5.0, 10.0),
+        position_list=(0, 1),
+        z_slices=(0, 1),
+    )
+
+    def fake_load_microscopy_file(_path: Path):
+        return reader, metadata
+
+    monkeypatch.setattr(
+        "pyama.io.microscopy.load_microscopy_file",
+        fake_load_microscopy_file,
+    )
+
+    loaded_metadata = inspect_microscopy_file(Path("sample.nd2"))
+
+    assert loaded_metadata == metadata
+    assert reader.closed is True
+
+
 def test_load_czi_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pyama.io.microscopy.czi_api.CziReader", _FakeCziReader)
 
@@ -183,13 +222,15 @@ def test_load_czi_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
     assert metadata.position_list == (0, 1)
     assert metadata.n_positions == 2
     assert metadata.n_channels == 2
+    assert metadata.n_z == 2
     assert metadata.height == 2
     assert metadata.width == 3
     assert metadata.channel_names == ("Brightfield", "Fluor")
     assert metadata.timepoints == (1.5, 3.0, 4.5)
+    assert metadata.z_slices == (0, 1)
 
-    frame = get_microscopy_frame(reader, 1, 1, 2)
-    assert np.array_equal(frame, np.full((2, 3), 32, dtype=np.uint16))
+    frame = get_microscopy_frame(reader, 1, 1, 2, z=1)
+    assert np.array_equal(frame, np.full((2, 3), 132, dtype=np.uint16))
 
     channel_stack = get_microscopy_channel_stack(reader, 0, 1)
     assert channel_stack.shape == (2, 2, 3)
@@ -204,9 +245,7 @@ def test_load_czi_metadata_and_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_czi_scene_size_mismatch_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "pyama.io.microscopy.czi_api.CziReader", _FakeCziReaderMismatch
-    )
+    monkeypatch.setattr("pyama.io.microscopy.czi_api.CziReader", _FakeCziReaderMismatch)
 
     with pytest.raises(RuntimeError, match="identical layer-0 dimensions"):
         load_microscopy_file(Path("mismatch.czi"))

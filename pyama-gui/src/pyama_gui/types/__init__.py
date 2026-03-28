@@ -1,5 +1,6 @@
 """Type definitions for pyama-gui."""
 
+from pyama_gui.types.bboxes import BBoxesViewState
 from pyama_gui.types.common import AppState, ListRowState, OverlaySpec, PageState, PlotSpec
 from pyama_gui.types.modeling import FittingRequest
 from pyama_gui.types.processing import ProcessingViewState
@@ -9,6 +10,7 @@ from pyama_gui.types.modeling import ModelingViewState
 
 __all__ = [
     "AppState",
+    "BBoxesViewState",
     "ListRowState",
     "OverlaySpec",
     "PageState",

@@ -8,13 +8,10 @@
 import argparse
 import logging
 import multiprocessing as mp
+from pathlib import Path
 import sys
 
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
-
-from pyama_gui.main_window import MainWindow
-from pyama_gui.services import QtFileDialogService
+import pyama_gui._qtwebengine_bootstrap  # noqa: F401
 
 
 # =============================================================================
@@ -24,6 +21,12 @@ from pyama_gui.services import QtFileDialogService
 
 def main() -> None:
     """Spin up the Qt event loop and show the primary application window."""
+    from PySide6.QtWidgets import QApplication
+
+    from pyama.tasks import shutdown_backend, start_rpc_backend
+    from pyama_gui.main_window import MainWindow
+    from pyama_gui.services import QtFileDialogService
+
     # ------------------------------------------------------------------------
     # COMMAND LINE ARGUMENTS
     # ------------------------------------------------------------------------
@@ -32,6 +35,7 @@ def main() -> None:
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+    start_rpc_backend(cwd=Path.cwd())
 
     # ------------------------------------------------------------------------
     # LOGGING CONFIGURATION (do this first!)
@@ -71,25 +75,26 @@ def main() -> None:
     # ------------------------------------------------------------------------
     # QT APPLICATION SETUP
     # ------------------------------------------------------------------------
-    app = QApplication(sys.argv)
-    app.setApplicationName("PyAMA")
-    app.setQuitOnLastWindowClosed(True)
+    try:
+        app = QApplication(sys.argv)
+        app.setApplicationName("PyAMA")
+        app.setQuitOnLastWindowClosed(True)
 
-    # ------------------------------------------------------------------------
-    # MAIN WINDOW CREATION AND DISPLAY
-    # ------------------------------------------------------------------------
-    window = MainWindow(dialog_service=QtFileDialogService())
-    window.show()
-    QTimer.singleShot(0, window.prompt_for_workspace_on_startup)
+        # --------------------------------------------------------------------
+        # MAIN WINDOW CREATION AND DISPLAY
+        # --------------------------------------------------------------------
+        window = MainWindow(dialog_service=QtFileDialogService())
+        window.show()
 
-    # ------------------------------------------------------------------------
-    # EVENT LOOP EXECUTION
-    # ------------------------------------------------------------------------
-    exit_code = app.exec()
-
-    # Clean up
-    app.processEvents()
-    app.quit()
+        # --------------------------------------------------------------------
+        # EVENT LOOP EXECUTION
+        # --------------------------------------------------------------------
+        exit_code = app.exec()
+    finally:
+        if "app" in locals():
+            app.processEvents()
+            app.quit()
+        shutdown_backend()
 
     sys.exit(exit_code)
 

@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QProgressBar,
     QPushButton,
     QSizePolicy,
@@ -125,17 +124,6 @@ class ProcessingView(QWidget):
     def _build_input_section(self) -> QGroupBox:
         group = QGroupBox("Input")
         layout = QVBoxLayout(group)
-
-        header = QHBoxLayout()
-        header.addWidget(QLabel("Microscopy File:"))
-        header.addStretch()
-        self._microscopy_button = QPushButton("Browse")
-        header.addWidget(self._microscopy_button)
-        layout.addLayout(header)
-
-        self._microscopy_path_field = QLineEdit()
-        self._microscopy_path_field.setReadOnly(True)
-        layout.addWidget(self._microscopy_path_field)
 
         pc_layout = QVBoxLayout()
         pc_label = QLabel("Phase Contrast")
@@ -267,7 +255,6 @@ class ProcessingView(QWidget):
         self.view_model.samples_changed.connect(self._refresh_samples)
         self.view_model.merge_state_changed.connect(self._refresh_merge_state)
 
-        self._microscopy_button.clicked.connect(self._on_microscopy_clicked)
         self._pc_combo.currentIndexChanged.connect(self._sync_channel_selection)
         self._pc_feature_table.itemSelectionChanged.connect(
             self._sync_channel_selection
@@ -287,13 +274,8 @@ class ProcessingView(QWidget):
         self._run_merge_btn.clicked.connect(self._on_run_merge)
 
     @Slot()
-    def _on_microscopy_clicked(self) -> None:
-        self.view_model.request_select_microscopy()
-
-    @Slot()
     def _refresh_metadata(self) -> None:
         state = self.view_model.state
-        self._microscopy_path_field.setText(state.microscopy_path_label)
 
         self._pc_combo.blockSignals(True)
         self._pc_combo.clear()
@@ -360,11 +342,11 @@ class ProcessingView(QWidget):
     @Slot()
     def _sync_channel_selection(self) -> None:
         phase_channel = self._pc_combo.currentData()
-        pc_features = [
-            self._pc_feature_table.item(index.row(), 0).text()
-            for index in self._pc_feature_table.selectionModel().selectedRows()
-            if self._pc_feature_table.item(index.row(), 0) is not None
-        ]
+        pc_features: list[str] = []
+        for index in self._pc_feature_table.selectionModel().selectedRows():
+            item = self._pc_feature_table.item(index.row(), 0)
+            if item is not None:
+                pc_features.append(item.text())
         self.view_model.set_channel_selection(
             phase_channel=phase_channel,
             pc_features=pc_features,
@@ -497,9 +479,7 @@ class ProcessingView(QWidget):
             features.setdefault(int(channel_value), []).append(feature_item.text())
         return features
 
-    def _populate_fl_feature_table(
-        self, rows: list[tuple[str, int, str]]
-    ) -> None:
+    def _populate_fl_feature_table(self, rows: list[tuple[str, int, str]]) -> None:
         self._fl_feature_table.setRowCount(0)
         for channel_label, channel_id, feature_name in rows:
             row = self._fl_feature_table.rowCount()
@@ -531,7 +511,9 @@ class ProcessingView(QWidget):
                 {
                     "name": (name_item.text() if name_item is not None else "").strip(),
                     "positions": (
-                        (positions_item.text() if positions_item is not None else "").strip()
+                        (
+                            positions_item.text() if positions_item is not None else ""
+                        ).strip()
                     ),
                 }
             )

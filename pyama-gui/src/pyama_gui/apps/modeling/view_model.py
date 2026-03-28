@@ -9,8 +9,12 @@ from PySide6.QtCore import QObject, Signal
 
 from pyama.apps.modeling.fitting import analyze_fitting_quality
 from pyama.apps.modeling.models import get_model, list_models
-from pyama.io.csv import load_analysis_csv
-from pyama.tasks import ModelFitTaskRequest, TaskStatus, submit_model_fit
+from pyama.io.csv import load_analysis_csv as load_analysis_table
+from pyama.tasks import (
+    ModelFitTaskRequest,
+    TaskStatus,
+    submit_model_fit,
+)
 from pyama_gui.app_view_model import AppViewModel
 from pyama_gui.task_runner import TaskWorker, WorkerHandle, run_task
 from pyama_gui.types.common import ListRowState, PageState, PlotSpec
@@ -451,7 +455,7 @@ class ModelingViewModel(QObject):
 
     def load_csv(self, path: Path) -> None:
         try:
-            df = load_analysis_csv(
+            df = load_analysis_table(
                 path, frame_interval_minutes=self._frame_interval_minutes
             )
         except Exception as exc:

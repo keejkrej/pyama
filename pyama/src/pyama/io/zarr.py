@@ -32,20 +32,31 @@ class RoisZarrSchema:
     def roi_bboxes_path(self, position_id: int) -> str:
         return f"position/{int(position_id)}/metadata/roi_bboxes"
 
-    def roi_is_present_path(self, position_id: int) -> str:
-        return f"position/{int(position_id)}/metadata/roi_is_present"
+    def channel_group_path(self, position_id: int) -> str:
+        return f"position/{int(position_id)}/channel"
 
-    def seg_mask_frame_path(
+    def roi_group_path(
+        self,
+        position_id: int,
+        channel_id: int,
+    ) -> str:
+        return f"{self.channel_group_path(position_id)}/{int(channel_id)}/roi"
+
+    def roi_raw_path(
         self,
         position_id: int,
         channel_id: int,
         roi_id: int,
-        frame_idx: int,
     ) -> str:
-        return (
-            f"position/{int(position_id)}/channel/{int(channel_id)}/roi/"
-            f"{int(roi_id)}/seg_mask/frame/{int(frame_idx)}"
-        )
+        return f"{self.roi_group_path(position_id, channel_id)}/{int(roi_id)}/raw"
+
+    def roi_raw_frame_group_path(
+        self,
+        position_id: int,
+        channel_id: int,
+        roi_id: int,
+    ) -> str:
+        return f"{self.roi_raw_path(position_id, channel_id, roi_id)}/frame"
 
     def roi_raw_frame_path(
         self,
@@ -413,7 +424,7 @@ class RoisZarrStore(RoisZarrSchema):
     def read_int32_1d(self, path: str) -> np.ndarray:
         return np.asarray(self.get_required_array(path)[:], dtype=np.int32)
 
-    def read_int32_3d(self, path: str) -> np.ndarray:
+    def read_int32_2d(self, path: str) -> np.ndarray:
         return np.asarray(self.get_required_array(path)[:], dtype=np.int32)
 
     def write_array(self, path: str, data: np.ndarray) -> zarr.Array:
@@ -437,30 +448,11 @@ class RoisZarrStore(RoisZarrSchema):
     def write_roi_bboxes(self, position_id: int, roi_bboxes: np.ndarray) -> zarr.Array:
         return self.write_array(self.roi_bboxes_path(position_id), np.asarray(roi_bboxes, dtype=np.int32))
 
-    def write_roi_is_present(self, position_id: int, roi_is_present: np.ndarray) -> zarr.Array:
-        return self.write_array(self.roi_is_present_path(position_id), np.asarray(roi_is_present, dtype=bool))
-
     def read_roi_ids(self, position_id: int) -> np.ndarray:
         return self.read_int32_1d(self.roi_ids_path(position_id))
 
     def read_roi_bboxes(self, position_id: int) -> np.ndarray:
-        return self.read_int32_3d(self.roi_bboxes_path(position_id))
-
-    def read_roi_is_present(self, position_id: int) -> np.ndarray:
-        return self.read_bool_2d(self.roi_is_present_path(position_id))
-
-    def write_seg_mask_frame(
-        self,
-        position_id: int,
-        channel_id: int,
-        roi_id: int,
-        frame_idx: int,
-        data: np.ndarray,
-    ) -> zarr.Array:
-        return self.write_array(
-            self.seg_mask_frame_path(position_id, channel_id, roi_id, frame_idx),
-            np.asarray(data, dtype=bool),
-        )
+        return self.read_int32_2d(self.roi_bboxes_path(position_id))
 
     def write_roi_raw_frame(
         self,
@@ -488,15 +480,6 @@ class RoisZarrStore(RoisZarrSchema):
             np.asarray(data, dtype=np.uint16),
         )
 
-    def read_seg_mask_frame(
-        self,
-        position_id: int,
-        channel_id: int,
-        roi_id: int,
-        frame_idx: int,
-    ) -> np.ndarray:
-        return self.read_bool_2d(self.seg_mask_frame_path(position_id, channel_id, roi_id, frame_idx))
-
     def read_roi_raw_frame(
         self,
         position_id: int,
@@ -514,6 +497,42 @@ class RoisZarrStore(RoisZarrSchema):
         frame_idx: int,
     ) -> np.ndarray:
         return self.read_uint16_2d(self.roi_background_frame_path(position_id, channel_id, roi_id, frame_idx))
+
+    def list_position_ids(self) -> list[int]:
+        node = self.root.get("position")
+        if node is None:
+            return []
+        group = require_group(node, path="position")
+        return sorted(int(value) for value in group.group_keys())
+
+    def list_channel_ids(self, position_id: int) -> list[int]:
+        path = self.channel_group_path(position_id)
+        node = self.root.get(path)
+        if node is None:
+            return []
+        group = require_group(node, path=path)
+        return sorted(int(value) for value in group.group_keys())
+
+    def list_channel_roi_ids(self, position_id: int, channel_id: int) -> list[int]:
+        path = self.roi_group_path(position_id, channel_id)
+        node = self.root.get(path)
+        if node is None:
+            return []
+        group = require_group(node, path=path)
+        return sorted(int(value) for value in group.group_keys())
+
+    def list_roi_raw_frame_indices(
+        self,
+        position_id: int,
+        channel_id: int,
+        roi_id: int,
+    ) -> list[int]:
+        path = self.roi_raw_frame_group_path(position_id, channel_id, roi_id)
+        node = self.root.get(path)
+        if node is None:
+            return []
+        group = require_group(node, path=path)
+        return sorted(int(value) for value in group.array_keys())
 
 
 def open_raw_zarr(path: Path, mode: ZarrOpenMode) -> RawZarrStore:

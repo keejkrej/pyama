@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from pyama.io.config import get_config_path, load_config
-from pyama.io.zarr import open_raw_zarr
+from pyama.io.zarr import open_raw_zarr, open_rois_zarr
 from pyama.types.io import PositionArtifacts, ProcessingResults
 from pyama.types.processing import Channels
 
@@ -54,6 +54,10 @@ def get_trace_csv_path(
 
 def _dataset_ref(store_path: Path, dataset_path: str) -> str:
     return f"{store_path}{_DATASET_REF_SEP}{dataset_path}"
+
+
+def _roi_dataset_ref(store_path: Path, dataset_path: str) -> str:
+    return _dataset_ref(store_path, dataset_path.format(roi_id="{roi_id}"))
 
 
 def _load_channels_from_config(config_path: Path | None) -> Channels | None:
@@ -132,6 +136,26 @@ def _scan_raw_zarr(raw_zarr_path: Path) -> dict[int, PositionArtifacts]:
     return position_data
 
 
+def _scan_rois_zarr(rois_zarr_path: Path) -> dict[int, PositionArtifacts]:
+    store = open_rois_zarr(rois_zarr_path, mode="r")
+    position_data: dict[int, PositionArtifacts] = {}
+
+    for position_id in store.list_position_ids():
+        payload = position_data.setdefault(position_id, {})
+        for channel_id in store.list_channel_ids(position_id):
+            roi_ids = store.list_channel_roi_ids(position_id, channel_id)
+            if not roi_ids:
+                continue
+            first_roi_id = int(roi_ids[0])
+            if not store.list_roi_raw_frame_indices(position_id, channel_id, first_roi_id):
+                continue
+            payload[f"roi_raw_ch_{channel_id}"] = _roi_dataset_ref(
+                rois_zarr_path,
+                f"position/{position_id}/channel/{channel_id}/roi/{{roi_id}}/raw",
+            )
+    return position_data
+
+
 def _scan_traces_dir(traces_dir: Path) -> dict[int, PositionArtifacts]:
     position_data: dict[int, PositionArtifacts] = {}
     inspected_dir = traces_dir / "inspected"
@@ -162,6 +186,9 @@ def scan_processing_results(project_dir: Path) -> ProcessingResults:
     position_data: dict[int, PositionArtifacts] = {}
     if raw_zarr_path.exists():
         position_data.update(_scan_raw_zarr(raw_zarr_path))
+    if rois_zarr_path.exists():
+        for position_id, payload in _scan_rois_zarr(rois_zarr_path).items():
+            position_data.setdefault(position_id, {}).update(payload)
     if traces_dir.exists():
         for position_id, payload in _scan_traces_dir(traces_dir).items():
             position_data.setdefault(position_id, {}).update(payload)
@@ -169,7 +196,7 @@ def scan_processing_results(project_dir: Path) -> ProcessingResults:
     if not position_data:
         raise FileNotFoundError(
             f"No recognizable processing outputs found in {project_dir}. "
-            "Expected raw.zarr and/or traces/position_*.csv."
+            "Expected rois.zarr, raw.zarr, and/or traces/position_*.csv."
         )
 
     channels = _load_channels_from_config(config_path)

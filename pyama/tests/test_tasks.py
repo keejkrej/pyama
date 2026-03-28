@@ -4,10 +4,7 @@ from pathlib import Path
 from queue import Empty
 from time import sleep, time
 
-import numpy as np
-
 import pyama.tasks.manager as task_manager_module
-from pyama.types.visualization import CachedStack
 from pyama.tasks.manager import TaskManager
 from pyama.types import (
     Channels,
@@ -19,7 +16,6 @@ from pyama.types.tasks import (
     ProcessingTaskRequest,
     StatisticsTaskRequest,
     TaskStatus,
-    VisualizationTaskRequest,
 )
 
 
@@ -51,25 +47,32 @@ def _collect_snapshots(
 
 
 def test_subscribe_returns_current_snapshot_for_completed_tasks(
-    tmp_path: Path,
     monkeypatch,
 ) -> None:
-    source_path = tmp_path / "source.npy"
-    cached_path = tmp_path / "cached.npy"
-    np.save(source_path, np.zeros((1, 2, 2), dtype=np.uint8))
+    expected_result = ("results_df", {"sample": "trace"}, Path("out.csv"))
 
-    def fake_get_or_build_uint8(*_args, **_kwargs) -> CachedStack:
-        return CachedStack(path=cached_path, shape=(1, 2, 2), n_frames=1)
+    def fake_run_folder_statistics(*_args, **kwargs):
+        progress_reporter = kwargs["progress_reporter"]
+        progress_reporter(
+            {
+                "step": "statistics",
+                "current": 1,
+                "total": 1,
+                "progress": 100,
+                "message": "Done",
+            }
+        )
+        return expected_result
 
     monkeypatch.setattr(
         task_manager_module,
-        "get_or_build_uint8_impl",
-        fake_get_or_build_uint8,
+        "run_folder_statistics_impl",
+        fake_run_folder_statistics,
     )
 
     manager = TaskManager()
-    record = manager.submit_visualization(
-        VisualizationTaskRequest(source_path=source_path, channel_id="0")
+    record = manager.submit_statistics(
+        StatisticsTaskRequest(mode="auc", folder_path=Path.cwd())
     )
 
     deadline = time() + 1.0
@@ -88,7 +91,7 @@ def test_subscribe_returns_current_snapshot_for_completed_tasks(
         manager.unsubscribe(record.id, queue)
 
     assert snapshot.status == TaskStatus.COMPLETED
-    assert snapshot.result.path == cached_path
+    assert snapshot.result == expected_result
 
 
 def test_processing_task_converts_raw_progress_into_overall_progress(
@@ -101,12 +104,12 @@ def test_processing_task_converts_raw_progress_into_overall_progress(
         progress_reporter(
             {
                 "event": "frame",
-                "step": "copy",
+                "step": "roi",
                 "position": 0,
                 "channel": 0,
                 "t": 4,
                 "T": 10,
-                "message": "Copying",
+                "message": "ROI",
                 "worker_id": -1,
             }
         )
@@ -114,11 +117,12 @@ def test_processing_task_converts_raw_progress_into_overall_progress(
         progress_reporter(
             {
                 "event": "frame",
-                "step": "tracking",
+                "step": "background_estimation",
                 "position": 0,
+                "channel": 1,
                 "t": 9,
                 "T": 10,
-                "message": "Tracking",
+                "message": "Background",
                 "worker_id": 0,
             }
         )
@@ -154,18 +158,20 @@ def test_processing_task_converts_raw_progress_into_overall_progress(
     snapshots = _collect_snapshots(manager, record.id)
 
     progress_states = [snapshot.progress for snapshot in snapshots if snapshot.progress]
-    copy_progress = next(
-        progress for progress in progress_states if progress.step == "copy"
+    roi_progress = next(
+        progress for progress in progress_states if progress.step == "roi"
     )
-    tracking_progress = next(
-        progress for progress in progress_states if progress.step == "tracking"
+    background_progress = next(
+        progress
+        for progress in progress_states
+        if progress.step == "background_estimation"
     )
 
-    assert copy_progress.percent == 7
-    assert copy_progress.details["overall_total"] == 70
-    assert copy_progress.details["step_current"] == 5
-    assert tracking_progress.percent == 21
-    assert tracking_progress.details["overall_current"] == 15
+    assert roi_progress.percent == 25
+    assert roi_progress.details["overall_total"] == 20
+    assert roi_progress.details["step_current"] == 5
+    assert background_progress.percent == 75
+    assert background_progress.details["overall_current"] == 15
     assert snapshots[-1].status == TaskStatus.COMPLETED
 
 

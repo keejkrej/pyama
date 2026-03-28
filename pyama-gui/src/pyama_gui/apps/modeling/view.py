@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
-    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -31,6 +30,14 @@ from pyama_gui.apps.modeling.view_model import ModelingViewModel
 from pyama_gui.widgets import MplCanvas
 
 logger = logging.getLogger(__name__)
+
+
+def _as_float_value(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float | str):
+        return float(value)
+    return None
 
 
 class ModelingView(QWidget):
@@ -72,14 +79,36 @@ class ModelingView(QWidget):
         self._canvas.setToolTip("Right-click to save this plot as a PNG.")
         layout.addWidget(self._canvas)
 
-        form = QFormLayout()
+        model_label = QLabel("Model:")
+        interval_label = QLabel("Time interval (min):")
+        label_width = max(
+            model_label.sizeHint().width(), interval_label.sizeHint().width()
+        )
+        model_label.setFixedWidth(label_width)
+        interval_label.setFixedWidth(label_width)
+        model_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        interval_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+
+        model_row = QHBoxLayout()
         self._model_combo = QComboBox()
-        form.addRow("Model:", self._model_combo)
+        model_row.addWidget(model_label)
+        model_row.addWidget(self._model_combo)
+        model_row.addStretch()
+
+        interval_row = QHBoxLayout()
         self._interval_spin = QDoubleSpinBox()
         self._interval_spin.setRange(0.1, 1000.0)
         self._interval_spin.setSingleStep(0.5)
-        form.addRow("Time interval (min):", self._interval_spin)
-        layout.addLayout(form)
+        interval_row.addWidget(interval_label)
+        interval_row.addWidget(self._interval_spin)
+        interval_row.addStretch()
+
+        layout.addLayout(model_row)
+        layout.addLayout(interval_row)
 
         self._param_table = QTableWidget()
         self._param_table.setColumnCount(7)
@@ -784,19 +813,22 @@ class ModelingView(QWidget):
 
     def _collect_model_params(self) -> dict[str, float]:
         values_dict = self._read_parameter_table()
-        return {
-            param_name: float(fields["value"])
-            for param_name, fields in values_dict.items()
-            if "value" in fields and fields.get("value") is not None
-        }
+        collected: dict[str, float] = {}
+        for param_name, fields in values_dict.items():
+            value = _as_float_value(fields.get("value"))
+            if value is not None:
+                collected[param_name] = value
+        return collected
 
     def _collect_model_bounds(self) -> dict[str, tuple[float, float]]:
         values_dict = self._read_parameter_table()
-        return {
-            param_name: (float(fields["min"]), float(fields["max"]))
-            for param_name, fields in values_dict.items()
-            if fields.get("min") is not None and fields.get("max") is not None
-        }
+        collected: dict[str, tuple[float, float]] = {}
+        for param_name, fields in values_dict.items():
+            minimum = _as_float_value(fields.get("min"))
+            maximum = _as_float_value(fields.get("max"))
+            if minimum is not None and maximum is not None:
+                collected[param_name] = (minimum, maximum)
+        return collected
 
     def _read_parameter_table(self) -> dict[str, dict[str, object]]:
         values: dict[str, dict[str, object]] = {}

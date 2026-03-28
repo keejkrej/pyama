@@ -2,9 +2,12 @@ from pathlib import Path
 
 import numpy as np
 
-from pyama.apps.processing.background import _estimate_bbox_background_value, run_background_to_raw_zarr
+from pyama.apps.processing.background import (
+    _estimate_roi_background_value,
+    run_background_to_rois_zarr,
+)
 from pyama.apps.processing.extract import _fl_intensity_total
-from pyama.io.zarr import default_compressors, open_raw_zarr
+from pyama.io.zarr import open_rois_zarr
 from pyama.types.io import MicroscopyMetadata
 from pyama.types.processing import Channels, ProcessingConfig, ProcessingParams
 
@@ -24,70 +27,46 @@ def _build_metadata(tmp_path: Path) -> MicroscopyMetadata:
     )
 
 
-def test_background_estimator_expands_sampling_box_from_background_min_samples() -> None:
-    frame = np.array(
+def test_background_estimator_uses_mean_of_pixels_up_to_first_quartile() -> None:
+    raw_roi = np.array(
         [
-            [20, 20, 20, 20, 20],
-            [20, 10, 10, 10, 20],
-            [20, 10, 99, 10, 20],
-            [20, 10, 10, 10, 20],
-            [20, 20, 20, 20, 20],
+            [10, 10, 10],
+            [10, 99, 50],
+            [20, 30, 40],
         ],
         dtype=np.uint16,
     )
-    seg_frame = np.zeros((5, 5), dtype=np.uint16)
-    seg_frame[2, 2] = 1
 
-    background = _estimate_bbox_background_value(
-        raw_frame=frame,
-        seg_frame=seg_frame,
-        roi_id=1,
-        y0=2,
-        x0=2,
-        y1=3,
-        x1=3,
-        background_min_samples=8,
-    )
+    background = _estimate_roi_background_value(raw_roi)
 
     assert background == 10
 
 
-def test_run_background_to_raw_zarr_does_not_apply_background_weight(tmp_path: Path) -> None:
+def test_run_background_to_rois_zarr_does_not_apply_background_weight(
+    tmp_path: Path,
+) -> None:
     output_dir = tmp_path / "results"
     output_dir.mkdir()
-    store = open_raw_zarr(output_dir / "raw.zarr", mode="a")
 
-    seg = np.zeros((1, 5, 5), dtype=np.uint16)
-    seg[0, 2, 2] = 1
-    seg_ds = store.root.create_array(
-        name="position/0/channel/0/seg_tracked",
-        shape=seg.shape,
-        chunks=(1, 5, 5),
-        dtype="uint16",
-        compressors=default_compressors(),
+    rois_store = open_rois_zarr(output_dir / "rois.zarr", mode="a")
+    rois_store.write_roi_ids(0, np.array([0], dtype=np.int32))
+    rois_store.write_roi_bboxes(0, np.array([[1, 1, 3, 3]], dtype=np.int32))
+    rois_store.write_roi_raw_frame(
+        0,
+        1,
+        0,
+        0,
+        np.array(
+            [
+                [10, 10, 10],
+                [10, 99, 50],
+                [20, 30, 40],
+            ],
+            dtype=np.uint16,
+        ),
     )
-    seg_ds[:] = seg
 
-    raw = np.array(
-        [[
-            [20, 20, 20, 20, 20],
-            [20, 10, 10, 10, 20],
-            [20, 10, 99, 10, 20],
-            [20, 10, 10, 10, 20],
-            [20, 20, 20, 20, 20],
-        ]],
-        dtype=np.uint16,
-    )
-    raw_ds = store.root.create_array(
-        name="position/0/channel/1/raw",
-        shape=raw.shape,
-        chunks=(1, 5, 5),
-        dtype="uint16",
-        compressors=default_compressors(),
-    )
-    raw_ds[:] = raw
-
-    summary = run_background_to_raw_zarr(
+    summary = run_background_to_rois_zarr(
         reader=None,
         metadata=_build_metadata(tmp_path),
         config=ProcessingConfig(
@@ -97,9 +76,7 @@ def test_run_background_to_raw_zarr_does_not_apply_background_weight(tmp_path: P
         output_dir=output_dir,
     )
 
-    store = open_raw_zarr(output_dir / "raw.zarr", mode="r")
-    bg_path = store.fl_background_path(0, 1)
-    bg_ds = store.get_required_array(bg_path)
+    rois_store = open_rois_zarr(output_dir / "rois.zarr", mode="r")
 
     assert summary == {
         "background_method": "mvp",
@@ -108,10 +85,10 @@ def test_run_background_to_raw_zarr_does_not_apply_background_weight(tmp_path: P
         "background_frames": 1,
         "background_cancelled": False,
     }
-    assert "background_weight" not in bg_ds.attrs
-    expected = np.zeros((5, 5), dtype=np.uint16)
-    expected[2, 2] = 10
-    np.testing.assert_array_equal(store.read_uint16_frame(bg_path, 0), expected)
+    np.testing.assert_array_equal(
+        rois_store.read_roi_background_frame(0, 1, 0, 0),
+        np.full((3, 3), 10, dtype=np.uint16),
+    )
 
 
 def test_extract_background_weight_is_applied_once() -> None:
@@ -119,9 +96,12 @@ def test_extract_background_weight_is_applied_once() -> None:
     bg_roi = np.array([[10]], dtype=np.float32)
     seg_mask = np.array([[True]])
 
-    assert _fl_intensity_total(
-        raw_roi,
-        bg_roi,
-        seg_mask,
-        background_weight=0.5,
-    ) == 25.0
+    assert (
+        _fl_intensity_total(
+            raw_roi,
+            bg_roi,
+            background_weight=0.5,
+            seg_mask=seg_mask,
+        )
+        == 25.0
+    )

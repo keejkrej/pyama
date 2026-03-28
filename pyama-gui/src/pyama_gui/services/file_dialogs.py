@@ -58,3 +58,6 @@ class QtFileDialogService:
             options=QFileDialog.Option.DontUseNativeDialog,
         )
         return Path(path) if path else None
+
+
+__all__ = ["FileDialogService", "QtFileDialogService"]

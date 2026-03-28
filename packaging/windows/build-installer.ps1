@@ -87,7 +87,6 @@ $isccPath = Get-IsccPath
 
 $versions = @(
     (Get-PackageVersion -PyprojectPath (Join-Path $repoRoot "pyama\pyproject.toml")),
-    (Get-PackageVersion -PyprojectPath (Join-Path $repoRoot "pyama-cli\pyproject.toml")),
     (Get-PackageVersion -PyprojectPath (Join-Path $repoRoot "pyama-gui\pyproject.toml"))
 )
 
@@ -110,7 +109,7 @@ Copy-Item -LiteralPath (Join-Path $repoRoot ".python-version") -Destination (Joi
 Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $stageRoot "README.md")
 New-Item -ItemType Directory -Path (Join-Path $stageRoot "tools") -Force | Out-Null
 
-foreach ($packageName in @("pyama", "pyama-cli", "pyama-gui")) {
+foreach ($packageName in @("pyama", "pyama-gui")) {
     $packageSource = Join-Path $repoRoot $packageName
     $packageDestination = Join-Path $stageRoot $packageName
 

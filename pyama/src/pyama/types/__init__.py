@@ -18,19 +18,27 @@ from pyama.types.processing import (
     ProcessingParams,
     SamplesFilePayload,
 )
+from pyama.types.rpc import (
+    RpcArrayHandle,
+    RpcError,
+    RpcFileHandle,
+    RpcJsonHandle,
+    RpcTableHandle,
+)
 from pyama.types.statistics import SamplePair, StatisticsRequest
 from pyama.types.tasks import (
     FrameProgressPayload,
     MergeTaskRequest,
+    ModelFitTaskResultHandle,
     ModelFitTaskRequest,
     ProcessingTaskRequest,
     ProgressPayload,
+    StatisticsTaskResultHandle,
     StatisticsTaskRequest,
     TaskKind,
     TaskProgress,
     TaskRecord,
     TaskStatus,
-    VisualizationTaskRequest,
 )
 from pyama.types.visualization import CachedStack, RoiOverlay
 
@@ -44,6 +52,7 @@ __all__ = [
     "MergeTaskRequest",
     "MicroscopyMetadata",
     "ModelFitTaskRequest",
+    "ModelFitTaskResultHandle",
     "ModelParameter",
     "ParameterPreset",
     "PositionArtifacts",
@@ -52,14 +61,19 @@ __all__ = [
     "ProcessingResults",
     "ProcessingTaskRequest",
     "ProgressPayload",
+    "RpcArrayHandle",
+    "RpcError",
+    "RpcFileHandle",
+    "RpcJsonHandle",
+    "RpcTableHandle",
     "RoiOverlay",
     "SamplePair",
     "SamplesFilePayload",
     "StatisticsRequest",
+    "StatisticsTaskResultHandle",
     "StatisticsTaskRequest",
     "TaskKind",
     "TaskProgress",
     "TaskRecord",
     "TaskStatus",
-    "VisualizationTaskRequest",
 ]

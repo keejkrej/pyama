@@ -9,17 +9,16 @@ uv run pyama-gui
 
 **Packages**: pyama (workflows, modeling, statistics, I/O) · pyama-gui (Processing, Visualization, Modeling, Statistics tabs)
 
-**Pipeline**: Copying → Segmentation (LOG-STD) → Tracking (IoU) → Background → ROI → Extraction
+**Pipeline**: ROI Crop (bbox CSV) → Background → Extraction
 
-**Processing config**: `ProcessingParams` now covers positions, workers, background tuning, and `copy_only`; segmentation and tracking use the built-in LOG-STD and IoU pipeline.
+**Processing config**: `ProcessingParams` now covers positions, workers, and background tuning for the bbox-driven ROI workflow.
 
-**Outputs**: `processing_config.yaml`, `raw.zarr`, `rois.zarr`, `traces/position_*.csv`, and merged sample CSVs under `traces_merged/`
+**Outputs**: `processing_config.yaml`, `rois.zarr`, `traces/position_*.csv`, and merged sample CSVs under `traces_merged/`
 
 ## Development
 
 ```bash
 uv sync
-uv run pyama-cli --help
 uv run pyama-gui
 ```
 
@@ -29,7 +28,7 @@ The Windows installer is source-based: it embeds `uv.exe`, installs into `%LOCAL
 
 After installation:
 
-- `pyama-cli` and `pyama-gui` are available on the user `PATH`
+- `pyama-gui` is available on the user `PATH`
 - the GUI gets a Start Menu shortcut
 - the installer can optionally create a Desktop shortcut
 
@@ -45,7 +44,7 @@ Build prerequisites:
 - network access to download the pinned `uv` binary during the build
 - network access during installation so embedded `uv` can download Python and package wheels
 
-The build script validates that `pyama`, `pyama-cli`, and `pyama-gui` all share the same version before producing `PyAMA-Setup-<version>.exe`.
+The build script validates that `pyama` and `pyama-gui` share the same version before producing `PyAMA-Setup-<version>.exe`.
 
 ## Docs
 

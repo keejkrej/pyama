@@ -101,7 +101,12 @@ class PyQtGraphImageView(QWidget):
         self._set_content_visible(False)
         self._placeholder.update()
 
-    def set_image(self, image: np.ndarray) -> None:
+    def set_image(
+        self,
+        image: np.ndarray,
+        *,
+        levels: tuple[float, float] | None = None,
+    ) -> None:
         image_data = np.asarray(image)
         if image_data.ndim != 2:
             raise ValueError("PyQtGraphImageView expects a 2D image.")
@@ -113,10 +118,16 @@ class PyQtGraphImageView(QWidget):
             QRectF(0.0, 0.0, float(image_data.shape[1]), float(image_data.shape[0]))
         )
 
-        min_value = float(np.min(image_data))
-        max_value = float(np.max(image_data))
-        if min_value == max_value:
-            max_value = min_value + 1.0
+        if levels is None:
+            min_value = float(np.min(image_data))
+            max_value = float(np.max(image_data))
+            if min_value == max_value:
+                max_value = min_value + 1.0
+        else:
+            min_value = float(levels[0])
+            max_value = float(levels[1])
+            if min_value == max_value:
+                max_value = min_value + 1.0
         self._image_item.setLevels((min_value, max_value))
         self._image_shape = image_data.shape
         self._set_content_visible(True)
@@ -140,6 +151,12 @@ class PyQtGraphImageView(QWidget):
         for overlay_id, item in list(self._overlay_items.items()):
             self._view_box.removeItem(item)
             del self._overlay_items[overlay_id]
+
+    @staticmethod
+    def _as_float(value: object, default: float) -> float:
+        if isinstance(value, int | float):
+            return float(value)
+        return default
 
     def _build_overlay_item(self, overlay: OverlaySpec) -> _ClickablePathItem | None:
         properties = overlay.properties
@@ -167,9 +184,13 @@ class PyQtGraphImageView(QWidget):
         item.setPen(
             pg.mkPen(
                 color=properties.get("edgecolor", "red"),
-                width=float(properties.get("linewidth", 2.0)),
+                width=self._as_float(properties.get("linewidth", 2.0), 2.0),
             )
         )
-        item.setBrush(pg.mkBrush(None))
-        item.setZValue(float(properties.get("zorder", 10)))
+        facecolor = properties.get("facecolor")
+        item.setBrush(
+            pg.mkBrush(facecolor) if facecolor is not None else pg.mkBrush(None)
+        )
+        item.setOpacity(self._as_float(properties.get("alpha", 1.0), 1.0))
+        item.setZValue(self._as_float(properties.get("zorder", 10), 10.0))
         return item

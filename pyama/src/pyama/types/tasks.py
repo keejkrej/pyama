@@ -8,6 +8,7 @@ from typing import Any, Literal, TypedDict
 
 from pyama.types.io import MicroscopyMetadata
 from pyama.types.processing import MergeSample, ProcessingConfig
+from pyama.types.rpc import RpcTableHandle
 from pyama.types.statistics import StatisticsRequest
 
 
@@ -16,7 +17,6 @@ class TaskKind(str, Enum):
     MERGE = "merge"
     MODEL_FIT = "model_fit"
     STATISTICS = "statistics"
-    VISUALIZATION = "visualization"
 
 
 class TaskStatus(str, Enum):
@@ -99,13 +99,17 @@ class ModelFitTaskRequest:
 StatisticsTaskRequest = StatisticsRequest
 
 
-@dataclass(slots=True)
-class VisualizationTaskRequest:
-    source_path: str | Path
-    channel_id: str
-    cache_root: Path | None = None
-    force_rebuild: bool = False
+@dataclass(frozen=True, slots=True)
+class ModelFitTaskResultHandle:
+    results_table: RpcTableHandle | None = None
+    saved_csv_path: Path | None = None
 
+
+@dataclass(frozen=True, slots=True)
+class StatisticsTaskResultHandle:
+    results_table: RpcTableHandle
+    trace_tables: dict[str, RpcTableHandle]
+    output_path: Path
 
 @dataclass(frozen=True, slots=True)
 class TaskRecord:
@@ -121,13 +125,14 @@ class TaskRecord:
 __all__ = [
     "FrameProgressPayload",
     "MergeTaskRequest",
+    "ModelFitTaskResultHandle",
     "ModelFitTaskRequest",
     "ProcessingTaskRequest",
     "ProgressPayload",
+    "StatisticsTaskResultHandle",
     "StatisticsTaskRequest",
     "TaskKind",
     "TaskProgress",
     "TaskRecord",
     "TaskStatus",
-    "VisualizationTaskRequest",
 ]

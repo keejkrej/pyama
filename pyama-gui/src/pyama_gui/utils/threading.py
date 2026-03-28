@@ -4,7 +4,7 @@
 # IMPORTS
 # =============================================================================
 
-from typing import Callable
+from typing import Any, Callable, cast
 
 from PySide6.QtCore import QObject, QThread
 
@@ -80,13 +80,6 @@ class WorkerHandle:
                         "Thread still not responding after second interrupt request"
                     )
 
-        # Disconnect signals after thread has finished to prevent crashes
-        try:
-            self._thread.disconnect()
-            self._worker.disconnect()
-        except Exception:
-            pass
-
         # Clean up objects
         try:
             self._worker.deleteLater()
@@ -152,11 +145,12 @@ def start_worker(
 
     # Connect thread started signal to worker method
     start_callable = getattr(worker, start_method)
-    thread.started.connect(start_callable)  # type: ignore[arg-type]
+    thread.started.connect(start_callable)
 
     # Connect worker finished signal to thread quit
-    if hasattr(worker, "finished"):
-        worker.finished.connect(thread.quit)  # type: ignore[attr-defined]
+    finished_signal = cast(Any, getattr(worker, "finished", None))
+    if finished_signal is not None:
+        finished_signal.connect(thread.quit)
 
     # Set up cleanup connections
     thread.finished.connect(lambda: thread.deleteLater())

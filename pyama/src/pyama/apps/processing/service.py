@@ -7,12 +7,10 @@ import logging
 import threading
 from typing import Callable
 
-from pyama.apps.processing.background import run_background_to_raw_zarr
-from pyama.apps.processing.copy import run_copy_to_raw_zarr
+from pyama.apps.processing.bbox import load_bbox_rows
+from pyama.apps.processing.background import run_background_to_rois_zarr
 from pyama.apps.processing.extract import run_extract_to_csv
 from pyama.apps.processing.roi import run_roi_to_rois_zarr
-from pyama.apps.processing.segment import run_segment_to_raw_zarr
-from pyama.apps.processing.track import run_track_to_raw_zarr
 from pyama.io import load_microscopy_file
 from pyama.io.config import ensure_config
 from pyama.types.io import MicroscopyMetadata
@@ -24,9 +22,6 @@ from pyama.utils.processing import resolve_processing_positions
 logger = logging.getLogger(__name__)
 
 _STAGE_TO_PROGRESS_STEP = {
-    "copy": "copy",
-    "segment": "segmentation",
-    "track": "tracking",
     "background": "background_estimation",
     "roi": "roi",
     "extract": "extraction",
@@ -46,39 +41,34 @@ def _run_position_pipeline(
     position_lookup: dict[int, int],
     position_total: int,
 ) -> bool:
-    shared_kwargs = {
-        "reader": reader,
-        "metadata": metadata,
-        "config": config,
-        "output_dir": output_dir,
-        "cancel_event": cancel_event,
-        "progress_callback": progress_callback,
-        "positions_subset": [position_idx],
-        "worker_id": worker_id,
-        "global_position_lookup": position_lookup,
-        "global_position_total": position_total,
-    }
-
-    copy_summary = run_copy_to_raw_zarr(**shared_kwargs)
-    if bool(copy_summary.get("cancelled", False)):
-        return True
-    if config.params.copy_only:
-        return False
-
-    segment_summary = run_segment_to_raw_zarr(**shared_kwargs)
-    if bool(segment_summary.get("segmentation_cancelled", False)):
-        return True
-
-    track_summary = run_track_to_raw_zarr(**shared_kwargs)
-    if bool(track_summary.get("tracking_cancelled", False)):
-        return True
-
-    background_summary = run_background_to_raw_zarr(**shared_kwargs)
-    if bool(background_summary.get("background_cancelled", False)):
-        return True
-
-    roi_summary = run_roi_to_rois_zarr(**shared_kwargs)
+    roi_summary = run_roi_to_rois_zarr(
+        reader=reader,
+        metadata=metadata,
+        config=config,
+        output_dir=output_dir,
+        cancel_event=cancel_event,
+        progress_callback=progress_callback,
+        positions_subset=[position_idx],
+        worker_id=worker_id,
+        global_position_lookup=position_lookup,
+        global_position_total=position_total,
+    )
     if bool(roi_summary.get("roi_cancelled", False)):
+        return True
+
+    background_summary = run_background_to_rois_zarr(
+        reader=reader,
+        metadata=metadata,
+        config=config,
+        output_dir=output_dir,
+        cancel_event=cancel_event,
+        progress_callback=progress_callback,
+        positions_subset=[position_idx],
+        worker_id=worker_id,
+        global_position_lookup=position_lookup,
+        global_position_total=position_total,
+    )
+    if bool(background_summary.get("background_cancelled", False)):
         return True
 
     extract_summary = run_extract_to_csv(
@@ -117,7 +107,9 @@ def _run_orchestrator(
         return
 
     worker_count = max(1, min(config.params.n_workers, len(resolved_positions)))
-    position_lookup = {position_idx: idx + 1 for idx, position_idx in enumerate(resolved_positions)}
+    position_lookup = {
+        position_idx: idx + 1 for idx, position_idx in enumerate(resolved_positions)
+    }
     position_queue: Queue[int] = Queue()
     for position_idx in resolved_positions:
         position_queue.put(position_idx)
@@ -150,6 +142,23 @@ def _run_orchestrator(
         list(executor.map(run_worker, range(worker_count)))
 
 
+def _validate_bbox_inputs(
+    *,
+    metadata: MicroscopyMetadata,
+    config: ProcessingConfig,
+    output_dir: Path,
+) -> None:
+    resolved_positions = resolve_processing_positions(metadata, config)
+    for position_idx in resolved_positions:
+        position_id = metadata.position_list[position_idx]
+        load_bbox_rows(
+            output_dir=output_dir,
+            position_id=position_id,
+            frame_width=metadata.width,
+            frame_height=metadata.height,
+        )
+
+
 def run_complete_workflow(
     *,
     metadata: MicroscopyMetadata,
@@ -159,6 +168,8 @@ def run_complete_workflow(
     progress_callback: Callable[[dict[str, int | str]], None] | None = None,
     progress_reporter: Callable[[ProgressPayload], None] | None = None,
 ) -> bool:
+    config = ensure_config(config)
+
     def _event_to_progress_payload(event: dict[str, int | str]) -> None:
         stage = str(event.get("stage", "processing"))
         step = _STAGE_TO_PROGRESS_STEP.get(stage, stage)
@@ -201,6 +212,12 @@ def run_complete_workflow(
 
             progress_sink = _combined_progress_sink
 
+    _validate_bbox_inputs(
+        metadata=metadata,
+        config=config,
+        output_dir=output_dir,
+    )
+
     reader, _loaded_metadata = load_microscopy_file(Path(metadata.file_path))
     try:
         _run_orchestrator(
@@ -215,7 +232,11 @@ def run_complete_workflow(
         try:
             reader.close()
         except Exception:
-            logger.debug("Failed to close microscopy reader for %s", metadata.file_path, exc_info=True)
+            logger.debug(
+                "Failed to close microscopy reader for %s",
+                metadata.file_path,
+                exc_info=True,
+            )
     return not bool(cancel_event and cancel_event.is_set())
 
 

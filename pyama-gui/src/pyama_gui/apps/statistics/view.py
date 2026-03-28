@@ -27,6 +27,19 @@ from pyama_gui.apps.statistics.view_model import StatisticsViewModel
 from pyama_gui.widgets import MplCanvas
 
 
+def _as_numeric(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 class StatisticsView(QWidget):
     """Consolidated statistics tab view."""
 
@@ -286,7 +299,7 @@ class StatisticsView(QWidget):
             return QColor("red")
         if self.view_model.selected_metric != "onset_time_min":
             return QColor("green")
-        r_squared = row.get("r_squared")
+        r_squared = _as_numeric(row.get("r_squared"))
         if r_squared is None:
             return QColor("green")
         if r_squared > 0.9:

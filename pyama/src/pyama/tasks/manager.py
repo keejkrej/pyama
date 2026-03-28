@@ -12,8 +12,9 @@ import yaml
 from pyama.apps.modeling.service import fit_csv_file as fit_csv_file_impl
 from pyama.apps.processing.merge import run_merge_traces as run_merge_impl
 from pyama.apps.processing.service import run_complete_workflow
-from pyama.apps.statistics.service import run_folder_statistics as run_folder_statistics_impl
-from pyama.io.visualization_cache import build_uint8_cache as get_or_build_uint8_impl
+from pyama.apps.statistics.service import (
+    run_folder_statistics as run_folder_statistics_impl,
+)
 from pyama.tasks.broker import TaskBroker
 from pyama.types.tasks import ProgressPayload
 from pyama.types.tasks import (
@@ -25,7 +26,6 @@ from pyama.types.tasks import (
     TaskProgress,
     TaskRecord,
     TaskStatus,
-    VisualizationTaskRequest,
 )
 from pyama.utils.progress import build_progress_payload
 
@@ -66,9 +66,6 @@ class TaskManager:
 
     def submit_statistics(self, request: StatisticsTaskRequest) -> TaskRecord:
         return self._submit(TaskKind.STATISTICS, request, self._run_statistics)
-
-    def submit_visualization(self, request: VisualizationTaskRequest) -> TaskRecord:
-        return self._submit(TaskKind.VISUALIZATION, request, self._run_visualization)
 
     def get_task(self, task_id: str) -> TaskRecord | None:
         with self._lock:
@@ -150,7 +147,9 @@ class TaskManager:
             self._set_status(task_id, TaskStatus.FAILED, error_message=str(exc))
             return
         if cancel_event.is_set():
-            self._set_status(task_id, TaskStatus.CANCELLED, error_message="Task cancelled")
+            self._set_status(
+                task_id, TaskStatus.CANCELLED, error_message="Task cancelled"
+            )
             return
         self._set_status(task_id, TaskStatus.COMPLETED, result=result)
 
@@ -247,16 +246,17 @@ class TaskManager:
             )
 
         channels = config.channels
-        has_pc = channels is not None
         fl_count = 0 if channels is None else len(channels.fl)
         total_channels = 0 if channels is None else 1 + fl_count
         stage_units = {
-            "copy": len(selected_positions) * max(1, total_channels) * max(1, int(request.metadata.n_frames)),
-            "segmentation": len(selected_positions) * int(has_pc) * max(1, int(request.metadata.n_frames)),
-            "tracking": len(selected_positions) * int(has_pc) * max(1, int(request.metadata.n_frames)),
-            "background_estimation": len(selected_positions) * max(1, fl_count) * max(1, int(request.metadata.n_frames)),
-            "roi": len(selected_positions) * max(1, total_channels + 1) * max(1, int(request.metadata.n_frames)),
-            "extraction": len(selected_positions) * max(1, int(request.metadata.n_frames)),
+            "roi": len(selected_positions)
+            * max(1, total_channels)
+            * max(1, int(request.metadata.n_frames)),
+            "background_estimation": len(selected_positions)
+            * fl_count
+            * max(1, int(request.metadata.n_frames)),
+            "extraction": len(selected_positions)
+            * max(1, int(request.metadata.n_frames)),
         }
         workflow_total = max(1, sum(stage_units.values()))
         stage_progress: dict[tuple[str, int, int | None], int] = {}
@@ -273,14 +273,20 @@ class TaskManager:
             progress_key = (
                 step,
                 position,
-                channel_id if step in {"copy", "background_estimation", "extraction"} else None,
+                channel_id
+                if step in {"roi", "background_estimation", "extraction"}
+                else None,
             )
             previous = stage_progress.get(progress_key, 0)
             if current > previous:
                 stage_progress[progress_key] = current
 
             workflow_current = sum(stage_progress.values())
-            workflow_percent = int((workflow_current / workflow_total) * 100) if workflow_total > 0 else None
+            workflow_percent = (
+                int((workflow_current / workflow_total) * 100)
+                if workflow_total > 0
+                else None
+            )
             self._publish_progress(
                 task_id,
                 TaskKind.PROCESSING,
@@ -416,48 +422,6 @@ class TaskManager:
             progress_reporter=progress_reporter,
             cancel_event=cancel_event,
         )
-
-    def _run_visualization(
-        self,
-        task_id: str,
-        request: VisualizationTaskRequest,
-        cancel_event: Event,
-    ):
-        if cancel_event.is_set():
-            raise RuntimeError("Task cancelled")
-        self._publish_payload_progress(
-            task_id,
-            TaskKind.VISUALIZATION,
-            build_progress_payload(
-                step="visualization_cache",
-                current=0,
-                total=1,
-                message=f"Building cache for {request.channel_id}",
-                channel_id=request.channel_id,
-                source_path=str(request.source_path),
-            ),
-        )
-        result = get_or_build_uint8_impl(
-            request.source_path,
-            request.channel_id,
-            cache_root=request.cache_root,
-            force_rebuild=request.force_rebuild,
-        )
-        self._publish_payload_progress(
-            task_id,
-            TaskKind.VISUALIZATION,
-            build_progress_payload(
-                step="visualization_cache",
-                current=1,
-                total=1,
-                message=f"Built cache for {request.channel_id}",
-                channel_id=request.channel_id,
-                source_path=str(request.source_path),
-                cached_path=str(result.path),
-            ),
-        )
-        return result
-
 
 _task_manager: TaskManager | None = None
 

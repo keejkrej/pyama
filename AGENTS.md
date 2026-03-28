@@ -1,13 +1,12 @@
 # AGENTS.md
 
-Repository guidelines for AI agents. PyAMA: `pyama` core library + `pyama-gui` Qt GUI + `pyama-cli`.
+Repository guidelines for AI agents. PyAMA: `pyama` core library + `pyama-gui` Qt GUI.
 
 ## Commands
 
 ```bash
 uv sync
 uv run pyama-gui
-uv run pyama-cli --help
 uv run pytest
 uv run ruff check && uv run ruff format
 uv run ty check

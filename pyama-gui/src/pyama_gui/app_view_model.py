@@ -13,6 +13,7 @@ class AppViewModel(QObject):
 
     state_changed = Signal()
     workspace_changed = Signal(object)
+    microscopy_changed = Signal(object)
     status_changed = Signal(str)
     busy_changed = Signal(bool)
 
@@ -25,6 +26,7 @@ class AppViewModel(QObject):
         super().__init__(parent)
         self._dialog_service = dialog_service
         self._workspace_dir: Path | None = None
+        self._microscopy_path: Path | None = None
         self._status_message = "Ready"
         self._busy_count = 0
 
@@ -36,6 +38,7 @@ class AppViewModel(QObject):
     def state(self) -> AppState:
         return AppState(
             workspace_dir=self._workspace_dir,
+            microscopy_path=self._microscopy_path,
             status_message=self._status_message,
             busy=self.busy,
         )
@@ -49,6 +52,17 @@ class AppViewModel(QObject):
             return
         self._workspace_dir = path
         self.workspace_changed.emit(path)
+        self.state_changed.emit()
+
+    @property
+    def microscopy_path(self) -> Path | None:
+        return self._microscopy_path
+
+    def set_microscopy_path(self, path: Path | None) -> None:
+        if self._microscopy_path == path:
+            return
+        self._microscopy_path = path
+        self.microscopy_changed.emit(path)
         self.state_changed.emit()
 
     @property
@@ -98,3 +112,25 @@ class AppViewModel(QObject):
 
         self.set_workspace_dir(workspace_dir)
         self.set_status_message(f"Workspace folder set to {workspace_dir}")
+
+    def select_microscopy(self) -> None:
+        if self._dialog_service is None:
+            raise RuntimeError("No dialog service configured.")
+
+        start_dir = self._microscopy_path.parent if self._microscopy_path else self._workspace_dir
+        path = self._dialog_service.select_open_file(
+            "Select Microscopy File",
+            str(start_dir or DEFAULT_DIR),
+            "Microscopy Files (*.nd2 *.czi);;ND2 Files (*.nd2);;CZI Files (*.czi);;All Files (*)",
+        )
+        if path is None:
+            return
+
+        self.set_microscopy_path(path)
+        self.set_status_message(f"Microscopy file set to {path}")
+
+    def clear_microscopy(self) -> None:
+        if self._microscopy_path is None:
+            return
+        self.set_microscopy_path(None)
+        self.set_status_message("Microscopy file cleared")

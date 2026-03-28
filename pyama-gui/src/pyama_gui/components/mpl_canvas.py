@@ -2,6 +2,8 @@
 
 import matplotlib
 import numpy as np
+from matplotlib.artist import Artist
+from matplotlib.image import AxesImage
 from matplotlib.patches import Circle, Polygon
 
 matplotlib.use("Qt5Agg")
@@ -42,8 +44,8 @@ class MplCanvas(QWidget):
         self._canvas = FigureCanvas(self._fig)
         self._placeholder = _CanvasPlaceholder(self)
         self._has_content = False
-        self._image_artist = None
-        self._overlay_artists: dict[str, object] = {}
+        self._image_artist: AxesImage | None = None
+        self._overlay_artists: dict[str, Artist] = {}
 
         self._build_ui()
         self._fig.canvas.mpl_connect("pick_event", self._on_pick)
@@ -116,6 +118,7 @@ class MplCanvas(QWidget):
         vmin: float = 0,
         vmax: float = 255,
     ) -> None:
+        extent = self._image_extent(image_data)
         if self._image_artist is None:
             self._axes.cla()
             self._axes.set_xticks([])
@@ -129,14 +132,12 @@ class MplCanvas(QWidget):
                 origin="upper",
                 interpolation="nearest",
                 zorder=1,
-                extent=[0, image_data.shape[1], image_data.shape[0], 0],
+                extent=extent,
             )
         else:
             self._image_artist.set_data(image_data)
             self._image_artist.set_clim(vmin, vmax)
-            self._image_artist.set_extent(
-                [0, image_data.shape[1], image_data.shape[0], 0]
-            )
+            self._image_artist.set_extent(extent)
 
         self._canvas.draw()
         self._set_content_visible(True)
@@ -147,13 +148,11 @@ class MplCanvas(QWidget):
         vmin: float | None = None,
         vmax: float | None = None,
     ) -> None:
-        if self._image_artist:
+        if self._image_artist is not None:
             self._image_artist.set_data(image_data)
             if vmin is not None and vmax is not None:
                 self._image_artist.set_clim(vmin, vmax)
-            self._image_artist.set_extent(
-                [0, image_data.shape[1], image_data.shape[0], 0]
-            )
+            self._image_artist.set_extent(self._image_extent(image_data))
             self._canvas.draw()
             self._set_content_visible(True)
 
@@ -244,7 +243,7 @@ class MplCanvas(QWidget):
         if data:
             self._axes.boxplot(
                 data,
-                labels=labels,
+                tick_labels=labels,
                 patch_artist=True,
                 showfliers=False,
             )
@@ -272,8 +271,11 @@ class MplCanvas(QWidget):
             self._axes.add_patch(artist)
             self._overlay_artists[overlay_id] = artist
         elif shape_type == "polygon":
+            xy = properties.get("xy")
+            if xy is None:
+                raise ValueError("Polygon overlays require an 'xy' property")
             artist = Polygon(
-                properties.get("xy"),
+                xy,
                 edgecolor=properties.get("edgecolor", "red"),
                 facecolor=properties.get("facecolor", "none"),
                 linewidth=properties.get("linewidth", 1.0),
@@ -305,13 +307,7 @@ class MplCanvas(QWidget):
 
         artist = self._overlay_artists[overlay_id]
         try:
-            if hasattr(artist, "remove"):
-                artist.remove()
-            else:
-                if artist in self._axes.patches:
-                    self._axes.patches.remove(artist)
-                if artist in self._axes.artists:
-                    self._axes.artists.remove(artist)
+            artist.remove()
         except (ValueError, KeyError, NotImplementedError, AttributeError):
             pass
 
@@ -321,3 +317,12 @@ class MplCanvas(QWidget):
     def clear_overlays(self) -> None:
         for overlay_id in list(self._overlay_artists.keys()):
             self.remove_overlay(overlay_id)
+
+    @staticmethod
+    def _image_extent(image_data: np.ndarray) -> tuple[float, float, float, float]:
+        return (
+            0.0,
+            float(image_data.shape[1]),
+            float(image_data.shape[0]),
+            0.0,
+        )

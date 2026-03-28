@@ -159,7 +159,7 @@ try {
         "copy"
     )
 
-    foreach ($commandName in @("pyama-cli.exe", "pyama-gui.exe")) {
+    foreach ($commandName in @("pyama-gui.exe")) {
         $commandPath = Join-Path $InstallRoot ".venv\Scripts\$commandName"
         if (-not (Test-Path -LiteralPath $commandPath)) {
             throw "Expected launcher was not created: $commandPath"

@@ -6,11 +6,12 @@
 
 import logging
 from pathlib import Path
+from typing import Callable
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QLabel,
+    QMenu,
     QMainWindow,
     QPushButton,
     QStatusBar,
@@ -20,9 +21,24 @@ from PySide6.QtWidgets import (
 )
 
 from pyama_gui.app_view_model import AppViewModel
-from pyama_gui.services import FileDialogService
+from pyama_gui.services import (
+    FileDialogService,
+    PathRevealService,
+    QtPathRevealService,
+)
 
 logger = logging.getLogger(__name__)
+
+type TabFactory = Callable[[], QWidget]
+type TabSpec = tuple[str, str, TabFactory]
+type PathEntry = tuple[str, Path | None]
+
+
+def _display_path_name(path: Path | None) -> str:
+    """Return a short display label for a path."""
+    if path is None:
+        return "Not set"
+    return path.stem or path.name or str(path)
 
 
 class _LazyTabContainer(QWidget):
@@ -46,78 +62,146 @@ class _LazyTabContainer(QWidget):
         self._layout.addWidget(widget)
 
 
+class _PathsMenu(QMenu):
+    """Anchored menu listing workspace-related paths."""
+
+    def __init__(
+        self,
+        *,
+        path_reveal_service: PathRevealService,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._path_reveal_service = path_reveal_service
+        self._paths_by_label: dict[str, Path | None] = {}
+        self._entry_actions = {}
+        self._build_menu()
+
+    def _build_menu(self) -> None:
+        self.setTitle("Project Paths")
+        for label in ("Workspace", "Microscopy"):
+            action = self.addAction("")
+            action.triggered.connect(
+                lambda _checked=False, entry_label=label: self._on_entry_triggered(
+                    entry_label
+                )
+            )
+            self._entry_actions[label] = action
+
+    def show_for_button(
+        self, anchor_button: QPushButton, entries: tuple[PathEntry, ...]
+    ) -> None:
+        self.set_entries(entries)
+        global_bottom_left = anchor_button.mapToGlobal(anchor_button.rect().bottomLeft())
+        self.popup(global_bottom_left)
+
+    def set_entries(self, entries: tuple[PathEntry, ...]) -> None:
+        self._paths_by_label = {}
+        for label, path in entries:
+            action = self._entry_actions[label]
+            self._paths_by_label[label] = path
+            if path is None:
+                action.setText(f"{label}: Not set")
+                action.setToolTip("")
+                action.setEnabled(False)
+                continue
+
+            action.setText(f"{label}: {_display_path_name(path)}")
+            action.setToolTip("")
+            action.setEnabled(True)
+
+    def entry_text(self, label: str) -> str:
+        text = self._entry_actions[label].text()
+        prefix = f"{label}: "
+        if text.startswith(prefix):
+            return text[len(prefix) :]
+        return text
+
+    def entry_action(self, label: str):
+        return self._entry_actions[label]
+
+    @Slot(str)
+    def _on_entry_triggered(self, label: str) -> None:
+        path = self._paths_by_label.get(label)
+        if path is None:
+            return
+        self._path_reveal_service.reveal_path(path)
+
+
 # =============================================================================
 # STATUS BAR
 # =============================================================================
 
 
 class StatusBar(QStatusBar):
-    """Status bar for displaying status messages only."""
+    """Status bar for status messages plus a popup path browser."""
 
-    # ------------------------------------------------------------------------
-    # INITIALIZATION
-    # ------------------------------------------------------------------------
-    def __init__(self, parent=None) -> None:
+    def __init__(
+        self,
+        *,
+        path_reveal_service: PathRevealService,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._path_reveal_service = path_reveal_service
+        self._workspace_path: Path | None = None
+        self._microscopy_path: Path | None = None
+        self._paths_menu: _PathsMenu | None = None
         self._build_ui()
-        self._connect_signals()
-
-    # ------------------------------------------------------------------------
-    # UI SETUP
-    # ------------------------------------------------------------------------
-    def _build_ui(self) -> None:
-        """Set up the status bar UI components."""
-        # Main status label
-        self._status_label = QLabel("Ready")
-        self.addWidget(self._status_label)
-
-    def _connect_signals(self) -> None:
-        """Connect signals for the status bar."""
-        pass
-
-    # ------------------------------------------------------------------------
-    # STATUS UPDATES
-    # ------------------------------------------------------------------------
-    def show_status_message(self, message: str) -> None:
-        """Display status message."""
-        self._status_label.setText(message)
-
-    def clear_status(self) -> None:
-        """Clear status and show ready state."""
-        self._status_label.setText("Ready")
-
-
-class WorkspaceBar(QWidget):
-    """Top-level workspace selector shown above the main tab widget."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._build_ui()
-
-    def _build_ui(self) -> None:
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 0)
-
-        self._title_label = QLabel("Workspace:")
-        self._path_label = QLabel("Not set")
-        self._change_button = QPushButton("Set Workspace...")
-
-        layout.addWidget(self._title_label)
-        layout.addWidget(self._path_label, 1)
-        layout.addWidget(self._change_button)
 
     @property
-    def change_button(self) -> QPushButton:
-        return self._change_button
+    def paths_button(self) -> QPushButton:
+        return self._paths_button
+
+    @property
+    def paths_menu(self) -> _PathsMenu:
+        return self._paths_menu
+
+    def path_entry_text(self, label: str) -> str:
+        return self._paths_menu.entry_text(label)
+
+    def _build_ui(self) -> None:
+        self.showMessage("Ready")
+        self._paths_menu = _PathsMenu(
+            path_reveal_service=self._path_reveal_service, parent=self.window()
+        )
+        self._paths_button = QPushButton("Info", self)
+        self._paths_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._paths_button.clicked.connect(self._toggle_paths_menu)
+        self.addPermanentWidget(self._paths_button)
+        self._refresh_paths_menu()
+
+    def show_status_message(self, message: str) -> None:
+        self.showMessage(message)
+
+    def clear_status(self) -> None:
+        self.showMessage("Ready")
 
     def show_workspace(self, path: Path | None) -> None:
-        if path is None:
-            self._path_label.setText("Not set")
-            self._change_button.setText("Set Workspace...")
-            return
+        self._workspace_path = path
+        self._refresh_paths_menu()
 
-        self._path_label.setText(str(path))
-        self._change_button.setText("Change...")
+    def show_microscopy(self, path: Path | None) -> None:
+        self._microscopy_path = path
+        self._refresh_paths_menu()
+
+    def _path_entries(self) -> tuple[PathEntry, ...]:
+        return (
+            ("Workspace", self._workspace_path),
+            ("Microscopy", self._microscopy_path),
+        )
+
+    def _refresh_paths_menu(self) -> None:
+        if self._paths_menu is None:
+            return
+        self._paths_menu.set_entries(self._path_entries())
+
+    @Slot()
+    def _toggle_paths_menu(self) -> None:
+        if self._paths_menu.isVisible():
+            self._paths_menu.hide()
+            return
+        self._paths_menu.show_for_button(self._paths_button, self._path_entries())
 
 
 # =============================================================================
@@ -126,15 +210,23 @@ class WorkspaceBar(QWidget):
 
 
 class MainWindow(QMainWindow):
-    """Top-level window assembling the Processing, Visualization, Modeling, and Statistics tabs."""
+    """Top-level window assembling the workflow and optional analysis tabs."""
 
     # ------------------------------------------------------------------------
     # INITIALIZATION
     # ------------------------------------------------------------------------
-    def __init__(self, *, dialog_service: FileDialogService | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        dialog_service: FileDialogService | None = None,
+        path_reveal_service: PathRevealService | None = None,
+    ) -> None:
         super().__init__()
         self.app_view_model = AppViewModel(self, dialog_service=dialog_service)
+        self.path_reveal_service = path_reveal_service or QtPathRevealService()
+        self.welcome_tab = None
         self.processing_tab = None
+        self.bboxes_tab = None
         self.visualization_tab = None
         self.modeling_tab = None
         self.statistics_tab = None
@@ -150,7 +242,6 @@ class MainWindow(QMainWindow):
         self._setup_window()
         self._create_menu_bar()
         self._create_status_bar()
-        self._create_workspace_bar()
         self._create_tabs()
         self._finalize_window()
 
@@ -160,9 +251,9 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         """Connect all signals and establish communication between components."""
         self.tabs.currentChanged.connect(self._on_tab_changed)
-        self.workspace_bar.change_button.clicked.connect(self._on_set_workspace_folder)
         self.app_view_model.status_changed.connect(self._on_status_message)
         self.app_view_model.workspace_changed.connect(self._on_workspace_changed)
+        self.app_view_model.microscopy_changed.connect(self._on_microscopy_changed)
         self.app_view_model.busy_changed.connect(self._on_busy_changed)
         self._ensure_tab_loaded(0)
 
@@ -179,12 +270,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     def _create_status_bar(self) -> None:
         """Create and configure the status bar."""
-        self.status_bar = StatusBar(self)
+        self.status_bar = StatusBar(
+            path_reveal_service=self.path_reveal_service, parent=self
+        )
+        self.status_bar.show_workspace(self.app_view_model.workspace_dir)
+        self.status_bar.show_microscopy(self.app_view_model.microscopy_path)
         self.setStatusBar(self.status_bar)
-
-    def _create_workspace_bar(self) -> None:
-        self.workspace_bar = WorkspaceBar(self)
-        self.workspace_bar.show_workspace(self.app_view_model.workspace_dir)
 
     def _create_menu_bar(self) -> None:
         menu_bar = self.menuBar()
@@ -206,12 +297,24 @@ class MainWindow(QMainWindow):
             self._tab_containers.append(container)
             self.tabs.addTab(container, label)
 
-    def _tab_specs(self) -> tuple[tuple[str, str, object], ...]:
+    def _tab_specs(self) -> tuple[TabSpec, ...]:
         return (
+            ("welcome_tab", "Welcome", self._create_welcome_tab),
+            ("bboxes_tab", "Alignment", self._create_bboxes_tab),
             ("processing_tab", "Processing", self._create_processing_tab),
             ("statistics_tab", "Statistics", self._create_statistics_tab),
             ("modeling_tab", "Modeling", self._create_modeling_tab),
             ("visualization_tab", "Visualization", self._create_visualization_tab),
+        )
+
+    def _create_welcome_tab(self) -> QWidget:
+        from pyama_gui.apps.welcome.view import WelcomeView
+
+        return WelcomeView(
+            self.app_view_model,
+            set_workspace=self._on_set_workspace_folder,
+            set_microscopy=self._on_set_microscopy_file,
+            parent=self,
         )
 
     def _create_processing_tab(self) -> QWidget:
@@ -223,6 +326,11 @@ class MainWindow(QMainWindow):
         from pyama_gui.apps.statistics.view import StatisticsView
 
         return StatisticsView(self.app_view_model, self)
+
+    def _create_bboxes_tab(self) -> QWidget:
+        from pyama_gui.apps.bboxes.view import BBoxesView
+
+        return BBoxesView(self.app_view_model, self)
 
     def _create_modeling_tab(self) -> QWidget:
         from pyama_gui.apps.modeling.view import ModelingView
@@ -257,7 +365,11 @@ class MainWindow(QMainWindow):
 
     @Slot(object)
     def _on_workspace_changed(self, path: Path | None) -> None:
-        self.workspace_bar.show_workspace(path)
+        self.status_bar.show_workspace(path)
+
+    @Slot(object)
+    def _on_microscopy_changed(self, path: Path | None) -> None:
+        self.status_bar.show_microscopy(path)
 
     @Slot(int)
     def _on_tab_changed(self, index: int) -> None:
@@ -274,6 +386,18 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_set_workspace_folder(self) -> None:
         self.app_view_model.select_workspace()
+
+    @Slot()
+    def _on_set_microscopy_file(self) -> None:
+        self.app_view_model.select_microscopy()
+
+    @Slot()
+    def _on_clear_microscopy_file(self) -> None:
+        self.app_view_model.clear_microscopy()
+
+    @Slot()
+    def _open_alignment_tab(self) -> None:
+        self.tabs.setCurrentIndex(1)
 
     def prompt_for_workspace_on_startup(self) -> None:
         """Prompt for a workspace folder when the app starts without one."""
@@ -295,6 +419,5 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.workspace_bar)
         layout.addWidget(self.tabs, 1)
         self.setCentralWidget(container)

@@ -151,8 +151,6 @@ class VisualizationView(QWidget):
         self._next_frame_10_button.clicked.connect(
             lambda: self.view_model.step_frame(10)
         )
-        self._image_viewer.overlay_clicked.connect(self._on_overlay_clicked)
-        self._image_viewer.overlay_right_clicked.connect(self._on_overlay_right_clicked)
         self._feature_dropdown.currentTextChanged.connect(
             self.view_model.set_selected_feature
         )
@@ -266,16 +264,6 @@ class VisualizationView(QWidget):
             for item in self._channels_list.selectedItems()
         ]
         self.view_model.set_selected_channels(selected_channels)
-
-    @Slot(str)
-    def _on_overlay_clicked(self, overlay_id: str) -> None:
-        if overlay_id.startswith("trace_"):
-            self.view_model.select_trace(overlay_id.split("_", 1)[1])
-
-    @Slot(str)
-    def _on_overlay_right_clicked(self, overlay_id: str) -> None:
-        if overlay_id.startswith("trace_"):
-            self.view_model.toggle_trace_quality(overlay_id.split("_", 1)[1])
 
     @Slot(QListWidgetItem)
     def _on_trace_item_clicked(self, item: QListWidgetItem) -> None:

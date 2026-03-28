@@ -2,9 +2,9 @@
 PyAMA-Pro: Professional PySide6-based image processing tool for microscopy data
 
 Complete suite for microscopy analysis:
-- Processing: ND2 → Extract → Binarize → Correct → Track → CSV
-- Visualization: Interactive exploration of results
-- Modeling: Advanced trace fitting with gene expression models
+- Workflow: Welcome → Alignment → Processing → Statistics
+- Visualization: Optional interactive exploration of results
+- Modeling: Optional trace fitting with gene expression models
 - Statistics: Normalized metrics and cross-sample comparison
 """
 

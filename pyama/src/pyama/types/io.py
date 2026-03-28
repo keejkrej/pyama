@@ -18,11 +18,13 @@ class MicroscopyMetadata:
     dtype: str
     timepoints: tuple[float, ...] = ()
     position_list: tuple[int, ...] = (0,)
+    z_slices: tuple[int, ...] = (0,)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "channel_names", tuple(self.channel_names))
         object.__setattr__(self, "timepoints", tuple(float(value) for value in self.timepoints))
         object.__setattr__(self, "position_list", tuple(int(value) for value in self.position_list))
+        object.__setattr__(self, "z_slices", tuple(int(value) for value in self.z_slices))
         if self.height < 0 or self.width < 0 or self.n_frames < 0:
             raise ValueError("MicroscopyMetadata dimensions must be >= 0")
 
@@ -33,6 +35,10 @@ class MicroscopyMetadata:
     @property
     def n_channels(self) -> int:
         return len(self.channel_names)
+
+    @property
+    def n_z(self) -> int:
+        return len(self.z_slices)
 
 type PositionArtifacts = dict[str, Path | str]
 

@@ -67,8 +67,7 @@ def create_analysis_dataframe(
         else:
             df_data[roi_id] = [float("nan")] * len(frame_values)
 
-    df = pd.DataFrame(df_data, index=frame_values)
-    df.index.name = "frame"
+    df = pd.DataFrame(df_data, index=pd.Index(frame_values, name="frame"))
     return df
 
 
@@ -176,6 +175,8 @@ def extract_roi_position_dataframe(df: pd.DataFrame, roi_id: int) -> pd.DataFram
             "frame": roi_df["frame"].values,
             "x": roi_df["x"].values,
             "y": roi_df["y"].values,
+            "w": roi_df["w"].values,
+            "h": roi_df["h"].values,
         }
     )
 
@@ -197,6 +198,8 @@ def extract_all_rois_data(df: pd.DataFrame) -> dict:
             "frames": positions_df["frame"].values,
             "x": positions_df["x"].values,
             "y": positions_df["y"].values,
+            "w": positions_df["w"].values,
+            "h": positions_df["h"].values,
         }
 
         result[str_id] = {

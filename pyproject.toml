@@ -1,13 +1,11 @@
 [tool.uv.workspace]
 members = [
     "pyama",
-    "pyama-cli",
     "pyama-gui",
 ]
 
 [tool.uv.sources]
 pyama = { workspace = true }
-pyama-cli = { workspace = true }
 pyama-gui = { workspace = true }
 
 [dependency-groups]

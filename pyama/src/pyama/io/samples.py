@@ -1,8 +1,8 @@
 """Sample YAML and statistics sample discovery helpers."""
 
 import logging
-from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 import yaml
 
@@ -26,15 +26,26 @@ def read_samples_yaml(path: Path) -> SamplesFilePayload:
 
     validated_samples: list[MergeSamplePayload] = []
     for index, sample in enumerate(samples, start=1):
-        if not isinstance(sample, Mapping):
+        if not isinstance(sample, dict):
             raise ValueError(f"Sample {index} must be a mapping")
-        name = sample.get("name")
-        positions = sample.get("positions")
+        sample_dict = cast(dict[object, object], sample)
+        name = sample_dict.get("name")
+        positions = sample_dict.get("positions")
         if not isinstance(name, str):
             raise ValueError(f"Sample {index} is missing a name")
-        if not isinstance(positions, (str, list)):
+        if isinstance(positions, str):
+            validated_samples.append({"name": name, "positions": positions})
+            continue
+        if not isinstance(positions, list):
             raise ValueError(f"Sample {index} must include a string or list of positions")
-        validated_samples.append({"name": name, "positions": positions})
+        validated_positions: list[int | str] = []
+        for position in positions:
+            if isinstance(position, bool) or not isinstance(position, int | str):
+                raise ValueError(
+                    f"Sample {index} list positions must contain only integers or strings"
+                )
+            validated_positions.append(position)
+        validated_samples.append({"name": name, "positions": validated_positions})
     return {"samples": validated_samples}
 
 
@@ -56,15 +67,6 @@ def discover_statistics_sample_pairs(folder_path: Path | str) -> list[SamplePair
     if area_dir.exists():
         for csv_path in sorted(area_dir.glob("*.csv")):
             area_by_sample[csv_path.stem] = csv_path
-    if not intensity_by_sample and not area_by_sample:
-        for csv_path in sorted(folder.glob("*.csv")):
-            name = csv_path.name
-            if name.endswith("_intensity_ch_1.csv"):
-                sample_name = name[: -len("_intensity_ch_1.csv")]
-                intensity_by_sample[sample_name] = csv_path
-            elif name.endswith("_area_ch_0.csv"):
-                sample_name = name[: -len("_area_ch_0.csv")]
-                area_by_sample[sample_name] = csv_path
 
     pairs: list[SamplePair] = []
     for sample_name in sorted(set(intensity_by_sample) | set(area_by_sample)):

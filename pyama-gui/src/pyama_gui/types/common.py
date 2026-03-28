@@ -9,6 +9,7 @@ class AppState:
     """Shared application state exposed to the shell."""
 
     workspace_dir: Path | None
+    microscopy_path: Path | None
     status_message: str
     busy: bool
 

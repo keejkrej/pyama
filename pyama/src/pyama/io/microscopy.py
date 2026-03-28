@@ -146,6 +146,7 @@ class NikonImage:
         self._dims = SimpleNamespace(
             T=int(self.sizes.get("T", 1)),
             C=int(self.sizes.get("C", 1)),
+            Z=int(self.sizes.get("Z", 1)),
             Y=int(self.sizes.get("Y", 0)),
             X=int(self.sizes.get("X", 0)),
         )
@@ -239,6 +240,7 @@ class ZeissImage:
         self._dims = SimpleNamespace(
             T=_range_size(total_bounds.get("T")),
             C=_range_size(total_bounds.get("C")),
+            Z=_range_size(total_bounds.get("Z")),
             Y=self._height,
             X=self._width,
         )
@@ -248,6 +250,7 @@ class ZeissImage:
             len(self._scene_ids),
             self._dims.T,
             self._dims.C,
+            self._dims.Z,
             self._dims.Y,
             self._dims.X,
         )
@@ -373,11 +376,21 @@ def load_microscopy_file(file_path: Path) -> tuple[MicroscopyImage, MicroscopyMe
             dtype=reader.dtype,
             timepoints=tuple(reader.timepoints),
             position_list=tuple(reader.position_list),
+            z_slices=tuple(range(int(reader.dims.Z))),
         )
         return reader, metadata
     except Exception as exc:
         logger.exception("Failed to load microscopy file %s", file_path)
         raise RuntimeError(f"Failed to load {file_type.upper()} file: {exc}") from exc
+
+
+def inspect_microscopy_file(file_path: Path) -> MicroscopyMetadata:
+    """Return microscopy metadata without exposing the live reader to callers."""
+    reader, metadata = load_microscopy_file(file_path)
+    try:
+        return metadata
+    finally:
+        reader.close()
 
 
 def get_microscopy_frame(

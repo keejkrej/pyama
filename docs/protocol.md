@@ -9,4 +9,4 @@ Prereqs: `uv sync`, test ND2, output dir.
 **Modeling**: Load CSV → pick model → Start Fitting → quality panel, parameter analysis, Save All Plots
 **Statistics**: Load `traces_merged` folder (or a workspace containing it) → run AUC/Onset → inspect normalized traces → compare sample distributions
 
-**Cross-tab**: workspace startup prompt; full flow; tab switching; error handling for invalid files
+**Cross-tab**: full flow; tab switching; error handling for invalid files

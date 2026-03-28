@@ -13,17 +13,15 @@ def test_processing_params_defaults_are_canonical() -> None:
     assert params.n_workers == 1
     assert params.background_weight == 1.0
     assert params.background_min_samples == 64
-    assert params.copy_only is False
     assert params.to_dict() == {
         "positions": "all",
         "n_workers": 1,
         "background_weight": 1.0,
         "background_min_samples": 64,
-        "copy_only": False,
     }
 
 
-def test_processing_params_from_dict_ignores_legacy_method_keys() -> None:
+def test_processing_params_from_dict_ignores_legacy_keys() -> None:
     params = ProcessingParams.from_dict(
         {
             "positions": "0:3",
@@ -41,7 +39,6 @@ def test_processing_params_from_dict_ignores_legacy_method_keys() -> None:
         n_workers=2,
         background_weight=0.5,
         background_min_samples=32,
-        copy_only=True,
     )
 
 
@@ -93,7 +90,6 @@ def test_processing_config_to_dict_omits_legacy_method_keys() -> None:
             "n_workers": 1,
             "background_weight": 1.0,
             "background_min_samples": 64,
-            "copy_only": False,
         },
     }
 

@@ -8,7 +8,7 @@ from pyama.io.visualization_cache import (
     load_cached_slice,
     resolve_cache_path,
 )
-from pyama.io.zarr import open_raw_zarr
+from pyama.io.zarr import open_raw_zarr, open_rois_zarr
 
 
 def test_resolve_cache_path_uses_channel_suffix(tmp_path: Path) -> None:
@@ -79,6 +79,33 @@ def test_build_uint8_cache_accepts_raw_zarr_dataset_reference(tmp_path: Path) ->
 
     assert cached.path.exists()
     assert cached.path.suffix == ".npy"
+    assert cached.n_frames == 2
+    reloaded = np.load(cached.path)
+    assert reloaded.shape == (2, 2, 3)
+
+
+def test_build_uint8_cache_accepts_rois_zarr_roi_reference(tmp_path: Path) -> None:
+    rois_zarr_path = tmp_path / "rois.zarr"
+    store = open_rois_zarr(rois_zarr_path, mode="a")
+    store.write_roi_raw_frame(
+        position_id=0,
+        channel_id=1,
+        roi_id=7,
+        frame_idx=0,
+        data=np.arange(6, dtype=np.uint16).reshape(2, 3),
+    )
+    store.write_roi_raw_frame(
+        position_id=0,
+        channel_id=1,
+        roi_id=7,
+        frame_idx=1,
+        data=np.arange(6, 12, dtype=np.uint16).reshape(2, 3),
+    )
+
+    source_ref = f"{rois_zarr_path}::position/0/channel/1/roi/7/raw"
+    cached = build_uint8_cache(source_ref, "roi_raw_ch_1")
+
+    assert cached.path.exists()
     assert cached.n_frames == 2
     reloaded = np.load(cached.path)
     assert reloaded.shape == (2, 2, 3)
