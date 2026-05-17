@@ -4,48 +4,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
-from PIL import ImageDraw
 from PySide6 import QtCore, QtWidgets
 
-from .annotations import Label, load_annotation, load_labels, save_annotation, save_labels
+from .annotator_viewmodel import AnnotatorViewModel
 from .ui.image_view import ImageCanvas
 from .ui.qt import get_app, run_window
-from .workspace import RoiRecord, scan_roi_workspace
-
-
-def read_roi_stack(path: Path) -> np.ndarray:
-    import tifffile
-
-    stack = np.asarray(tifffile.imread(str(path)))
-    if stack.ndim == 2:
-        return stack[None, None, None, :, :]
-    if stack.ndim == 3:
-        return stack[:, None, None, :, :]
-    if stack.ndim == 4:
-        return stack[:, :, None, :, :]
-    if stack.ndim == 5:
-        return stack
-    raise ValueError(f"Unsupported ROI TIFF shape: {stack.shape}")
 
 
 class AnnotatorWindow(QtWidgets.QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, view_model: AnnotatorViewModel | None = None) -> None:
         super().__init__()
         self.setWindowTitle("Pyama Annotator")
         self.resize(1200, 820)
-        self.root = Path.cwd()
-        self.records: list[RoiRecord] = []
-        self.stack: np.ndarray | None = None
-        self.mask: np.ndarray | None = None
-        self.undo_stack: list[np.ndarray] = []
-        self.redo_stack: list[np.ndarray] = []
-        self.lasso_points: list[tuple[int, int]] = []
+        self.vm = view_model or AnnotatorViewModel()
 
         self.canvas = ImageCanvas()
         self.canvas.scene().sigMouseClicked.connect(self.on_canvas_click)
         self._build_ui()
-        self.load_workspace(self.root)
+        self._connect_view_model()
+        self.vm.load_workspace(self.vm.root)
 
     def _build_ui(self) -> None:
         root = QtWidgets.QWidget()
@@ -58,32 +35,26 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         form = QtWidgets.QFormLayout(panel)
         layout.addWidget(panel)
 
-        self.workspace_edit = QtWidgets.QLineEdit(str(self.root))
-        browse = QtWidgets.QPushButton("...")
-        browse.clicked.connect(self.choose_workspace)
-        row = QtWidgets.QWidget()
-        row_layout = QtWidgets.QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.addWidget(self.workspace_edit)
-        row_layout.addWidget(browse)
-        form.addRow("Workspace", row)
+        self.workspace_edit = QtWidgets.QLineEdit(str(self.vm.root))
+        form.addRow("Workspace", self._path_row(self.workspace_edit, self.choose_workspace))
 
         reload_btn = QtWidgets.QPushButton("Scan")
-        reload_btn.clicked.connect(lambda: self.load_workspace(Path(self.workspace_edit.text())))
+        reload_btn.clicked.connect(lambda: self.vm.load_workspace(Path(self.workspace_edit.text())))
         form.addRow(reload_btn)
 
         self.roi_list = QtWidgets.QListWidget()
-        self.roi_list.currentRowChanged.connect(self.open_roi)
+        self.roi_list.currentRowChanged.connect(self.vm.open_roi)
         form.addRow("ROIs", self.roi_list)
 
-        self.t_spin = self._spin(self.update_frame)
-        self.c_spin = self._spin(self.update_frame)
-        self.z_spin = self._spin(self.update_frame)
+        self.t_spin = self._spin(self.update_frame_selection)
+        self.c_spin = self._spin(self.update_frame_selection)
+        self.z_spin = self._spin(self.update_frame_selection)
         form.addRow("Time", self.t_spin)
         form.addRow("Channel", self.c_spin)
         form.addRow("Z", self.z_spin)
 
         self.label_combo = QtWidgets.QComboBox()
+        self.label_combo.currentIndexChanged.connect(self.on_label_changed)
         form.addRow("Label", self.label_combo)
         label_row = QtWidgets.QWidget()
         label_layout = QtWidgets.QHBoxLayout(label_row)
@@ -106,11 +77,11 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         action_layout = QtWidgets.QGridLayout(actions)
         for i, (text, slot) in enumerate(
             [
-                ("Undo", self.undo),
-                ("Redo", self.redo),
-                ("Discard", self.discard),
-                ("Fill Lasso", self.fill_lasso),
-                ("Save", self.save_current),
+                ("Undo", self.vm.undo),
+                ("Redo", self.vm.redo),
+                ("Discard", self.vm.discard),
+                ("Fill Lasso", self.vm.fill_lasso),
+                ("Save", self.vm.save_current),
             ]
         ):
             button = QtWidgets.QPushButton(text)
@@ -122,171 +93,97 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         self.status.setWordWrap(True)
         form.addRow(self.status)
 
+    def _connect_view_model(self) -> None:
+        self.vm.roi_list_changed.connect(self.set_roi_list)
+        self.vm.labels_changed.connect(self.set_labels)
+        self.vm.label_selected_changed.connect(self.select_label)
+        self.vm.frame_limits_changed.connect(self.set_frame_limits)
+        self.vm.frame_changed.connect(self.canvas.set_frame)
+        self.vm.mask_changed.connect(self.canvas.set_mask)
+        self.vm.status_changed.connect(self.status.setText)
+
+    def _path_row(self, edit: QtWidgets.QLineEdit, slot) -> QtWidgets.QWidget:
+        row = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(edit)
+        btn = QtWidgets.QPushButton("...")
+        btn.clicked.connect(slot)
+        layout.addWidget(btn)
+        return row
+
     def _spin(self, slot, minimum: int = 0, maximum: int = 0, value: int = 0) -> QtWidgets.QSpinBox:
         spin = QtWidgets.QSpinBox()
         spin.setRange(minimum, maximum)
         spin.setValue(value)
-        spin.valueChanged.connect(slot)
+        spin.valueChanged.connect(lambda *_: slot())
         return spin
 
     def choose_workspace(self) -> None:
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose ROI Workspace")
         if path:
             self.workspace_edit.setText(path)
-            self.load_workspace(Path(path))
+            self.vm.load_workspace(Path(path))
 
-    def load_workspace(self, root: Path) -> None:
-        self.root = root
-        self.labels = load_labels(root)
-        self.label_combo.clear()
-        for label in self.labels:
-            self.label_combo.addItem(label.name, label.id)
-
-        workspace = scan_roi_workspace(root)
-        self.records = workspace.records
+    @QtCore.Slot(object)
+    def set_roi_list(self, rows: list[str]) -> None:
+        previous = self.roi_list.blockSignals(True)
         self.roi_list.clear()
-        for record in self.records:
-            self.roi_list.addItem(f"Pos{record.pos} Roi{record.roi}")
-        if self.records:
+        self.roi_list.addItems(rows)
+        if rows:
             self.roi_list.setCurrentRow(0)
-        self.status.setText(f"Found {len(self.records)} ROIs")
+        self.roi_list.blockSignals(previous)
 
-    @QtCore.Slot(int)
-    def open_roi(self, row: int) -> None:
-        if row < 0 or row >= len(self.records):
+    @QtCore.Slot(object)
+    def set_labels(self, labels) -> None:
+        previous = self.label_combo.blockSignals(True)
+        self.label_combo.clear()
+        for label in labels:
+            self.label_combo.addItem(label.name, label.id)
+        self.label_combo.blockSignals(previous)
+
+    @QtCore.Slot(object)
+    def select_label(self, label_id: str | None) -> None:
+        if label_id is None:
             return
-        record = self.records[row]
-        self.stack = read_roi_stack(Path(record.path))
-        self.t_spin.setRange(0, self.stack.shape[0] - 1)
-        self.c_spin.setRange(0, self.stack.shape[1] - 1)
-        self.z_spin.setRange(0, self.stack.shape[2] - 1)
-        self.mask = np.zeros(self.stack.shape[-2:], dtype=bool)
-        self.undo_stack.clear()
-        self.redo_stack.clear()
-        self.update_frame()
+        idx = self.label_combo.findData(label_id)
+        if idx >= 0:
+            previous = self.label_combo.blockSignals(True)
+            self.label_combo.setCurrentIndex(idx)
+            self.label_combo.blockSignals(previous)
 
-    def current_record(self) -> RoiRecord | None:
-        row = self.roi_list.currentRow()
-        if row < 0 or row >= len(self.records):
-            return None
-        return self.records[row]
+    @QtCore.Slot(int, int, int)
+    def set_frame_limits(self, max_time: int, max_chan: int, max_z: int) -> None:
+        for spin, maximum in (
+            (self.t_spin, max_time),
+            (self.c_spin, max_chan),
+            (self.z_spin, max_z),
+        ):
+            previous = spin.blockSignals(True)
+            spin.setRange(0, maximum)
+            spin.blockSignals(previous)
 
-    def update_frame(self) -> None:
-        if self.stack is None:
-            return
-        frame = self.stack[self.t_spin.value(), self.c_spin.value(), self.z_spin.value()]
-        self.canvas.set_frame(frame)
-        record = self.current_record()
-        if record is not None:
-            annotation, mask = load_annotation(
-                self.root,
-                pos=record.pos,
-                roi=record.roi,
-                channel=self.c_spin.value(),
-                time=self.t_spin.value(),
-                z=self.z_spin.value(),
-            )
-            if annotation and annotation.label_id:
-                idx = self.label_combo.findData(annotation.label_id)
-                if idx >= 0:
-                    self.label_combo.setCurrentIndex(idx)
-            self.mask = mask if mask is not None else np.zeros(frame.shape, dtype=bool)
-        self.canvas.set_mask(self.mask)
+    def update_frame_selection(self) -> None:
+        self.vm.set_frame_indices(self.t_spin.value(), self.c_spin.value(), self.z_spin.value())
+
+    def on_label_changed(self) -> None:
+        self.vm.set_label_id(self.label_combo.currentData())
 
     def on_canvas_click(self, event) -> None:
-        if self.stack is None or self.mask is None:
-            return
         point = self.canvas.plotItem.vb.mapSceneToView(event.scenePos())
         x, y = int(round(point.x())), int(round(point.y()))
-        if not (0 <= y < self.mask.shape[0] and 0 <= x < self.mask.shape[1]):
-            return
-        mode = self.mode.currentText()
-        if mode == "lasso":
-            self.lasso_points.append((x, y))
-            self.status.setText(f"Lasso points: {len(self.lasso_points)}")
-            return
-        self.push_undo()
-        radius = self.brush.value()
-        y1, y2 = max(0, y - radius), min(self.mask.shape[0], y + radius + 1)
-        x1, x2 = max(0, x - radius), min(self.mask.shape[1], x + radius + 1)
-        yy, xx = np.ogrid[y1:y2, x1:x2]
-        brush = (yy - y) ** 2 + (xx - x) ** 2 <= radius**2
-        self.mask[y1:y2, x1:x2][brush] = mode == "brush"
-        self.canvas.set_mask(self.mask)
-
-    def push_undo(self) -> None:
-        if self.mask is not None:
-            self.undo_stack.append(self.mask.copy())
-            self.redo_stack.clear()
-
-    def undo(self) -> None:
-        if self.mask is None or not self.undo_stack:
-            return
-        self.redo_stack.append(self.mask.copy())
-        self.mask = self.undo_stack.pop()
-        self.canvas.set_mask(self.mask)
-
-    def redo(self) -> None:
-        if self.mask is None or not self.redo_stack:
-            return
-        self.undo_stack.append(self.mask.copy())
-        self.mask = self.redo_stack.pop()
-        self.canvas.set_mask(self.mask)
-
-    def discard(self) -> None:
-        if self.stack is None:
-            return
-        self.mask = np.zeros(self.stack.shape[-2:], dtype=bool)
-        self.undo_stack.clear()
-        self.redo_stack.clear()
-        self.canvas.set_mask(self.mask)
-
-    def fill_lasso(self) -> None:
-        if self.mask is None or len(self.lasso_points) < 3:
-            return
-        self.push_undo()
-        from PIL import Image
-
-        image = Image.new("L", (self.mask.shape[1], self.mask.shape[0]), 0)
-        ImageDraw.Draw(image).polygon(self.lasso_points, fill=1)
-        self.mask |= np.asarray(image, dtype=bool)
-        self.lasso_points.clear()
-        self.canvas.set_mask(self.mask)
-
-    def save_current(self) -> None:
-        record = self.current_record()
-        if record is None:
-            return
-        save_labels(self.root, self.labels)
-        save_annotation(
-            self.root,
-            pos=record.pos,
-            roi=record.roi,
-            channel=self.c_spin.value(),
-            time=self.t_spin.value(),
-            z=self.z_spin.value(),
-            label_id=self.label_combo.currentData(),
-            mask=self.mask,
-        )
-        self.status.setText("Saved annotation")
+        if self.mode.currentText() == "lasso":
+            self.vm.add_lasso_point(x, y)
+        else:
+            self.vm.paint_at(x, y, self.mode.currentText(), self.brush.value())
 
     def add_label(self) -> None:
         name, ok = QtWidgets.QInputDialog.getText(self, "Add Label", "Name")
-        if not ok or not name.strip():
-            return
-        label_id = name.strip().lower().replace(" ", "_")
-        self.labels.append(Label(id=label_id, name=name.strip(), color="#ffcc00"))
-        save_labels(self.root, self.labels)
-        self.load_workspace(self.root)
+        if ok:
+            self.vm.add_label(name)
 
     def remove_label(self) -> None:
-        idx = self.label_combo.currentIndex()
-        if idx < 0:
-            return
-        label_id = self.label_combo.itemData(idx)
-        self.labels = [label for label in self.labels if label.id != label_id]
-        save_labels(self.root, self.labels)
-        self.load_workspace(self.root)
+        self.vm.remove_label(self.label_combo.currentData())
 
 
 def main() -> int:

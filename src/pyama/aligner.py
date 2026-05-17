@@ -6,27 +6,24 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
-from .adapters import ReaderSession, open_reader
-from .grid import GridSpec, auto_excluded_cells, cell_at, enumerate_grid
+from .aligner_viewmodel import AlignerViewModel
+from .grid import GridSpec
 from .ui.image_view import ImageCanvas
-from .ui.qt import WorkerThread, get_app, run_window
-from .workspace import Alignment, cell_bbox_union, crop_rois, save_alignment, save_bbox
+from .ui.qt import get_app, run_window
 
 
 class AlignerWindow(QtWidgets.QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, view_model: AlignerViewModel | None = None) -> None:
         super().__init__()
         self.setWindowTitle("Pyama Aligner")
         self.resize(1200, 820)
-        self.session: ReaderSession | None = None
-        self.source_path: Path | None = None
-        self.worker: WorkerThread | None = None
-        self.excluded: set[int] = set()
+        self.vm = view_model or AlignerViewModel()
 
         self.canvas = ImageCanvas()
-        self.canvas.cellClicked.connect(self.toggle_cell)
+        self.canvas.cellClicked.connect(self.vm.toggle_cell)
         self._build_ui()
-        self._sync_limits_enabled(False)
+        self._connect_view_model()
+        self._sync_source_enabled(False)
 
     def _build_ui(self) -> None:
         root = QtWidgets.QWidget()
@@ -40,8 +37,7 @@ class AlignerWindow(QtWidgets.QMainWindow):
         layout.addWidget(panel)
 
         self.source_edit = QtWidgets.QLineEdit()
-        source_row = self._path_row(self.source_edit, self.choose_source)
-        form.addRow("Source", source_row)
+        form.addRow("Source", self._path_row(self.source_edit, self.choose_source))
         self.workspace_edit = QtWidgets.QLineEdit(str(Path.cwd()))
         form.addRow("Workspace", self._path_row(self.workspace_edit, self.choose_workspace))
 
@@ -49,10 +45,10 @@ class AlignerWindow(QtWidgets.QMainWindow):
         open_btn.clicked.connect(self.open_source)
         form.addRow(open_btn)
 
-        self.pos_spin = self._spin(self.update_frame)
-        self.t_spin = self._spin(self.update_frame)
-        self.c_spin = self._spin(self.update_frame)
-        self.z_spin = self._spin(self.update_frame)
+        self.pos_spin = self._spin(self.update_frame_selection)
+        self.t_spin = self._spin(self.update_frame_selection)
+        self.c_spin = self._spin(self.update_frame_selection)
+        self.z_spin = self._spin(self.update_frame_selection)
         form.addRow("Position", self.pos_spin)
         form.addRow("Time", self.t_spin)
         form.addRow("Channel", self.c_spin)
@@ -60,16 +56,16 @@ class AlignerWindow(QtWidgets.QMainWindow):
 
         self.kind_combo = QtWidgets.QComboBox()
         self.kind_combo.addItems(["rect", "hex"])
-        self.kind_combo.currentTextChanged.connect(self.update_overlay)
+        self.kind_combo.currentTextChanged.connect(self.update_grid_spec)
         form.addRow("Grid", self.kind_combo)
-        self.origin_x = self._double(0, self.update_overlay)
-        self.origin_y = self._double(0, self.update_overlay)
-        self.roi_w = self._spin(self.update_overlay, 1, 10000, 64)
-        self.roi_h = self._spin(self.update_overlay, 1, 10000, 64)
-        self.spacing_x = self._double(80, self.update_overlay)
-        self.spacing_y = self._double(80, self.update_overlay)
-        self.rows = self._spin(self.update_overlay, 1, 1000, 4)
-        self.cols = self._spin(self.update_overlay, 1, 1000, 4)
+        self.origin_x = self._double(0, self.update_grid_spec)
+        self.origin_y = self._double(0, self.update_grid_spec)
+        self.roi_w = self._spin(self.update_grid_spec, 1, 10000, 64)
+        self.roi_h = self._spin(self.update_grid_spec, 1, 10000, 64)
+        self.spacing_x = self._double(80, self.update_grid_spec)
+        self.spacing_y = self._double(80, self.update_grid_spec)
+        self.rows = self._spin(self.update_grid_spec, 1, 1000, 4)
+        self.cols = self._spin(self.update_grid_spec, 1, 1000, 4)
         form.addRow("Origin X", self.origin_x)
         form.addRow("Origin Y", self.origin_y)
         form.addRow("ROI W", self.roi_w)
@@ -79,24 +75,32 @@ class AlignerWindow(QtWidgets.QMainWindow):
         form.addRow("Rows", self.rows)
         form.addRow("Cols", self.cols)
 
-        auto_btn = QtWidgets.QPushButton("Auto Exclude")
-        auto_btn.clicked.connect(self.auto_exclude)
-        form.addRow(auto_btn)
-        save_btn = QtWidgets.QPushButton("Save BBox + Align")
-        save_btn.clicked.connect(self.save_alignment_files)
-        form.addRow(save_btn)
-        crop_btn = QtWidgets.QPushButton("Batch Crop")
-        crop_btn.clicked.connect(self.start_crop)
-        form.addRow(crop_btn)
-        cancel_btn = QtWidgets.QPushButton("Cancel Crop")
-        cancel_btn.clicked.connect(self.cancel_crop)
-        form.addRow(cancel_btn)
+        self.auto_btn = QtWidgets.QPushButton("Auto Exclude")
+        self.auto_btn.clicked.connect(self.vm.auto_exclude)
+        form.addRow(self.auto_btn)
+        self.save_btn = QtWidgets.QPushButton("Save BBox + Align")
+        self.save_btn.clicked.connect(self.save_alignment_files)
+        form.addRow(self.save_btn)
+        self.crop_btn = QtWidgets.QPushButton("Batch Crop")
+        self.crop_btn.clicked.connect(self.start_crop)
+        form.addRow(self.crop_btn)
+        self.cancel_btn = QtWidgets.QPushButton("Cancel Crop")
+        self.cancel_btn.clicked.connect(self.vm.cancel_crop)
+        form.addRow(self.cancel_btn)
 
         self.progress = QtWidgets.QProgressBar()
         self.status = QtWidgets.QLabel("")
         self.status.setWordWrap(True)
         form.addRow(self.progress)
         form.addRow(self.status)
+
+    def _connect_view_model(self) -> None:
+        self.vm.frame_changed.connect(self.canvas.set_frame)
+        self.vm.grid_changed.connect(self.canvas.set_grid)
+        self.vm.frame_limits_changed.connect(self.set_frame_limits)
+        self.vm.source_open_changed.connect(self._sync_source_enabled)
+        self.vm.progress_changed.connect(self.on_progress)
+        self.vm.status_changed.connect(self.status.setText)
 
     def _path_row(self, edit: QtWidgets.QLineEdit, slot) -> QtWidgets.QWidget:
         row = QtWidgets.QWidget()
@@ -112,7 +116,7 @@ class AlignerWindow(QtWidgets.QMainWindow):
         spin = QtWidgets.QSpinBox()
         spin.setRange(minimum, maximum)
         spin.setValue(value)
-        spin.valueChanged.connect(slot)
+        spin.valueChanged.connect(lambda *_: slot())
         return spin
 
     def _double(self, value: float, slot) -> QtWidgets.QDoubleSpinBox:
@@ -120,7 +124,7 @@ class AlignerWindow(QtWidgets.QMainWindow):
         spin.setRange(-1_000_000, 1_000_000)
         spin.setDecimals(2)
         spin.setValue(value)
-        spin.valueChanged.connect(slot)
+        spin.valueChanged.connect(lambda *_: slot())
         return spin
 
     def choose_source(self) -> None:
@@ -128,8 +132,7 @@ class AlignerWindow(QtWidgets.QMainWindow):
             self, "Open Source", "", "Images (*.nd2 *.czi *.tif *.tiff *.png *.jpg *.jpeg)"
         )
         if not path:
-            directory = QtWidgets.QFileDialog.getExistingDirectory(self, "Open Image Folder")
-            path = directory
+            path = QtWidgets.QFileDialog.getExistingDirectory(self, "Open Image Folder")
         if path:
             self.source_edit.setText(path)
 
@@ -139,20 +142,26 @@ class AlignerWindow(QtWidgets.QMainWindow):
             self.workspace_edit.setText(path)
 
     def open_source(self) -> None:
-        if self.session is not None:
-            self.session.close()
-        self.source_path = Path(self.source_edit.text()).expanduser()
-        self.session = open_reader(self.source_path)
-        info = self.session.info
-        self.pos_spin.setRange(0, max(info.n_pos - 1, 0))
-        self.t_spin.setRange(0, max(info.n_time - 1, 0))
-        self.c_spin.setRange(0, max(info.n_chan - 1, 0))
-        self.z_spin.setRange(0, max(info.n_z - 1, 0))
-        self._sync_limits_enabled(True)
-        self.update_frame()
+        self.vm.set_workspace_path(Path(self.workspace_edit.text()))
+        self.vm.open_source(Path(self.source_edit.text()))
 
-    def _sync_limits_enabled(self, enabled: bool) -> None:
+    @QtCore.Slot(int, int, int, int)
+    def set_frame_limits(self, max_pos: int, max_time: int, max_chan: int, max_z: int) -> None:
+        for spin, maximum in (
+            (self.pos_spin, max_pos),
+            (self.t_spin, max_time),
+            (self.c_spin, max_chan),
+            (self.z_spin, max_z),
+        ):
+            previous = spin.blockSignals(True)
+            spin.setRange(0, maximum)
+            spin.blockSignals(previous)
+
+    @QtCore.Slot(bool)
+    def _sync_source_enabled(self, enabled: bool) -> None:
         for widget in (self.pos_spin, self.t_spin, self.c_spin, self.z_spin):
+            widget.setEnabled(enabled)
+        for widget in (self.auto_btn, self.save_btn, self.crop_btn, self.cancel_btn):
             widget.setEnabled(enabled)
 
     def grid_spec(self) -> GridSpec:
@@ -168,82 +177,26 @@ class AlignerWindow(QtWidgets.QMainWindow):
             cols=self.cols.value(),
         )
 
-    def update_frame(self) -> None:
-        if self.session is None:
-            return
-        frame = self.session.read_frame(
-            self.pos_spin.value(), self.t_spin.value(), self.c_spin.value(), self.z_spin.value()
-        )
-        self.canvas.set_frame(frame)
-        self.update_overlay()
-
-    def update_overlay(self) -> None:
-        spec = self.grid_spec()
-        self.canvas.set_grid(
-            enumerate_grid(spec),
-            self.excluded,
-            lambda x, y: cell_at(spec, x, y),
+    def update_frame_selection(self) -> None:
+        self.vm.set_frame_indices(
+            self.pos_spin.value(),
+            self.t_spin.value(),
+            self.c_spin.value(),
+            self.z_spin.value(),
         )
 
-    @QtCore.Slot(int)
-    def toggle_cell(self, index: int) -> None:
-        if index in self.excluded:
-            self.excluded.remove(index)
-        else:
-            self.excluded.add(index)
-        self.update_overlay()
-
-    def auto_exclude(self) -> None:
-        if self.session is None:
-            return
-        info = self.session.info
-        if info.size_x is None or info.size_y is None:
-            frame = self.session.read_frame(self.pos_spin.value(), 0, 0, 0)
-            image_height, image_width = frame.shape[:2]
-        else:
-            image_width, image_height = info.size_x, info.size_y
-        self.excluded |= auto_excluded_cells(self.grid_spec(), image_width, image_height)
-        self.update_overlay()
+    def update_grid_spec(self) -> None:
+        self.vm.set_grid_spec(self.grid_spec())
 
     def save_alignment_files(self) -> None:
-        if self.source_path is None:
-            return
-        root = Path(self.workspace_edit.text())
-        spec = self.grid_spec()
-        bbox = cell_bbox_union(
-            cell for cell in enumerate_grid(spec) if cell.index not in self.excluded
-        )
-        pos = self.pos_spin.value()
-        save_bbox(root, pos, bbox)
-        save_alignment(
-            root,
-            Alignment(pos=pos, source=str(self.source_path), grid=spec, excluded=self.excluded),
-        )
-        self.status.setText("Saved alignment")
+        self.vm.set_workspace_path(Path(self.workspace_edit.text()))
+        self.vm.set_grid_spec(self.grid_spec())
+        self.vm.save_alignment_files()
 
     def start_crop(self) -> None:
-        if self.session is None or self.source_path is None:
-            return
-        self.save_alignment_files()
-        self.worker = WorkerThread(
-            crop_rois,
-            self.session,
-            Path(self.workspace_edit.text()),
-            source=str(self.source_path),
-            pos=self.pos_spin.value(),
-            grid=self.grid_spec(),
-            excluded=set(self.excluded),
-        )
-        self.worker.progress.connect(self.on_progress)
-        self.worker.failed.connect(self.on_failed)
-        self.worker.succeeded.connect(
-            lambda records: self.status.setText(f"Wrote {len(records)} ROIs")
-        )
-        self.worker.start()
-
-    def cancel_crop(self) -> None:
-        if self.worker is not None:
-            self.worker.cancel.cancel()
+        self.vm.set_workspace_path(Path(self.workspace_edit.text()))
+        self.vm.set_grid_spec(self.grid_spec())
+        self.vm.start_crop()
 
     @QtCore.Slot(object)
     def on_progress(self, event) -> None:
@@ -251,13 +204,8 @@ class AlignerWindow(QtWidgets.QMainWindow):
         self.progress.setValue(event.done)
         self.status.setText(event.message)
 
-    @QtCore.Slot(str)
-    def on_failed(self, message: str) -> None:
-        self.status.setText(message)
-
     def closeEvent(self, event) -> None:
-        if self.session is not None:
-            self.session.close()
+        self.vm.close()
         super().closeEvent(event)
 
 

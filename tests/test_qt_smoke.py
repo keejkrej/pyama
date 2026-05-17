@@ -35,14 +35,14 @@ def test_entry_points_create_app_before_window(monkeypatch: pytest.MonkeyPatch) 
         calls: list[str] = []
 
         class Window:
-            def __init__(self) -> None:
+            def __init__(self, calls=calls) -> None:
                 calls.append("window")
 
-        def get_app() -> object:
+        def get_app(calls=calls) -> object:
             calls.append("app")
             return object()
 
-        def run_window(window: object) -> int:
+        def run_window(window: object, calls=calls) -> int:
             calls.append("run")
             return 0
 
