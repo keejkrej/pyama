@@ -10,7 +10,7 @@ from PySide6 import QtCore, QtWidgets
 
 from .annotations import Label, load_annotation, load_labels, save_annotation, save_labels
 from .ui.image_view import ImageCanvas
-from .ui.qt import run_window
+from .ui.qt import get_app, run_window
 from .workspace import RoiRecord, scan_roi_workspace
 
 
@@ -290,4 +290,5 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
 
 
 def main() -> int:
+    get_app()
     return run_window(AnnotatorWindow())

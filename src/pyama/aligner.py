@@ -9,7 +9,7 @@ from PySide6 import QtCore, QtWidgets
 from .adapters import ReaderSession, open_reader
 from .grid import GridSpec, auto_excluded_cells, cell_at, enumerate_grid
 from .ui.image_view import ImageCanvas
-from .ui.qt import WorkerThread, run_window
+from .ui.qt import WorkerThread, get_app, run_window
 from .workspace import Alignment, cell_bbox_union, crop_rois, save_alignment, save_bbox
 
 
@@ -262,4 +262,5 @@ class AlignerWindow(QtWidgets.QMainWindow):
 
 
 def main() -> int:
+    get_app()
     return run_window(AlignerWindow())
