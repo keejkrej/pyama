@@ -22,9 +22,11 @@ class AlignerWindow(QtWidgets.QMainWindow):
         self.vm = view_model or AlignerViewModel()
         self._last_cells: list[GridCell] = []
         self._last_excluded: set[int] = set()
+        self.active_tool = "pan"
 
         self.canvas = ImageCanvas()
         self.canvas.cellClicked.connect(self.vm.toggle_cell)
+        self.canvas.overlayDragged.connect(self.apply_tool_drag)
         self._build_ui()
         self._connect_view_model()
         self._sync_source_enabled(False)
@@ -100,8 +102,8 @@ class AlignerWindow(QtWidgets.QMainWindow):
         dock.setFixedHeight(170)
         layout = QtWidgets.QHBoxLayout(dock)
         layout.setContentsMargins(8, 8, 8, 8)
-        layout.addWidget(self._tools_section(), stretch=1)
-        layout.addWidget(self._save_section(), stretch=2)
+        layout.addWidget(self._tools_section())
+        layout.addWidget(self._save_section())
         return dock
 
     def _tools_section(self) -> QtWidgets.QWidget:
@@ -109,11 +111,16 @@ class AlignerWindow(QtWidgets.QMainWindow):
         layout = QtWidgets.QGridLayout(group)
         self.tool_group = QtWidgets.QButtonGroup(self)
         self.tool_group.setExclusive(True)
-        tools = ("Pan", "Rotate", "Zoom Vector", "Zoom Pattern")
-        for index, label in enumerate(tools):
+        tools = (
+            ("pan", "Pan"),
+            ("rotate", "Rotate"),
+            ("zoom_vector", "Zoom Vector"),
+            ("zoom_pattern", "Zoom Pattern"),
+        )
+        for index, (tool, label) in enumerate(tools):
             button = QtWidgets.QPushButton(label)
             button.setCheckable(True)
-            button.clicked.connect(lambda _checked=False, name=label: self.status.setText(name))
+            button.clicked.connect(lambda _checked=False, name=tool: self.set_active_tool(name))
             if index == 0:
                 button.setChecked(True)
             self.tool_group.addButton(button)
@@ -124,21 +131,13 @@ class AlignerWindow(QtWidgets.QMainWindow):
         group = QtWidgets.QGroupBox("Save")
         layout = QtWidgets.QGridLayout(group)
 
-        self.save_btn = QtWidgets.QPushButton("Save BBox + Align")
+        self.save_btn = QtWidgets.QPushButton("Save")
         self.save_btn.clicked.connect(self.save_alignment_files)
-        self.crop_btn = QtWidgets.QPushButton("Batch Crop")
+        self.crop_btn = QtWidgets.QPushButton("Crop")
         self.crop_btn.clicked.connect(self.start_crop)
-        self.cancel_btn = QtWidgets.QPushButton("Cancel Crop")
-        self.cancel_btn.clicked.connect(self.vm.cancel_crop)
-        self.progress = QtWidgets.QProgressBar()
-        self.status = QtWidgets.QLabel("")
-        self.status.setWordWrap(True)
 
         layout.addWidget(self.save_btn, 0, 0)
         layout.addWidget(self.crop_btn, 0, 1)
-        layout.addWidget(self.cancel_btn, 0, 2)
-        layout.addWidget(self.progress, 1, 0, 1, 3)
-        layout.addWidget(self.status, 2, 0, 1, 3)
         return group
 
     def _contrast_section(self) -> QtWidgets.QWidget:
@@ -162,7 +161,7 @@ class AlignerWindow(QtWidgets.QMainWindow):
         self.overlay_check.toggled.connect(self.canvas.set_grid_visible)
         self.opacity_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.opacity_slider.setRange(0, 100)
-        self.opacity_slider.setValue(100)
+        self.opacity_slider.setValue(30)
         self.opacity_slider.valueChanged.connect(
             lambda value: self.canvas.set_grid_opacity(value / 100)
         )
@@ -227,8 +226,6 @@ class AlignerWindow(QtWidgets.QMainWindow):
         self.vm.grid_changed.connect(self.on_grid_changed)
         self.vm.frame_limits_changed.connect(self.set_frame_limits)
         self.vm.source_open_changed.connect(self._sync_source_enabled)
-        self.vm.progress_changed.connect(self.on_progress)
-        self.vm.status_changed.connect(self.status.setText)
 
     def _path_row(self, edit: QtWidgets.QLineEdit, slot) -> QtWidgets.QWidget:
         row = QtWidgets.QWidget()
@@ -242,6 +239,7 @@ class AlignerWindow(QtWidgets.QMainWindow):
 
     def _spin(self, slot, minimum: int = 0, maximum: int = 0, value: int = 0) -> QtWidgets.QSpinBox:
         spin = QtWidgets.QSpinBox()
+        spin.setKeyboardTracking(False)
         spin.setRange(minimum, maximum)
         spin.setValue(value)
         spin.valueChanged.connect(lambda *_: slot())
@@ -257,6 +255,7 @@ class AlignerWindow(QtWidgets.QMainWindow):
         decimals: int = 2,
     ) -> QtWidgets.QDoubleSpinBox:
         spin = QtWidgets.QDoubleSpinBox()
+        spin.setKeyboardTracking(False)
         spin.setRange(minimum, maximum)
         spin.setDecimals(decimals)
         spin.setValue(value)
@@ -308,7 +307,6 @@ class AlignerWindow(QtWidgets.QMainWindow):
             self.auto_btn,
             self.save_btn,
             self.crop_btn,
-            self.cancel_btn,
         )
         for widget in widgets:
             widget.setEnabled(enabled)
@@ -335,6 +333,28 @@ class AlignerWindow(QtWidgets.QMainWindow):
 
     def update_grid_spec(self) -> None:
         self.vm.set_grid_spec(self.grid_spec())
+
+    @QtCore.Slot(float, float)
+    def apply_tool_drag(self, dx: float, dy: float) -> None:
+        if self.active_tool == "rotate":
+            self._set_spin_value(self.rotation, self.rotation.value() + dx)
+        elif self.active_tool == "zoom_vector":
+            self._set_spin_value(self.vector_a, self.vector_a.value() + dx)
+            self._set_spin_value(self.vector_b, self.vector_b.value() + dy)
+        elif self.active_tool == "zoom_pattern":
+            self._set_spin_value(self.pattern_w, self.pattern_w.value() + round(dx))
+            self._set_spin_value(self.pattern_h, self.pattern_h.value() + round(dy))
+        else:
+            self.move_overlay(dx, dy)
+            return
+        self.update_grid_spec()
+
+    def set_active_tool(self, tool: str) -> None:
+        self.active_tool = tool
+
+    def move_overlay(self, dx: float, dy: float) -> None:
+        self._set_grid_offset_values(self.offset_x.value() + dx, self.offset_y.value() + dy)
+        self.update_grid_spec()
 
     def update_contrast(self) -> None:
         self.canvas.set_contrast_limits(self.contrast_min.value(), self.contrast_max.value())
@@ -391,11 +411,16 @@ class AlignerWindow(QtWidgets.QMainWindow):
             spin.setValue(value)
             spin.blockSignals(previous)
 
-    @QtCore.Slot(object)
-    def on_progress(self, event) -> None:
-        self.progress.setRange(0, max(event.total, 1))
-        self.progress.setValue(event.done)
-        self.status.setText(event.message)
+    def _set_grid_offset_values(self, offset_x: float, offset_y: float) -> None:
+        for spin, value in ((self.offset_x, offset_x), (self.offset_y, offset_y)):
+            self._set_spin_value(spin, value)
+
+    def _set_spin_value(
+        self, spin: QtWidgets.QDoubleSpinBox | QtWidgets.QSpinBox, value: float
+    ) -> None:
+        previous = spin.blockSignals(True)
+        spin.setValue(value)
+        spin.blockSignals(previous)
 
     def closeEvent(self, event) -> None:
         self.vm.close()

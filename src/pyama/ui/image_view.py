@@ -14,11 +14,30 @@ from pyama.grid import GridCell
 GridHitTest = Callable[[float, float], int | None]
 
 
+class OverlayDragViewBox(pg.ViewBox):
+    overlayDragged = QtCore.Signal(float, float)
+
+    def mouseDragEvent(self, event, axis=None) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            event.accept()
+            if not event.isStart() and not event.isFinish():
+                current = self.mapToView(event.pos())
+                previous = self.mapToView(event.lastPos())
+                self.overlayDragged.emit(
+                    current.x() - previous.x(),
+                    current.y() - previous.y(),
+                )
+            return
+        super().mouseDragEvent(event, axis=axis)
+
+
 class ImageCanvas(pg.PlotWidget):
     cellClicked = QtCore.Signal(int)
+    overlayDragged = QtCore.Signal(float, float)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent=parent)
+        self.view_box = OverlayDragViewBox()
+        super().__init__(parent=parent, viewBox=self.view_box)
         self.setAspectLocked(True)
         self.hideAxis("left")
         self.hideAxis("bottom")
@@ -31,8 +50,9 @@ class ImageCanvas(pg.PlotWidget):
         self._frame: np.ndarray | None = None
         self._contrast_limits: ContrastLimits | None = None
         self._grid_visible = True
-        self._grid_opacity = 1.0
+        self._grid_opacity = 0.3
         self._last_grid: tuple[list[GridCell], set[int], GridHitTest | None] = ([], set(), None)
+        self.view_box.overlayDragged.connect(self.overlayDragged.emit)
         self.scene().sigMouseClicked.connect(self._on_mouse_clicked)
 
     def set_frame(self, frame: np.ndarray) -> None:

@@ -24,6 +24,88 @@ def test_qt_windows_construct() -> None:
     app.processEvents()
 
 
+def test_aligner_canvas_drag_defaults_and_save_controls() -> None:
+    pytest.importorskip("PySide6")
+    pytest.importorskip("pyqtgraph")
+    from pyama.aligner import AlignerWindow
+    from pyama.ui.qt import get_app
+
+    app = get_app()
+    aligner = AlignerWindow()
+
+    assert aligner.opacity_slider.value() == 30
+    assert aligner.canvas._grid_opacity == pytest.approx(0.3)
+    assert aligner.save_btn.text() == "Save"
+    assert aligner.crop_btn.text() == "Crop"
+    assert not any(
+        button.text() in {"Batch Crop", "Cancel Crop"}
+        for button in aligner.findChildren(aligner.save_btn.__class__)
+    )
+
+    aligner.move_overlay(2.5, -1.5)
+    assert aligner.offset_x.value() == pytest.approx(2.5)
+    assert aligner.offset_y.value() == pytest.approx(-1.5)
+
+    aligner.close()
+    app.processEvents()
+
+
+def test_aligner_drag_respects_selected_tool() -> None:
+    pytest.importorskip("PySide6")
+    pytest.importorskip("pyqtgraph")
+    from pyama.aligner import AlignerWindow
+    from pyama.ui.qt import get_app
+
+    app = get_app()
+    aligner = AlignerWindow()
+
+    aligner.set_active_tool("rotate")
+    aligner.apply_tool_drag(5, 3)
+    assert aligner.rotation.value() == pytest.approx(5)
+    assert aligner.offset_x.value() == pytest.approx(0)
+    assert aligner.offset_y.value() == pytest.approx(0)
+
+    aligner.set_active_tool("zoom_vector")
+    aligner.apply_tool_drag(7, 9)
+    assert aligner.vector_a.value() == pytest.approx(87)
+    assert aligner.vector_b.value() == pytest.approx(89)
+    assert aligner.offset_x.value() == pytest.approx(0)
+    assert aligner.offset_y.value() == pytest.approx(0)
+
+    aligner.set_active_tool("zoom_pattern")
+    aligner.apply_tool_drag(4.2, 5.8)
+    assert aligner.pattern_w.value() == 68
+    assert aligner.pattern_h.value() == 70
+    assert aligner.offset_x.value() == pytest.approx(0)
+    assert aligner.offset_y.value() == pytest.approx(0)
+
+    aligner.set_active_tool("pan")
+    aligner.apply_tool_drag(2, -3)
+    assert aligner.offset_x.value() == pytest.approx(2)
+    assert aligner.offset_y.value() == pytest.approx(-3)
+
+    aligner.close()
+    app.processEvents()
+
+
+def test_aligner_parameter_inputs_commit_on_enter() -> None:
+    pytest.importorskip("PySide6")
+    pytest.importorskip("pyqtgraph")
+    from PySide6 import QtWidgets
+
+    from pyama.aligner import AlignerWindow
+    from pyama.ui.qt import get_app
+
+    app = get_app()
+    aligner = AlignerWindow()
+
+    for spin in aligner.findChildren(QtWidgets.QAbstractSpinBox):
+        assert not spin.keyboardTracking()
+
+    aligner.close()
+    app.processEvents()
+
+
 def test_entry_points_create_app_before_window(monkeypatch: pytest.MonkeyPatch) -> None:
     import pyama.aligner as aligner
     import pyama.annotator as annotator
