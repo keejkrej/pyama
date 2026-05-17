@@ -1,0 +1,43 @@
+[project]
+name = "pyama"
+version = "0.1.0"
+description = "Pure-Python desktop aligner and annotator for Lisca-style microscopy workspaces."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "PySide6>=6.7",
+  "pyqtgraph>=0.13",
+  "numpy>=1.26",
+  "tifffile>=2024.1",
+  "Pillow>=10.0",
+  "nd2>=0.10",
+  "pylibCZIrw>=4.1",
+]
+
+[project.scripts]
+aligner = "pyama.aligner:main"
+annotator = "pyama.annotator:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyama"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
