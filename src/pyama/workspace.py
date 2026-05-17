@@ -129,7 +129,12 @@ def crop_rois(
     cancel: CancelToken | None = None,
 ) -> list[RoiRecord]:
     excluded_set = set(excluded)
-    cells = [cell for cell in enumerate_grid(grid) if cell.index not in excluded_set]
+    image_width, image_height = _session_image_size(session, pos)
+    cells = [
+        cell
+        for cell in enumerate_grid(grid, image_width, image_height)
+        if cell.index not in excluded_set
+    ]
     total = len(cells) * session.info.n_time * session.info.n_chan * session.info.n_z
     out_dir = output_root / "roi" / f"Pos{pos}"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -225,6 +230,14 @@ def cell_bbox_union(cells: Iterable[GridCell]) -> BBox:
     x2 = max(box.x2 for box in boxes)
     y2 = max(box.y2 for box in boxes)
     return BBox(x1, y1, x2 - x1, y2 - y1)
+
+
+def _session_image_size(session: ReaderSession, pos: int) -> tuple[int | None, int | None]:
+    if session.info.size_x is not None and session.info.size_y is not None:
+        return session.info.size_x, session.info.size_y
+    frame = session.read_frame(pos, 0, 0, 0)
+    image_height, image_width = frame.shape[:2]
+    return image_width, image_height
 
 
 def _emit(

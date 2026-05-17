@@ -8,8 +8,10 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from pyama.contrast import percentile_limits
+from pyama.contrast import ContrastLimits, percentile_limits
 from pyama.grid import GridCell
+
+GridHitTest = Callable[[float, float], int | None]
 
 
 class ImageCanvas(pg.PlotWidget):
@@ -25,14 +27,54 @@ class ImageCanvas(pg.PlotWidget):
         self.addItem(self.image)
         self.addItem(self.mask)
         self._rects: list[QtWidgets.QGraphicsRectItem] = []
-        self._hit_test: Callable[[float, float], int | None] | None = None
+        self._hit_test: GridHitTest | None = None
+        self._frame: np.ndarray | None = None
+        self._contrast_limits: ContrastLimits | None = None
+        self._grid_visible = True
+        self._grid_opacity = 1.0
+        self._last_grid: tuple[list[GridCell], set[int], GridHitTest | None] = ([], set(), None)
         self.scene().sigMouseClicked.connect(self._on_mouse_clicked)
 
     def set_frame(self, frame: np.ndarray) -> None:
-        limits = percentile_limits(frame)
-        self.image.setImage(np.asarray(frame).T, levels=(limits.low, limits.high), autoLevels=False)
+        self._frame = np.asarray(frame)
+        self._contrast_limits = percentile_limits(self._frame)
+        self._render_frame()
         self.mask.setRect(self.image.boundingRect())
         self.setRange(xRange=(0, frame.shape[1]), yRange=(0, frame.shape[0]), padding=0.02)
+
+    def set_contrast_limits(self, low: float, high: float) -> None:
+        if high <= low:
+            high = low + 1.0
+        self._contrast_limits = ContrastLimits(low=float(low), high=float(high))
+        self._render_frame()
+
+    def auto_contrast(self) -> ContrastLimits | None:
+        if self._frame is None:
+            return None
+        self._contrast_limits = percentile_limits(self._frame)
+        self._render_frame()
+        return self._contrast_limits
+
+    def contrast_limits(self) -> ContrastLimits | None:
+        return self._contrast_limits
+
+    def set_grid_visible(self, visible: bool) -> None:
+        self._grid_visible = visible
+        self.set_grid(*self._last_grid)
+
+    def set_grid_opacity(self, opacity: float) -> None:
+        self._grid_opacity = min(1.0, max(0.0, opacity))
+        self.set_grid(*self._last_grid)
+
+    def _render_frame(self) -> None:
+        if self._frame is None:
+            return
+        limits = self._contrast_limits or percentile_limits(self._frame)
+        self.image.setImage(
+            self._frame.T,
+            levels=(limits.low, limits.high),
+            autoLevels=False,
+        )
 
     def set_mask(self, mask: np.ndarray | None) -> None:
         if mask is None:
@@ -47,12 +89,18 @@ class ImageCanvas(pg.PlotWidget):
         self,
         cells: list[GridCell],
         excluded: set[int],
-        hit_test: Callable[[float, float], int | None] | None,
+        hit_test: GridHitTest | None,
     ) -> None:
+        self._last_grid = (list(cells), set(excluded), hit_test)
         self.clear_grid()
+        if not self._grid_visible:
+            self._hit_test = None
+            return
         self._hit_test = hit_test
         for cell in cells:
-            pen = pg.mkPen("#ffcc00" if cell.index not in excluded else "#d62728", width=2)
+            color = QtGui.QColor("#ffcc00" if cell.index not in excluded else "#d62728")
+            color.setAlphaF(self._grid_opacity)
+            pen = pg.mkPen(color, width=2)
             rect = QtWidgets.QGraphicsRectItem(
                 cell.bbox.x, cell.bbox.y, cell.bbox.width, cell.bbox.height
             )

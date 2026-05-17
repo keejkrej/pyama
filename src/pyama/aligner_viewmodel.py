@@ -43,6 +43,8 @@ class AlignerViewModel(QtCore.QObject):
         self.channel = 0
         self.z = 0
         self.worker: WorkerThread | None = None
+        self.image_width: int | None = None
+        self.image_height: int | None = None
 
     def open_source(self, path: Path) -> None:
         self.close()
@@ -80,15 +82,17 @@ class AlignerViewModel(QtCore.QObject):
         if self.session is None:
             return
         frame = self.session.read_frame(self.pos, self.time, self.channel, self.z)
+        self.image_height, self.image_width = frame.shape[:2]
         self.frame_changed.emit(frame)
         self.update_overlay()
 
     def update_overlay(self) -> None:
         spec = self.grid_spec
+        image_width, image_height = self._grid_bounds()
         self.grid_changed.emit(
-            enumerate_grid(spec),
+            enumerate_grid(spec, image_width, image_height),
             set(self.excluded),
-            lambda x, y: cell_at(spec, x, y),
+            lambda x, y: cell_at(spec, x, y, image_width, image_height),
         )
 
     @QtCore.Slot(int)
@@ -102,17 +106,35 @@ class AlignerViewModel(QtCore.QObject):
     def auto_exclude(self) -> None:
         if self.session is None:
             return
-        info = self.session.info
-        if info.size_x is None or info.size_y is None:
-            frame = self.session.read_frame(self.pos, 0, 0, 0)
-            image_height, image_width = frame.shape[:2]
-        else:
-            image_width, image_height = info.size_x, info.size_y
+        image_width, image_height = self._grid_bounds()
+        if image_width is None or image_height is None:
+            return
         self.excluded |= auto_excluded_cells(self.grid_spec, image_width, image_height)
         self.update_overlay()
 
+    def reset_exclusions(self) -> None:
+        self.excluded.clear()
+        self.update_overlay()
+
+    def exclude_all(self) -> None:
+        self.excluded = {cell.index for cell in self.current_cells()}
+        self.update_overlay()
+
     def active_cells(self) -> Iterable[GridCell]:
-        return (cell for cell in enumerate_grid(self.grid_spec) if cell.index not in self.excluded)
+        return (cell for cell in self.current_cells() if cell.index not in self.excluded)
+
+    def current_cells(self) -> list[GridCell]:
+        image_width, image_height = self._grid_bounds()
+        return enumerate_grid(self.grid_spec, image_width, image_height)
+
+    def _grid_bounds(self) -> tuple[int | None, int | None]:
+        if self.image_width is not None and self.image_height is not None:
+            return self.image_width, self.image_height
+        if self.session is not None:
+            info = self.session.info
+            if info.size_x is not None and info.size_y is not None:
+                return info.size_x, info.size_y
+        return None, None
 
     def save_alignment_files(self) -> None:
         if self.source_path is None:
@@ -160,4 +182,6 @@ class AlignerViewModel(QtCore.QObject):
         if self.session is not None:
             self.session.close()
             self.session = None
+            self.image_width = None
+            self.image_height = None
             self.source_open_changed.emit(False)
